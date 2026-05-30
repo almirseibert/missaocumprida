@@ -1,0 +1,395 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  CLIENT
+  PROVIDER
+  BOTH
+  ADMIN
+}
+
+enum OrderStatus {
+  OPEN
+  IN_PROPOSAL
+  ACCEPTED
+  SCHEDULED
+  IN_PROGRESS
+  DONE
+  RATED
+  CANCELLED
+  DISPUTED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum ScheduleStatus {
+  CONFIRMED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum FieldType {
+  TEXT
+  TEXTAREA
+  SELECT
+  RADIO
+  BOOLEAN
+  PHOTO
+  NUMBER
+  DATE
+}
+
+enum ReviewerRole {
+  CLIENT
+  PROVIDER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  PROCESSING
+  PAID
+  REJECTED
+}
+
+// ============================================================
+// USUÁRIOS
+// ============================================================
+
+model User {
+  id                String    @id @default(uuid())
+  name              String
+  email             String    @unique
+  password          String
+  phone             String?
+  role              UserRole  @default(CLIENT)
+  avatar            String?
+  bio               String?
+  document_verified Boolean   @default(false)
+  rating_avg        Float     @default(0)
+  rating_count      Int       @default(0)
+  latitude          Float?
+  longitude         Float?
+  stripe_customer_id String?
+  pix_key           String?
+  pix_key_type      String?   // CPF, CNPJ, EMAIL, PHONE, RANDOM
+  provider_balance  Float     @default(0)
+  is_active         Boolean   @default(true)
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  // Relações
+  refresh_tokens    RefreshToken[]
+  provider_skills   ProviderSkill[]
+  orders_as_client  Order[]         @relation("ClientOrders")
+  proposals         Proposal[]
+  schedules_client  Schedule[]      @relation("ClientSchedules")
+  schedules_provider Schedule[]     @relation("ProviderSchedules")
+  ratings_given     Rating[]        @relation("RatingsGiven")
+  ratings_received  Rating[]        @relation("RatingsReceived")
+  messages_sent     Message[]
+  payments_client   Payment[]       @relation("ClientPayments")
+  payments_provider Payment[]       @relation("ProviderPayments")
+  withdrawals       ProviderWithdrawal[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  token      String   @unique
+  user_id    String
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ============================================================
+// CATEGORIAS E QUESTIONÁRIOS
+// ============================================================
+
+model ServiceGroup {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  slug        String     @unique
+  icon        String
+  description String?
+  order       Int        @default(0)
+  is_active   Boolean    @default(true)
+  created_at  DateTime   @default(now())
+
+  categories  Category[]
+
+  @@map("service_groups")
+}
+
+model Category {
+  id               String   @id @default(uuid())
+  group_id         String
+  name             String
+  slug             String   @unique
+  icon             String
+  description      String?
+  base_price_min   Float    @default(50)
+  base_price_max   Float    @default(200)
+  requires_photos  Boolean  @default(true)
+  estimated_hours  Float?
+  is_active        Boolean  @default(true)
+  order            Int      @default(0)
+  created_at       DateTime @default(now())
+
+  // Relações
+  group                ServiceGroup        @relation(fields: [group_id], references: [id])
+  questionnaire_fields QuestionnaireField[]
+  orders               Order[]
+  provider_skills      ProviderSkill[]
+
+  @@map("categories")
+}
+
+model QuestionnaireField {
+  id              String    @id @default(uuid())
+  category_id     String
+  question        String
+  field_type      FieldType
+  options         Json?     // Array de strings para SELECT/RADIO
+  placeholder     String?
+  is_required     Boolean   @default(true)
+  order           Int       @default(0)
+  affects_price   Boolean   @default(false)
+  price_modifier  Json?     // { "opcao": 1.5 } multiplicador por opção
+  help_text       String?   // Texto de ajuda abaixo do campo
+  created_at      DateTime  @default(now())
+
+  category Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  @@map("questionnaire_fields")
+}
+
+// ============================================================
+// HABILIDADES DO PRESTADOR
+// ============================================================
+
+model ProviderSkill {
+  id                 String   @id @default(uuid())
+  provider_id        String
+  category_id        String
+  years_experience   Int      @default(0)
+  certification      String?
+  service_radius_km  Int      @default(20)
+  hourly_rate        Float?
+  is_active          Boolean  @default(true)
+  created_at         DateTime @default(now())
+
+  provider  User     @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+  category  Category @relation(fields: [category_id], references: [id])
+
+  @@unique([provider_id, category_id])
+  @@map("provider_skills")
+}
+
+// ============================================================
+// PEDIDOS
+// ============================================================
+
+model Order {
+  id                  String      @id @default(uuid())
+  client_id           String
+  category_id         String
+  title               String
+  description         String?
+  answers             Json        // { field_id: valor }
+  photos              String[]    @default([])
+  status              OrderStatus @default(OPEN)
+  desired_date        DateTime?
+  address             String?     // rua + número — oculto para prestadores antes da aceitação
+  neighborhood        String?     // bairro — visível para prestadores antes da aceitação
+  city                String
+  state               String      @default("SP")
+  latitude            Float?
+  longitude           Float?
+  estimated_price_min Float?
+  estimated_price_max Float?
+  final_price         Float?
+  platform_fee_pct    Float       @default(0.10)
+  platform_fee_value  Float?
+  provider_amount              Float?
+  client_fee_pct               Float       @default(0.10)
+  client_fee_value             Float?
+  client_total                 Float?
+  stripe_payment_intent_id     String?
+  created_at                   DateTime    @default(now())
+  updated_at          DateTime    @updatedAt
+
+  // Relações
+  client    User       @relation("ClientOrders", fields: [client_id], references: [id])
+  category  Category   @relation(fields: [category_id], references: [id])
+  proposals Proposal[]
+  schedule  Schedule?
+  payment   Payment?
+
+  @@map("orders")
+}
+
+// ============================================================
+// PROPOSTAS
+// ============================================================
+
+model Proposal {
+  id          String         @id @default(uuid())
+  order_id    String
+  provider_id String
+  value       Float
+  message     String?
+  status      ProposalStatus @default(PENDING)
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+
+  order    Order    @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  provider User     @relation(fields: [provider_id], references: [id])
+  schedule Schedule?
+
+  @@unique([order_id, provider_id])
+  @@map("proposals")
+}
+
+// ============================================================
+// AGENDAMENTOS
+// ============================================================
+
+model Schedule {
+  id           String         @id @default(uuid())
+  order_id     String         @unique
+  proposal_id  String         @unique
+  provider_id  String
+  client_id    String
+  scheduled_at DateTime
+  checkin_at   DateTime?
+  done_at      DateTime?
+  status       ScheduleStatus @default(CONFIRMED)
+  created_at   DateTime       @default(now())
+  updated_at   DateTime       @updatedAt
+
+  order    Order    @relation(fields: [order_id], references: [id])
+  proposal Proposal @relation(fields: [proposal_id], references: [id])
+  provider User     @relation("ProviderSchedules", fields: [provider_id], references: [id])
+  client   User     @relation("ClientSchedules", fields: [client_id], references: [id])
+  ratings  Rating[]
+  messages Message[]
+
+  @@map("schedules")
+}
+
+// ============================================================
+// AVALIAÇÕES
+// ============================================================
+
+model Rating {
+  id            String       @id @default(uuid())
+  schedule_id   String
+  reviewer_id   String
+  reviewed_id   String
+  score         Int          // 1 a 5
+  comment       String?
+  reviewer_role ReviewerRole
+  created_at    DateTime     @default(now())
+
+  schedule Schedule @relation(fields: [schedule_id], references: [id])
+  reviewer User     @relation("RatingsGiven", fields: [reviewer_id], references: [id])
+  reviewed User     @relation("RatingsReceived", fields: [reviewed_id], references: [id])
+
+  @@unique([schedule_id, reviewer_id])
+  @@map("ratings")
+}
+
+// ============================================================
+// MENSAGENS / CHAT
+// ============================================================
+
+model Message {
+  id          String   @id @default(uuid())
+  schedule_id String
+  sender_id   String
+  content     String?
+  photo_url   String?
+  is_read     Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  schedule Schedule @relation(fields: [schedule_id], references: [id])
+  sender   User     @relation(fields: [sender_id], references: [id])
+
+  @@map("messages")
+}
+
+// ============================================================
+// PAGAMENTOS (ESCROW)
+// ============================================================
+
+model Payment {
+  id                    String        @id @default(uuid())
+  order_id              String        @unique
+  client_id             String
+  provider_id           String
+  stripe_payment_intent String        @unique
+  amount                Float         // client_total (valor cobrado do cliente)
+  provider_amount       Float         // valor líquido para o prestador
+  platform_fee          Float         // taxa da plataforma
+  status                PaymentStatus @default(PENDING)
+  paid_at               DateTime?
+  released_at           DateTime?
+  created_at            DateTime      @default(now())
+  updated_at            DateTime      @updatedAt
+
+  order    Order @relation(fields: [order_id], references: [id])
+  client   User  @relation("ClientPayments", fields: [client_id], references: [id])
+  provider User  @relation("ProviderPayments", fields: [provider_id], references: [id])
+
+  @@map("payments")
+}
+
+// ============================================================
+// SAQUES VIA PIX
+// ============================================================
+
+model ProviderWithdrawal {
+  id           String           @id @default(uuid())
+  provider_id  String
+  amount       Float
+  pix_key      String
+  pix_key_type String
+  status       WithdrawalStatus @default(REQUESTED)
+  processed_at DateTime?
+  notes        String?
+  created_at   DateTime         @default(now())
+  updated_at   DateTime         @updatedAt
+
+  provider User @relation(fields: [provider_id], references: [id])
+
+  @@map("provider_withdrawals")
+}
