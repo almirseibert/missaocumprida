@@ -1,9 +1,12 @@
 import { Router } from 'express'
 import { authenticate, requireRole } from '../../middlewares/auth'
 import {
+  createCheckout,
   getOrderPayment,
   handleWebhook,
+  handleMpWebhook,
   simulatePayment,
+  confirmIntent,
   getMyBalance,
   requestWithdrawal,
   listWithdrawals,
@@ -18,8 +21,13 @@ const router = Router()
 export const webhookRouter = Router()
 webhookRouter.post('/', handleWebhook)
 
+// Webhook do Mercado Pago — sem autenticação, sem raw body
+router.post('/mp-webhook', handleMpWebhook)
+
 // Rotas autenticadas
+router.post('/create-checkout', authenticate, createCheckout)
 router.get('/order/:orderId', authenticate, getOrderPayment)
+router.post('/confirm-intent', authenticate, confirmIntent)
 router.post('/simulate', authenticate, simulatePayment)
 
 // Carteira do prestador

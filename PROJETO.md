@@ -15,12 +15,12 @@
 | Autenticação | JWT + Refresh Token |
 | Upload de Arquivos | Multer + armazenamento local (dev) / Cloudflare R2 (prod) |
 | Cache / Filas | Redis (fase 2) |
-| Pagamentos | Stripe (fase 2) |
-| Tempo Real | Socket.io (fase 2) |
+| Pagamentos | Stripe (cartão) + Mercado Pago (PIX) |
+| Tempo Real | Socket.io (fase futura) |
 | Frontend | Next.js 14 (App Router) + TailwindCSS |
 | Estado global | Zustand |
 | Formulários | React Hook Form + Zod |
-| Mobile | React Native + Expo (fase 3) |
+| Mobile | React Native + Expo |
 
 ---
 
@@ -558,48 +558,136 @@ npm run dev  # roda na porta 3000
 - `POST /api/proposals/:id/accept`: calcula automaticamente 12% de taxa e armazena breakdown no pedido; retorna os valores na resposta
 - Frontend — pedido/[id]: modal de proposta exibe em tempo real o breakdown (valor bruto → taxa → o que o prestador recebe); após aceite, bloco "Detalhamento do pagamento" visível para ambas as partes
 
-### ✅ Passo 18 — Pagamentos Stripe + Escrow + Saque PIX (2026-05-30)
+### ✅ Passo 18 — Pagamentos Stripe + PIX Mercado Pago + Escrow (2026-05-30 a 2026-05-31)
 
-**Backend:**
+**Backend — Pagamentos:**
 - Novos models no Prisma: `Payment` (escrow) e `ProviderWithdrawal` (saques PIX)
-- Novos campos: `User.pix_key`, `User.pix_key_type`, `User.provider_balance`, `User.stripe_customer_id`; `Order.stripe_payment_intent_id`
+- Novos campos: `User.pix_key`, `User.pix_key_type`, `User.provider_balance`, `User.stripe_customer_id`, `User.cpf`; `Order.stripe_payment_intent_id`, `Payment.gateway_fee`, `Payment.gateway_fee_pct`, `Payment.payment_method`
 - Novos enums: `PaymentStatus`, `WithdrawalStatus`
+- Migrations aplicadas: `add_payments_pix`, `add_payment_gateway_fee_and_pix`, `add_cpf_to_user`
 - `src/modules/payments/stripe.ts` — cliente Stripe singleton
+- `src/modules/payments/mercadopago.ts` — cliente Mercado Pago singleton
 - `src/modules/payments/payments.controller.ts`:
-  - `createPaymentIntent()` — cria PaymentIntent no Stripe após aceite de proposta
+  - `POST /api/payments/create-checkout` — cria PIX (MP) ou PaymentIntent (Stripe/cartão); taxa de gateway: PIX 1%, cartão 4%; cancela e recria se já existir pagamento pendente
   - `GET /api/payments/order/:orderId` — status do pagamento
-  - `POST /api/payments/webhook` — webhook Stripe (`payment_intent.succeeded` → status PAID + SCHEDULED)
-  - `POST /api/payments/simulate` — simula pagamento (apenas dev, sem Stripe)
-  - `GET /api/payments/my-balance` — saldo disponível do prestador
-  - `POST /api/payments/withdrawal` — solicitar saque PIX (bloqueia saldo imediatamente)
+  - `POST /api/payments/mp-webhook` — webhook Mercado Pago (PIX aprovado → PAID + SCHEDULED)
+  - `POST /api/payments/webhook` — webhook Stripe (cartão → PAID + SCHEDULED)
+  - `POST /api/payments/simulate` — simula confirmação (apenas dev)
+  - `GET /api/payments/my-balance` — saldo + chave PIX + saques recentes do prestador
+  - `POST /api/payments/withdrawal` — solicitar saque PIX
   - `GET /api/payments/withdrawals` — histórico de saques
   - `PUT /api/payments/pix-key` — cadastrar/alterar chave PIX
-  - `PUT /api/payments/withdrawals/:id/approve` — admin aprova saque
-  - `PUT /api/payments/withdrawals/:id/reject` — admin rejeita + devolve saldo
-- `proposals.controller.ts` atualizado: `acceptProposal` cria PaymentIntent; status do pedido vai para `ACCEPTED` (aguardando pagamento) se Stripe configurado
-- `schedules.controller.ts` atualizado: `confirmByClient` libera pagamento ao prestador (`RELEASED`) e incrementa `provider_balance`
-- `app.ts`: webhook montado com `express.raw()` antes do `express.json()`; rotas `/api/payments` registradas
+  - `PUT /api/payments/withdrawals/:id/approve` / `reject` — admin gerencia saques
+- `schedules.controller.ts`: `confirmByClient` → `Payment.status = RELEASED`, incrementa `provider_balance`
+- `app.ts`: webhook Stripe com `express.raw()` antes do `express.json()`
+- Pacote `qrcode` instalado: QR Code gerado localmente a partir do código PIX (fallback quando MP não retorna imagem)
 
-**Frontend:**
-- `@stripe/react-stripe-js` e `@stripe/stripe-js` adicionados ao package.json
-- Novos tipos: `Payment`, `ProviderWithdrawal`, `BalanceData`, `PaymentStatus`, `WithdrawalStatus`, `PixKeyType`
-- `app/(app)/pagamento/[orderId]/page.tsx` — tela de pagamento com Stripe Elements (cartão); modo simulação quando Stripe não configurado
-- `app/(app)/carteira/page.tsx` — carteira do prestador: saldo disponível, cadastro de chave PIX, solicitação de saque, histórico de saques com status visual
-- `pedido/[id]/page.tsx` atualizado: banner de pagamento pendente (orange), badge de escrow ativo (blue) e pagamento liberado (green); redirect para `/pagamento/:id` ao aceitar proposta
-- Navbar: link "Carteira" adicionado para prestadores
+**Backend — Notificações e Fotos de Agendamento:**
+- `src/modules/notifications/` — sistema de notificações in-app
+- Fotos de agendamento (`Schedule.photos`) para documentação do serviço executado
+- `src/modules/schedules/schedules.controller.ts` atualizado com suporte a upload de fotos
 
-**Fluxo completo de escrow:**
-1. Cliente aceita proposta → PaymentIntent criado → redirect para `/pagamento/:orderId`
-2. Cliente paga com cartão → Stripe webhook → `Payment.status = PAID`, `Order.status = SCHEDULED`
-3. Serviço executado → prestador marca concluído → cliente confirma
-4. `confirmByClient` → `Payment.status = RELEASED`, `User.provider_balance += provider_amount`
-5. Prestador solicita saque PIX → plataforma aprova → PIX enviado manualmente
+**Frontend — Tela de Pagamento:**
+- `app/(app)/pagamento/[orderId]/page.tsx`:
+  - Seletor de método: PIX (1%) ou Cartão (4%)
+  - PIX via Mercado Pago: QR Code + código Copia e Cola + polling de confirmação a cada 5s
+  - Cartão via Stripe Elements com `locale: 'pt-BR'`
+  - Coleta inline de CPF (obrigatório para PIX no Brasil) — salva no perfil e prossegue automaticamente
+  - Modo sandbox detectado pelo token (`TEST-...`): simula PIX localmente sem chamar MP
+  - Botão "Simular confirmação do PIX" visível em modo dev
+  - Cartão só aparece se `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` estiver configurado
+- `app/(app)/carteira/page.tsx` — saldo, chave PIX, saque, histórico
 
-### ⏳ Passo 18 — App Mobile React Native (Fase 3)
-- Expo + React Native
-- Push notifications
-- GPS tracking (opt-in)
+**Credenciais configuradas:**
+- Stripe: chaves Live (`sk_live_...` / `pk_live_...`)
+- Mercado Pago: credenciais de produção (`APP_USR-...`) ativas; sandbox comentado no `.env.local`
+- Detecção automática: se token MP começa com `TEST-` → simula localmente; se `APP_USR-` → chama API real
+
+**Fluxo completo de pagamento:**
+1. Cliente aceita proposta → redirect para `/pagamento/:orderId`
+2. Escolhe PIX → QR Code real do MP gerado → cliente paga → webhook MP confirma → `PAID` + `SCHEDULED`
+3. Ou escolhe Cartão → Stripe Elements → webhook Stripe confirma → `PAID` + `SCHEDULED`
+4. Serviço executado → prestador conclui → cliente confirma → `RELEASED` → saldo prestador atualizado
+5. Prestador solicita saque PIX → admin aprova → transferência manual
 
 ---
 
-*Última atualização: 2026-05-30 — Passo 18 concluído. Sistema de pagamentos Stripe + Escrow + Saque PIX implantados.*
+### ✅ Passo 19 — App Mobile React Native + Expo (2026-05-31)
+*(em andamento — ver seção abaixo)*
+
+---
+
+## Próximos Passos
+
+### ✅ Passo 19 — App Mobile React Native + Expo (2026-05-31)
+
+**Stack Mobile:**
+- Expo SDK 56 + React Native 0.85
+- Expo Router v56 (file-based routing, igual ao Next.js App Router)
+- NativeWind v4 + Tailwind CSS v3 (estilos com `className`)
+- Zustand v5 (store de auth com AsyncStorage)
+- Axios (mesmo padrão do frontend web, com interceptors de refresh token)
+- expo-image-picker, expo-location, expo-notifications, expo-splash-screen
+
+**Estrutura de arquivos:**
+```
+mobile/
+├── app/
+│   ├── _layout.tsx              # Root layout (hydrate auth + splash)
+│   ├── index.tsx                # Redirect: login ou home
+│   ├── (auth)/
+│   │   ├── _layout.tsx
+│   │   ├── login.tsx            # Login com email/senha
+│   │   └── register.tsx         # Cadastro com seleção de papel
+│   └── (app)/
+│       ├── _layout.tsx          # Tab bar (Início, Pedidos, Feed*, Agenda, Perfil)
+│       ├── home.tsx             # Grupos + busca de categorias
+│       ├── meus-pedidos.tsx     # Lista de pedidos com status
+│       ├── feed.tsx             # Feed do prestador + envio de proposta
+│       ├── agendamentos.tsx     # Lista de agendamentos
+│       ├── perfil.tsx           # Perfil + edição + logout
+│       ├── carteira.tsx         # Saldo + saque PIX (prestador)
+│       ├── pedido/
+│       │   ├── [id].tsx         # Detalhe do pedido + propostas + aceite
+│       │   └── novo/[slug].tsx  # Questionário dinâmico + criar pedido
+│       ├── agendamento/[id].tsx # Chat em tempo real + ações (check-in, concluir, confirmar)
+│       └── pagamento/[orderId].tsx # PIX: QR Code + Copia e Cola + polling
+├── src/
+│   ├── global.css              # @tailwind directives
+│   ├── types/index.ts          # Todos os tipos TypeScript
+│   ├── lib/
+│   │   ├── api.ts              # Axios + interceptors (token + refresh 401)
+│   │   └── utils.ts            # formatCurrency, formatDate, labels de status
+│   └── store/auth.ts           # Zustand store com AsyncStorage
+├── app.json                    # Config Expo (scheme, permissions, plugins)
+├── babel.config.js             # NativeWind + Reanimated
+├── metro.config.js             # withNativeWind
+└── tailwind.config.js          # Config Tailwind com preset NativeWind
+```
+
+**Funcionalidades implementadas:**
+- Autenticação completa (login, registro, refresh token automático, logout)
+- Home com grupos de serviço e busca em tempo real
+- Criação de pedido com questionário dinâmico (TEXT, SELECT, RADIO, BOOLEAN, NUMBER, TEXTAREA)
+- Lista de pedidos do cliente com status colorido
+- Detalhe do pedido: propostas, aceite, banner de pagamento pendente
+- Feed do prestador com distância e envio de proposta
+- Agendamentos com status e navegação para chat
+- Chat em tempo real (polling a cada 5s) + ações (check-in, concluir, confirmar)
+- Pagamento PIX: geração de QR Code, Copia e Cola, polling de confirmação
+- Perfil com edição, avaliações e logout
+- Carteira do prestador: saldo, solicitação de saque PIX, histórico
+
+**Para rodar:**
+```bash
+cd mobile
+cp .env.example .env
+# Editar .env com o IP da sua máquina (não localhost!)
+# Exemplo: EXPO_PUBLIC_API_URL=http://192.168.1.50:3333
+npm start
+# Escanear QR Code com o app Expo Go (Android/iOS)
+```
+
+---
+
+*Última atualização: 2026-05-31 — Passo 19 concluído. App Mobile React Native com todas as telas principais implementadas.*

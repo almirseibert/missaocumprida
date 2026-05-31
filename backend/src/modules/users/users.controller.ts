@@ -9,7 +9,7 @@ export async function getMe(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
     select: {
-      id: true, name: true, email: true, phone: true, role: true,
+      id: true, name: true, email: true, phone: true, cpf: true, role: true,
       avatar: true, bio: true, document_verified: true,
       rating_avg: true, rating_count: true, latitude: true, longitude: true,
       is_active: true, created_at: true,
@@ -49,6 +49,7 @@ export async function getPublicProfile(req: Request, res: Response) {
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
   phone: z.string().optional(),
+  cpf: z.string().min(11).max(18).optional(),
   bio: z.string().max(500).optional(),
   role: z.enum(['CLIENT', 'PROVIDER', 'BOTH']).optional(),
   latitude: z.number().min(-90).max(90).optional().nullable(),
@@ -62,7 +63,7 @@ export async function updateMe(req: Request, res: Response) {
   const user = await prisma.user.update({
     where: { id: req.userId },
     data: parsed.data,
-    select: { id: true, name: true, email: true, phone: true, role: true, avatar: true, bio: true, latitude: true, longitude: true },
+    select: { id: true, name: true, email: true, phone: true, cpf: true, role: true, avatar: true, bio: true, latitude: true, longitude: true },
   })
   return R.ok(res, user, 'Perfil atualizado com sucesso')
 }

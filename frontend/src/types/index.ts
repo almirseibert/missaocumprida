@@ -24,6 +24,7 @@ export interface User {
   name: string
   email: string
   phone?: string
+  cpf?: string
   role: UserRole
   avatar?: string
   bio?: string
@@ -140,12 +141,32 @@ export interface Schedule {
   client_id: string
   scheduled_at: string
   checkin_at?: string
+  checkin_photo_url?: string
+  checkin_lat?: number
+  checkin_lng?: number
+  checkin_address?: string
   done_at?: string
+  complete_photo_url?: string
+  complete_lat?: number
+  complete_lng?: number
+  complete_address?: string
+  duration_minutes?: number
+  hourly_amount?: number
   status: ScheduleStatus
   order?: Order
-  provider?: User
+  provider?: User & { hourly_rate?: number }
   client?: User
   messages?: Message[]
+}
+
+export interface Notification {
+  id: string
+  type: string
+  title: string
+  body: string
+  data?: Record<string, string>
+  read: boolean
+  created_at: string
 }
 
 export interface Message {

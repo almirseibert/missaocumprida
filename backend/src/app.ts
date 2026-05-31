@@ -14,6 +14,7 @@ import schedulesRoutes from './modules/schedules/schedules.routes'
 import ratingsRoutes, { rateRouter } from './modules/ratings/ratings.routes'
 import messagesRoutes from './modules/messages/messages.routes'
 import paymentsRoutes, { webhookRouter } from './modules/payments/payments.routes'
+import notificationsRoutes from './modules/notifications/notifications.routes'
 
 const app = express()
 
@@ -49,6 +50,7 @@ app.use('/api/schedules', schedulesRoutes)
 app.use('/api/schedules', rateRouter)                             // POST /api/schedules/:scheduleId/rate
 app.use('/api/schedules/:scheduleId/messages', messagesRoutes)    // GET/POST /api/schedules/:scheduleId/messages
 app.use('/api/payments', paymentsRoutes)
+app.use('/api/notifications', notificationsRoutes)
 
 // ---- 404 ----
 app.use((_req, res) => {

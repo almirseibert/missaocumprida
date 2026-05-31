@@ -72,6 +72,28 @@ export async function createOrder(req: Request, res: Response) {
     },
   })
 
+  // Notify providers who have this category skill and are active
+  try {
+    const providers = await prisma.providerSkill.findMany({
+      where: { category_id: category_id },
+      select: { provider_id: true },
+    })
+    if (providers.length > 0) {
+      await prisma.notification.createMany({
+        data: providers.map((p) => ({
+          user_id: p.provider_id,
+          type: 'NEW_ORDER_NEARBY' as never,
+          title: 'Novo pedido na sua área!',
+          body: `Um novo pedido de ${category.name} foi publicado em ${city}.`,
+          data: { order_id: order.id } as never,
+        })),
+        skipDuplicates: true,
+      })
+    }
+  } catch {
+    // Non-fatal — don't fail the order creation
+  }
+
   return R.created(res, order, 'Pedido criado com sucesso')
 }
 

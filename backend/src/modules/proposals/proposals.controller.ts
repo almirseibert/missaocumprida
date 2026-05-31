@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
-import { createPaymentIntent } from '../payments/payments.controller'
 
 const createSchema = z.object({
   value: z.number().positive('Valor deve ser positivo'),
@@ -37,6 +36,10 @@ export async function createProposal(req: Request, res: Response) {
   })
   if (existing) return R.conflict(res, 'Você já enviou uma proposta para este pedido')
 
+  if (parsed.data.value < 10) {
+    return R.badRequest(res, 'O valor mínimo para uma proposta é R$ 10,00')
+  }
+
   const proposal = await prisma.proposal.create({
     data: { order_id: order.id, provider_id: req.userId, ...parsed.data },
     include: {
@@ -48,6 +51,19 @@ export async function createProposal(req: Request, res: Response) {
   if (order.status === 'OPEN') {
     await prisma.order.update({ where: { id: order.id }, data: { status: 'IN_PROPOSAL' } })
   }
+
+  // Notify client about new proposal
+  try {
+    await prisma.notification.create({
+      data: {
+        user_id: order.client_id,
+        type: 'PROPOSAL_RECEIVED',
+        title: 'Nova proposta recebida!',
+        body: `Você recebeu uma nova proposta para "${order.title}".`,
+        data: { order_id: order.id },
+      },
+    })
+  } catch {}
 
   return R.created(res, proposal, 'Proposta enviada com sucesso')
 }
@@ -126,16 +142,18 @@ export async function acceptProposal(req: Request, res: Response) {
     }),
   ])
 
-  // Cria PaymentIntent no Stripe (se configurado)
-  let paymentData: { clientSecret: string | null; paymentIntentId: string } | null = null
-  if (env.STRIPE_SECRET_KEY) {
-    try {
-      paymentData = await createPaymentIntent(proposal.order_id, req.userId)
-    } catch (err) {
-      // Não bloqueia o aceite se o Stripe falhar; registra o erro
-      console.error('[Stripe] Falha ao criar PaymentIntent:', err)
-    }
-  }
+  // Notify provider that their proposal was accepted
+  try {
+    await prisma.notification.create({
+      data: {
+        user_id: proposal.provider_id,
+        type: 'PROPOSAL_ACCEPTED',
+        title: 'Sua proposta foi aceita!',
+        body: `O cliente aceitou sua proposta para "${proposal.order.title}". ${env.STRIPE_SECRET_KEY ? 'Aguardando confirmação do pagamento.' : 'O agendamento foi confirmado.'}`,
+        data: { order_id: proposal.order_id },
+      },
+    })
+  } catch {}
 
   return R.ok(res, {
     final_price: proposal.value,
@@ -146,8 +164,6 @@ export async function acceptProposal(req: Request, res: Response) {
     client_fee_value: clientFeeValue,
     client_total: clientTotal,
     payment_required: !!env.STRIPE_SECRET_KEY,
-    client_secret: paymentData?.clientSecret ?? null,
-    payment_intent_id: paymentData?.paymentIntentId ?? null,
   }, 'Proposta aceita! Realize o pagamento para confirmar o agendamento.')
 }
 

@@ -1,5 +1,6 @@
 import dotenv from 'dotenv'
-dotenv.config()
+dotenv.config({ path: '.env.local' }) // dev overrides
+dotenv.config()                        // fallback to .env
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -20,4 +21,10 @@ export const env = {
 
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
+
+  MP_ACCESS_TOKEN: process.env.MP_ACCESS_TOKEN || '',
+  MP_PUBLIC_KEY: process.env.MP_PUBLIC_KEY || '',
+  MP_WEBHOOK_SECRET: process.env.MP_WEBHOOK_SECRET || '',
+  MP_CLIENT_ID: process.env.MP_CLIENT_ID || '',
+  MP_CLIENT_SECRET: process.env.MP_CLIENT_SECRET || '',
 }

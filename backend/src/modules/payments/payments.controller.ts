@@ -1,25 +1,86 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
+import QRCode from 'qrcode'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { stripe } from './stripe'
+import { mpPayment } from './mercadopago'
+
+async function pixToQrBase64(pixCode: string): Promise<string> {
+  return QRCode.toDataURL(pixCode).then(url => url.replace('data:image/png;base64,', ''))
+}
+
+// Taxa de processamento por método de pagamento
+const GATEWAY_FEE: Record<string, number> = {
+  card: 0.04, // 4% — cobre a taxa Stripe para cartão de crédito
+  pix:  0.01, // 1% — cobre a taxa Stripe para PIX
+}
+
+const MIN_AMOUNT = 10 // R$ 10,00 mínimo
 
 // ---------------------------------------------------------------------------
-// Criar PaymentIntent (chamado internamente pelo proposals.controller ao aceitar)
-// Retorna { clientSecret, paymentIntentId }
+// POST /api/payments/create-checkout — cria PaymentIntent com taxa de gateway
+// Chamado pelo frontend quando o usuário seleciona o método de pagamento
 // ---------------------------------------------------------------------------
-export async function createPaymentIntent(orderId: string, clientId: string) {
+export async function createCheckout(req: Request, res: Response) {
+  const { order_id, method } = req.body as { order_id?: string; method?: string }
+  if (!order_id || !method) return R.badRequest(res, 'order_id e method são obrigatórios')
+  if (!['card', 'pix'].includes(method)) return R.badRequest(res, 'method deve ser "card" ou "pix"')
+
   const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { client: true, schedule: { include: { provider: true } } },
+    where: { id: order_id },
+    include: { client: { select: { id: true, name: true, email: true, cpf: true, stripe_customer_id: true } }, schedule: { include: { provider: true } } },
   })
-  if (!order || !order.schedule) throw new Error('Pedido ou agendamento não encontrado')
+  if (!order) return R.notFound(res, 'Pedido não encontrado')
+  if (order.client_id !== req.userId) return R.forbidden(res)
+  if (order.status !== 'ACCEPTED') {
+    console.log(`[checkout] Pedido ${order_id} tem status "${order.status}" — esperado ACCEPTED`)
+    return R.badRequest(res, `Este pedido não aguarda pagamento (status atual: ${order.status})`)
+  }
+  if (!order.schedule) return R.badRequest(res, 'Agendamento não encontrado para este pedido')
 
-  const amountCents = Math.round((order.client_total ?? order.final_price ?? 0) * 100)
-  if (amountCents < 50) throw new Error('Valor mínimo para pagamento é R$ 0,50')
+  // Se já existe pagamento PAGO ou LIBERADO, devolve status
+  const existing = await prisma.payment.findUnique({ where: { order_id } })
+  if (existing) {
+    if (['PAID', 'RELEASED'].includes(existing.status)) {
+      return R.ok(res, { already_paid: true, status: existing.status })
+    }
+    // Mesmo método e PaymentIntent ativo: reusa
+    if (existing.payment_method === method && existing.stripe_payment_intent) {
+      try {
+        const intent = await stripe.paymentIntents.retrieve(existing.stripe_payment_intent)
+        if (['requires_payment_method', 'requires_confirmation', 'requires_action'].includes(intent.status)) {
+          return R.ok(res, {
+            client_secret: intent.client_secret,
+            amount: existing.amount,
+            base_amount: existing.amount - existing.gateway_fee,
+            gateway_fee_pct: existing.gateway_fee_pct,
+            gateway_fee: existing.gateway_fee,
+            payment_method: method,
+          })
+        }
+      } catch {}
+    }
+    // Cancela PaymentIntent antigo e deleta o registro para recriar
+    if (existing.stripe_payment_intent) {
+      try { await stripe.paymentIntents.cancel(existing.stripe_payment_intent) } catch {}
+    }
+    await prisma.payment.delete({ where: { order_id } })
+  }
 
-  // Cria ou recupera customer Stripe do cliente
+  // Calcula valor total com taxa de gateway
+  const baseAmount = order.client_total ?? order.final_price ?? 0
+  const feePct = GATEWAY_FEE[method]
+  const gatewayFee = Math.round(baseAmount * feePct * 100) / 100
+  const totalAmount = Math.round((baseAmount + gatewayFee) * 100) / 100
+
+  if (totalAmount < MIN_AMOUNT) {
+    return R.badRequest(res, `Valor mínimo para pagamento é R$ ${MIN_AMOUNT.toFixed(2)}`)
+  }
+  const amountCents = Math.round(totalAmount * 100)
+
+  // Cria ou recupera customer no Stripe (usado apenas para cartão)
   let stripeCustomerId = order.client.stripe_customer_id
   if (!stripeCustomerId) {
     const customer = await stripe.customers.create({
@@ -28,42 +89,170 @@ export async function createPaymentIntent(orderId: string, clientId: string) {
       metadata: { user_id: order.client.id },
     })
     stripeCustomerId = customer.id
-    await prisma.user.update({ where: { id: clientId }, data: { stripe_customer_id: customer.id } })
+    await prisma.user.update({ where: { id: req.userId }, data: { stripe_customer_id: customer.id } })
   }
 
+  // Fluxo PIX: Mercado Pago
+  if (method === 'pix') {
+    // CPF obrigatório para PIX no Brasil
+    if (!order.client.cpf) {
+      return R.badRequest(res, 'CPF obrigatório para pagamento via PIX. Atualize seu perfil antes de continuar.')
+    }
+
+    try {
+      const notificationUrl = env.NODE_ENV === 'production'
+        ? `${env.API_URL}/api/payments/mp-webhook`
+        : undefined
+
+      const nameParts = order.client.name.trim().split(' ')
+      const firstName = nameParts[0]
+      const lastName = nameParts.slice(1).join(' ') || firstName
+
+      // Remove caracteres não numéricos do CPF/CNPJ
+      const docNumber = order.client.cpf.replace(/\D/g, '')
+      const docType = docNumber.length === 14 ? 'CNPJ' : 'CPF'
+
+      const mpBody = {
+        transaction_amount: Math.round(totalAmount * 100) / 100,
+        description: order.title.slice(0, 60),
+        payment_method_id: 'pix',
+        payer: {
+          email: order.client.email,
+          first_name: firstName,
+          last_name: lastName,
+          identification: {
+            type: docType,
+            number: docNumber,
+          },
+        },
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+        external_reference: order.id,
+      }
+
+      // Simula PIX apenas quando o token é de sandbox (TEST-...)
+      const isMpSandbox = env.MP_ACCESS_TOKEN.startsWith('TEST-')
+      if (isMpSandbox) {
+        console.log('[PIX MP] Modo DEV — simulando PIX (não chama MP)')
+        const devPixCode = `00020126580014BR.GOV.BCB.PIX0136${order.id}5204000053039865406${String(Math.round(totalAmount * 100)).padStart(6, '0')}5802BR5913Missao Cumprida6007Lajeado62070503***6304ABCD`
+        const devQr = await pixToQrBase64(devPixCode)
+        const devMpId = `mp_dev_${Date.now()}`
+        await prisma.payment.create({
+          data: {
+            order_id: order.id,
+            client_id: req.userId,
+            provider_id: order.schedule.provider_id,
+            stripe_payment_intent: devMpId,
+            amount: totalAmount,
+            provider_amount: order.provider_amount ?? 0,
+            platform_fee: (order.platform_fee_value ?? 0) + (order.client_fee_value ?? 0),
+            gateway_fee_pct: feePct,
+            gateway_fee: gatewayFee,
+            payment_method: 'pix',
+          },
+        })
+        return R.ok(res, {
+          pix_code: devPixCode,
+          pix_qr_base64: devQr,
+          mp_payment_id: devMpId,
+          amount: totalAmount,
+          base_amount: baseAmount,
+          gateway_fee_pct: feePct,
+          gateway_fee: gatewayFee,
+          payment_method: 'pix',
+          dev_mode: true,
+        })
+      }
+
+      console.log('[PIX MP] Enviando para MP:', JSON.stringify(mpBody, null, 2))
+      const mpResponse = await mpPayment.create({ body: mpBody })
+
+      const pixData = mpResponse.point_of_interaction?.transaction_data
+      const mpId = String(mpResponse.id)
+      const pixCode = pixData?.qr_code ?? null
+      const pixQrBase64 = pixData?.qr_code_base64
+        ?? (pixCode ? await pixToQrBase64(pixCode) : null)
+
+      await prisma.payment.create({
+        data: {
+          order_id: order.id,
+          client_id: req.userId,
+          provider_id: order.schedule.provider_id,
+          stripe_payment_intent: `mp_${mpId}`,
+          amount: totalAmount,
+          provider_amount: order.provider_amount ?? 0,
+          platform_fee: (order.platform_fee_value ?? 0) + (order.client_fee_value ?? 0),
+          gateway_fee_pct: feePct,
+          gateway_fee: gatewayFee,
+          payment_method: 'pix',
+        },
+      })
+
+      return R.ok(res, {
+        pix_code: pixCode,
+        pix_qr_base64: pixQrBase64,
+        mp_payment_id: mpId,
+        amount: totalAmount,
+        base_amount: baseAmount,
+        gateway_fee_pct: feePct,
+        gateway_fee: gatewayFee,
+        payment_method: 'pix',
+      })
+    } catch (err: unknown) {
+      const mpErr = err as { message?: string; cause?: unknown; status?: number; error?: string }
+      console.error('[PIX MP] Erro completo:', {
+        message: mpErr.message,
+        status: mpErr.status,
+        error: mpErr.error,
+        cause: mpErr.cause,
+        raw: String(err),
+      })
+      const msg = mpErr.message ?? 'Erro ao gerar PIX'
+      return R.badRequest(res, msg)
+    }
+  }
+
+  // Cria PaymentIntent no Stripe (cartão)
   const intent = await stripe.paymentIntents.create({
     amount: amountCents,
     currency: 'brl',
     customer: stripeCustomerId,
+    payment_method_types: [method],
     metadata: {
       order_id: order.id,
-      client_id: clientId,
+      client_id: req.userId,
       provider_id: order.schedule.provider_id,
     },
-    description: `Missão Cumprida — Pedido #${order.id.slice(0, 8)}`,
-    automatic_payment_methods: { enabled: true },
+    description: `Missão Cumprida — ${order.title.slice(0, 50)}`,
   })
 
-  // Salva o payment intent no pedido
   await prisma.order.update({
     where: { id: order.id },
     data: { stripe_payment_intent_id: intent.id },
   })
 
-  // Cria registro de pagamento em PENDING
   await prisma.payment.create({
     data: {
       order_id: order.id,
-      client_id: clientId,
+      client_id: req.userId,
       provider_id: order.schedule.provider_id,
       stripe_payment_intent: intent.id,
-      amount: order.client_total ?? order.final_price ?? 0,
+      amount: totalAmount,
       provider_amount: order.provider_amount ?? 0,
       platform_fee: (order.platform_fee_value ?? 0) + (order.client_fee_value ?? 0),
+      gateway_fee_pct: feePct,
+      gateway_fee: gatewayFee,
+      payment_method: method,
     },
   })
 
-  return { clientSecret: intent.client_secret, paymentIntentId: intent.id }
+  return R.ok(res, {
+    client_secret: intent.client_secret,
+    amount: totalAmount,
+    base_amount: baseAmount,
+    gateway_fee_pct: feePct,
+    gateway_fee: gatewayFee,
+    payment_method: method,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -83,6 +272,45 @@ export async function getOrderPayment(req: Request, res: Response) {
   if (!isClient && !isProvider) return R.forbidden(res)
 
   return R.ok(res, payment)
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/payments/mp-webhook — Mercado Pago webhook (PIX)
+// ---------------------------------------------------------------------------
+export async function handleMpWebhook(req: Request, res: Response) {
+  try {
+    const { type, data } = req.body as { type?: string; data?: { id?: string } }
+
+    // MP envia type 'payment' quando o status muda
+    if (type === 'payment' && data?.id) {
+      const mpId = String(data.id)
+
+      // Consulta o pagamento atualizado diretamente na API do MP
+      const mpPay = await mpPayment.get({ id: mpId })
+
+      if (mpPay.status === 'approved') {
+        const orderId = mpPay.external_reference as string | undefined
+
+        if (orderId) {
+          await prisma.$transaction([
+            prisma.payment.update({
+              where: { stripe_payment_intent: `mp_${mpId}` },
+              data: { status: 'PAID', paid_at: new Date() },
+            }),
+            prisma.order.update({
+              where: { id: orderId },
+              data: { status: 'SCHEDULED' },
+            }),
+          ])
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[MP Webhook] Erro:', err)
+  }
+
+  // MP exige resposta 200 imediata
+  return res.sendStatus(200)
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +352,43 @@ export async function handleWebhook(req: Request, res: Response) {
   }
 
   return res.json({ received: true })
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/payments/confirm-intent — confirma pagamento via PaymentIntent (fallback do webhook)
+// Chamado pelo frontend após redirect_status=succeeded
+// ---------------------------------------------------------------------------
+export async function confirmIntent(req: Request, res: Response) {
+  const { payment_intent_id } = req.body
+  if (!payment_intent_id) return R.badRequest(res, 'payment_intent_id obrigatório')
+
+  const payment = await prisma.payment.findUnique({
+    where: { stripe_payment_intent: payment_intent_id },
+  })
+  if (!payment) return R.notFound(res, 'Pagamento não encontrado')
+  if (payment.client_id !== req.userId) return R.forbidden(res)
+
+  if (payment.status === 'PAID' || payment.status === 'RELEASED') {
+    return R.ok(res, { status: payment.status }, 'Pagamento já confirmado')
+  }
+
+  const intent = await stripe.paymentIntents.retrieve(payment_intent_id)
+  if (intent.status !== 'succeeded') {
+    return R.badRequest(res, `Pagamento ainda não confirmado pelo Stripe (status: ${intent.status})`)
+  }
+
+  await prisma.$transaction([
+    prisma.payment.update({
+      where: { stripe_payment_intent: payment_intent_id },
+      data: { status: 'PAID', paid_at: new Date() },
+    }),
+    prisma.order.update({
+      where: { id: payment.order_id },
+      data: { status: 'SCHEDULED' },
+    }),
+  ])
+
+  return R.ok(res, { status: 'PAID' }, 'Pagamento confirmado com sucesso')
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +473,6 @@ export async function requestWithdrawal(req: Request, res: Response) {
     return R.badRequest(res, `Saldo insuficiente. Disponível: R$ ${user.provider_balance.toFixed(2)}`)
   }
 
-  // Bloqueia o saldo imediatamente
   const [withdrawal] = await prisma.$transaction([
     prisma.providerWithdrawal.create({
       data: { provider_id: req.userId, amount, pix_key, pix_key_type },
@@ -258,7 +522,6 @@ export async function rejectWithdrawal(req: Request, res: Response) {
   if (!withdrawal) return R.notFound(res, 'Saque não encontrado')
   if (withdrawal.status !== 'REQUESTED') return R.badRequest(res, 'Saque já processado')
 
-  // Devolve saldo ao prestador
   await prisma.$transaction([
     prisma.providerWithdrawal.update({
       where: { id: withdrawal.id },
@@ -273,7 +536,7 @@ export async function rejectWithdrawal(req: Request, res: Response) {
 }
 
 // ---------------------------------------------------------------------------
-// PUT /api/users/me/pix — prestador cadastra chave PIX
+// PUT /api/payments/pix-key — prestador cadastra chave PIX
 // ---------------------------------------------------------------------------
 const pixSchema = z.object({
   pix_key: z.string().min(5),

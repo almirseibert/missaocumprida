@@ -8,6 +8,8 @@ interface AuthState {
   accessToken: string | null
   refreshToken: string | null
   isLoading: boolean
+  _hasHydrated: boolean
+  setHasHydrated: (v: boolean) => void
   setTokens: (accessToken: string, refreshToken: string) => void
   setUser: (user: User) => void
   logout: () => Promise<void>
@@ -21,6 +23,9 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isLoading: false,
+      _hasHydrated: false,
+
+      setHasHydrated: (v) => set({ _hasHydrated: v }),
 
       setTokens: (accessToken, refreshToken) => {
         localStorage.setItem('accessToken', accessToken)
@@ -45,11 +50,14 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data } = await api.get('/users/me')
           set({ user: data.data })
-        } catch {
-          // token inválido — limpa sessão
-          localStorage.removeItem('accessToken')
-          localStorage.removeItem('refreshToken')
-          set({ user: null, accessToken: null, refreshToken: null })
+        } catch (err: unknown) {
+          const status = (err as { response?: { status?: number } })?.response?.status
+          // Only clear session on explicit 401 — not on network/server errors
+          if (status === 401) {
+            localStorage.removeItem('accessToken')
+            localStorage.removeItem('refreshToken')
+            set({ user: null, accessToken: null, refreshToken: null })
+          }
         } finally {
           set({ isLoading: false })
         }
@@ -61,6 +69,9 @@ export const useAuthStore = create<AuthState>()(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )

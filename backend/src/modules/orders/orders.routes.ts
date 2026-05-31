@@ -15,6 +15,6 @@ router.get('/', listMyOrders)
 router.get('/feed', getProviderFeed)
 router.get('/:id', getOrder)
 router.post('/:id/photos', upload.array('photos', 5), uploadOrderPhotos)
-router.delete('/:id', cancelOrder)
+router.patch('/:id/cancel', cancelOrder)
 
 export default router

@@ -93,10 +93,12 @@ model User {
   rating_count      Int       @default(0)
   latitude          Float?
   longitude         Float?
+  cpf               String?   // CPF ou CNPJ (obrigatório para PIX via Mercado Pago)
   stripe_customer_id String?
   pix_key           String?
   pix_key_type      String?   // CPF, CNPJ, EMAIL, PHONE, RANDOM
   provider_balance  Float     @default(0)
+  hourly_rate       Float?
   is_active         Boolean   @default(true)
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
@@ -114,6 +116,7 @@ model User {
   payments_client   Payment[]       @relation("ClientPayments")
   payments_provider Payment[]       @relation("ProviderPayments")
   withdrawals       ProviderWithdrawal[]
+  notifications     Notification[]
 
   @@map("users")
 }
@@ -284,17 +287,27 @@ model Proposal {
 // ============================================================
 
 model Schedule {
-  id           String         @id @default(uuid())
-  order_id     String         @unique
-  proposal_id  String         @unique
-  provider_id  String
-  client_id    String
-  scheduled_at DateTime
-  checkin_at   DateTime?
-  done_at      DateTime?
-  status       ScheduleStatus @default(CONFIRMED)
-  created_at   DateTime       @default(now())
-  updated_at   DateTime       @updatedAt
+  id                   String         @id @default(uuid())
+  order_id             String         @unique
+  proposal_id          String         @unique
+  provider_id          String
+  client_id            String
+  scheduled_at         DateTime
+  checkin_at           DateTime?
+  checkin_photo_url    String?
+  checkin_lat          Float?
+  checkin_lng          Float?
+  checkin_address      String?
+  done_at              DateTime?
+  complete_photo_url   String?
+  complete_lat         Float?
+  complete_lng         Float?
+  complete_address     String?
+  duration_minutes     Int?
+  hourly_amount        Float?
+  status               ScheduleStatus @default(CONFIRMED)
+  created_at           DateTime       @default(now())
+  updated_at           DateTime       @updatedAt
 
   order    Order    @relation(fields: [order_id], references: [id])
   proposal Proposal @relation(fields: [proposal_id], references: [id])
@@ -356,10 +369,13 @@ model Payment {
   order_id              String        @unique
   client_id             String
   provider_id           String
-  stripe_payment_intent String        @unique
-  amount                Float         // client_total (valor cobrado do cliente)
+  stripe_payment_intent String?       @unique
+  amount                Float         // total cobrado do cliente (inclui taxa de processamento)
   provider_amount       Float         // valor líquido para o prestador
   platform_fee          Float         // taxa da plataforma
+  gateway_fee_pct       Float         @default(0)
+  gateway_fee           Float         @default(0)
+  payment_method        String?       // 'card' | 'pix'
   status                PaymentStatus @default(PENDING)
   paid_at               DateTime?
   released_at           DateTime?
@@ -392,4 +408,35 @@ model ProviderWithdrawal {
   provider User @relation(fields: [provider_id], references: [id])
 
   @@map("provider_withdrawals")
+}
+
+// ============================================================
+// NOTIFICAÇÕES
+// ============================================================
+
+enum NotificationType {
+  NEW_ORDER_NEARBY
+  PROPOSAL_RECEIVED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  CHECKIN_DONE
+  SERVICE_COMPLETED
+  SERVICE_CONFIRMED
+  PAYMENT_RECEIVED
+  GENERAL
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  user_id    String
+  type       NotificationType @default(GENERAL)
+  title      String
+  body       String
+  data       Json?
+  read       Boolean          @default(false)
+  created_at DateTime         @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
 }

@@ -35,7 +35,6 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null)
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [payment, setPayment] = useState<Payment | null>(null)
-  const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [proposalModal, setProposalModal] = useState(false)
   const [proposalValue, setProposalValue] = useState('')
@@ -76,6 +75,7 @@ export default function OrderDetailPage() {
 
   const submitProposal = async () => {
     if (!proposalValue) { toast.error('Informe o valor da proposta'); return }
+    if (parseFloat(proposalValue) < 10) { toast.error('O valor mínimo para uma proposta é R$ 10,00'); return }
     setSubmitting(true)
     try {
       await api.post(`/orders/${id}/proposals`, {
@@ -96,10 +96,9 @@ export default function OrderDetailPage() {
     try {
       const res = await api.post(`/proposals/${proposalId}/accept`)
       const data = res.data.data
-      if (data.payment_required && data.client_secret) {
-        setClientSecret(data.client_secret)
-        toast.success('Proposta aceita! Realize o pagamento abaixo.')
-        router.push(`/pagamento/${id}?cs=${data.client_secret}`)
+      if (data.payment_required) {
+        toast.success('Proposta aceita! Escolha o método de pagamento.')
+        router.push(`/pagamento/${id}`)
         return
       }
       toast.success('Proposta aceita! Agendamento criado.')
@@ -412,7 +411,7 @@ export default function OrderDetailPage() {
             <input
               type="number"
               step="0.01"
-              min="1"
+              min="10"
               placeholder="150.00"
               value={proposalValue}
               onChange={(e) => setProposalValue(e.target.value)}
@@ -425,8 +424,6 @@ export default function OrderDetailPage() {
             const gross = parseFloat(proposalValue)
             const providerFee = Math.round(gross * 0.10 * 100) / 100
             const net = Math.round((gross - providerFee) * 100) / 100
-            const clientFee = Math.round(gross * 0.10 * 100) / 100
-            const clientTotal = Math.round((gross + clientFee) * 100) / 100
             return (
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
                 <p className="font-medium text-gray-700">Resumo financeiro</p>
@@ -441,14 +438,6 @@ export default function OrderDetailPage() {
                 <div className="flex justify-between text-green-700 font-semibold border-t border-gray-200 pt-2">
                   <span>Você recebe</span>
                   <span>R$ {net.toFixed(2)}</span>
-                </div>
-                <div className="border-t border-gray-200 pt-2 flex justify-between text-gray-500">
-                  <span>Taxa de serviço para o cliente (10%)</span>
-                  <span>+ R$ {clientFee.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600 font-medium">
-                  <span>Cliente paga</span>
-                  <span>R$ {clientTotal.toFixed(2)}</span>
                 </div>
               </div>
             )

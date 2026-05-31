@@ -42,7 +42,7 @@ export function getAvatarUrl(avatar?: string): string | undefined {
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   OPEN: 'Aberto',
   IN_PROPOSAL: 'Em proposta',
-  ACCEPTED: 'Aceito',
+  ACCEPTED: 'Aguardando pagamento',
   SCHEDULED: 'Agendado',
   IN_PROGRESS: 'Em andamento',
   DONE: 'Concluído',
