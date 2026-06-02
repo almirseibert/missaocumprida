@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity,
-  TextInput, ActivityIndicator, SafeAreaView,
+  TextInput, ActivityIndicator,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Search } from 'lucide-react-native'
 import { api } from '../../src/lib/api'
@@ -18,6 +19,7 @@ export default function HomeScreen() {
   useEffect(() => {
     api.get('/categories/groups')
       .then(r => setGroups(r.data.data))
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 

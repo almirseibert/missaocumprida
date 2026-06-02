@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity,
-  ActivityIndicator, SafeAreaView, RefreshControl,
+  ActivityIndicator, RefreshControl,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { api } from '../../src/lib/api'
 import { Schedule } from '../../src/types'

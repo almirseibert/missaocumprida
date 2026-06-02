@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  SafeAreaView, Alert, TextInput, ActivityIndicator, RefreshControl,
+  Alert, TextInput, ActivityIndicator, RefreshControl,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { ArrowLeft } from 'lucide-react-native'
 import { api, getApiError } from '../../src/lib/api'

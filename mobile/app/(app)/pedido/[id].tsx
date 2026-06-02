@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, SafeAreaView,
+  ActivityIndicator, Alert,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft } from 'lucide-react-native'
 import { api, getApiError } from '../../../src/lib/api'
@@ -55,7 +56,7 @@ export default function PedidoDetailScreen() {
   if (!order) return null
 
   const isClient = user?.id === order.client_id
-  const isProvider = user?.id !== order.client_id
+  const isProvider = !isClient
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">

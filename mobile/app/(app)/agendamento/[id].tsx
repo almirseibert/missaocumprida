@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
-  ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft, Send } from 'lucide-react-native'
 import { api, getApiError } from '../../../src/lib/api'
 import { useAuthStore } from '../../../src/store/auth'
 import { Schedule, Message } from '../../../src/types'
-import { formatDate, formatCurrency, SCHEDULE_STATUS_LABEL } from '../../../src/lib/utils'
+import { formatDate, formatTime, formatCurrency, SCHEDULE_STATUS_LABEL } from '../../../src/lib/utils'
 
 export default function AgendamentoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -172,7 +173,7 @@ export default function AgendamentoDetailScreen() {
                   <Text className={isMine ? 'text-white' : 'text-gray-800'}>{msg.content}</Text>
                 </View>
                 <Text className={`text-xs text-gray-400 mt-0.5 ${isMine ? 'text-right mr-1' : 'ml-1'}`}>
-                  {new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  {formatTime(msg.created_at)}
                 </Text>
               </View>
             )

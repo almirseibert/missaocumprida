@@ -38,15 +38,14 @@ export default function AppLayout() {
           tabBarIcon: ({ color, size }) => <ListOrdered color={color} size={size} />,
         }}
       />
-      {isProvider && (
-        <Tabs.Screen
-          name="feed"
-          options={{
-            title: 'Feed',
-            tabBarIcon: ({ color, size }) => <Briefcase color={color} size={size} />,
-          }}
-        />
-      )}
+      <Tabs.Screen
+        name="feed"
+        options={{
+          title: 'Feed',
+          tabBarIcon: ({ color, size }) => <Briefcase color={color} size={size} />,
+          href: isProvider ? undefined : null,
+        }}
+      />
       <Tabs.Screen
         name="agendamentos"
         options={{
@@ -66,6 +65,7 @@ export default function AppLayout() {
       <Tabs.Screen name="pedido/novo/[slug]" options={{ href: null }} />
       <Tabs.Screen name="agendamento/[id]" options={{ href: null }} />
       <Tabs.Screen name="carteira" options={{ href: null }} />
+      <Tabs.Screen name="pagamento/[orderId]" options={{ href: null }} />
     </Tabs>
   )
 }

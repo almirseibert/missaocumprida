@@ -1,16 +1,23 @@
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  const fixed = Math.abs(value).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${value < 0 ? '-' : ''}R$ ${fixed}`
 }
 
+function pad(n: number) { return String(n).padStart(2, '0') }
+
 export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(date))
+  const d = new Date(date)
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function formatDateShort(date: string | Date): string {
-  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(date))
+  const d = new Date(date)
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+}
+
+export function formatTime(date: string | Date): string {
+  const d = new Date(date)
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export const ORDER_STATUS_LABEL: Record<string, string> = {

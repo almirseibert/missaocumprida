@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity,
-  ActivityIndicator, SafeAreaView, RefreshControl,
+  ActivityIndicator, RefreshControl,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { api } from '../../src/lib/api'
 import { Order } from '../../src/types'
@@ -16,7 +17,9 @@ export default function MeusPedidosScreen() {
   async function load() {
     try {
       const r = await api.get('/orders')
-      setOrders(r.data.data || [])
+      // O backend retorna { orders, total, page, limit } — aceita também array direto
+      const d = r.data.data
+      setOrders(Array.isArray(d) ? d : (d?.orders ?? []))
     } finally {
       setLoading(false)
       setRefreshing(false)

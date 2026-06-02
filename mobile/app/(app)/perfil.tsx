@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  SafeAreaView, Alert, TextInput, RefreshControl,
+  Alert, TextInput, RefreshControl,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { LogOut, Wallet, Star, ChevronRight } from 'lucide-react-native'
 import { useAuthStore } from '../../src/store/auth'

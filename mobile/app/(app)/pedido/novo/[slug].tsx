@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  ActivityIndicator, Alert, SafeAreaView, Switch,
+  ActivityIndicator, Alert, Switch,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft } from 'lucide-react-native'
 import { api, getApiError } from '../../../../src/lib/api'
@@ -47,10 +48,13 @@ export default function NovoPedidoScreen() {
       api.get(`/categories/${slug}/questionnaire`),
     ]).then(([catRes, qRes]) => {
       setCategory(catRes.data.data)
-      setFields(qRes.data.data || [])
+      // O endpoint de questionário retorna a categoria com os campos em questionnaire_fields
+      const q = qRes.data.data
+      const list = Array.isArray(q) ? q : (q?.questionnaire_fields ?? [])
+      setFields(list)
       setEstimatedMin(catRes.data.data.base_price_min)
       setEstimatedMax(catRes.data.data.base_price_max)
-    }).finally(() => setLoading(false))
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [slug])
 
   function setAnswer(fieldId: string, value: string | boolean) {

@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react'
 import {
-  View, Text, FlatList, TouchableOpacity,
-  ActivityIndicator, SafeAreaView, RefreshControl, Alert,
+  View, Text, FlatList, TouchableOpacity, Modal,
+  ActivityIndicator, RefreshControl, Alert, TextInput,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { api, getApiError } from '../../src/lib/api'
 import { Order } from '../../src/types'
@@ -12,11 +13,18 @@ export default function FeedScreen() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [propostaVisible, setPropostaVisible] = useState(false)
+  const [propostaOrderId, setPropostaOrderId] = useState('')
+  const [propostaValor, setPropostaValor] = useState('')
+  const [propostaMensagem, setPropostaMensagem] = useState('')
+  const [enviando, setEnviando] = useState(false)
 
   async function load() {
     try {
       const r = await api.get('/orders/feed')
-      setOrders(r.data.data || [])
+      // O backend retorna { orders, total, ... } — aceita também array direto
+      const d = r.data.data
+      setOrders(Array.isArray(d) ? d : (d?.orders ?? []))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -25,10 +33,80 @@ export default function FeedScreen() {
 
   useFocusEffect(useCallback(() => { load() }, []))
 
+  async function confirmarProposta() {
+    const value = parseFloat(propostaValor.replace(',', '.'))
+    if (isNaN(value) || value <= 0) { Alert.alert('Valor inválido'); return }
+    setEnviando(true)
+    try {
+      await api.post(`/orders/${propostaOrderId}/proposals`, {
+        value,
+        message: propostaMensagem || 'Tenho disponibilidade para realizar este serviço.',
+      })
+      setPropostaVisible(false)
+      setPropostaValor('')
+      setPropostaMensagem('')
+      Alert.alert('Proposta enviada!', 'O cliente receberá sua proposta em breve.')
+      load()
+    } catch (err) {
+      Alert.alert('Erro', getApiError(err))
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  function enviarProposta(orderId: string) {
+    setPropostaOrderId(orderId)
+    setPropostaVisible(true)
+  }
+
   if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#2563eb" />
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
+      <Modal visible={propostaVisible} transparent animationType="slide">
+        <View className="flex-1 justify-end bg-black/40">
+          <View className="bg-white rounded-t-2xl p-6 gap-4">
+            <Text className="text-lg font-bold text-gray-800">Enviar Proposta</Text>
+            <View>
+              <Text className="text-sm text-gray-500 mb-1">Valor (R$)</Text>
+              <TextInput
+                className="border border-gray-200 rounded-xl px-3 py-2.5 text-gray-800"
+                placeholder="Ex: 150,00"
+                keyboardType="decimal-pad"
+                value={propostaValor}
+                onChangeText={setPropostaValor}
+              />
+            </View>
+            <View>
+              <Text className="text-sm text-gray-500 mb-1">Mensagem (opcional)</Text>
+              <TextInput
+                className="border border-gray-200 rounded-xl px-3 py-2.5 text-gray-800"
+                placeholder="Descreva sua proposta…"
+                multiline
+                numberOfLines={3}
+                value={propostaMensagem}
+                onChangeText={setPropostaMensagem}
+              />
+            </View>
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                onPress={() => { setPropostaVisible(false); setPropostaValor(''); setPropostaMensagem('') }}
+                className="flex-1 border border-gray-300 rounded-xl py-3 items-center"
+              >
+                <Text className="text-gray-600">Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmarProposta}
+                disabled={enviando}
+                className={`flex-1 rounded-xl py-3 items-center ${enviando ? 'bg-green-400' : 'bg-green-600'}`}
+              >
+                <Text className="text-white font-semibold">{enviando ? 'Enviando…' : 'Enviar'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <View className="px-5 pt-6 pb-4">
         <Text className="text-2xl font-bold text-gray-800">Feed de Pedidos</Text>
         <Text className="text-gray-500 text-sm mt-1">Pedidos próximos às suas habilidades</Text>
@@ -97,36 +175,4 @@ export default function FeedScreen() {
     </SafeAreaView>
   )
 
-  function enviarProposta(orderId: string) {
-    Alert.prompt(
-      'Enviar Proposta',
-      'Informe o valor (R$) e uma mensagem',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Enviar',
-          onPress: async (input) => {
-            if (!input) return
-            const [valor, ...msgParts] = input.split(' ')
-            const value = parseFloat(valor.replace(',', '.'))
-            const message = msgParts.join(' ') || 'Tenho disponibilidade para realizar este serviço.'
-            if (isNaN(value) || value <= 0) {
-              Alert.alert('Valor inválido', 'Informe o valor no início (ex: 150 Faço o serviço...)')
-              return
-            }
-            try {
-              await api.post(`/orders/${orderId}/proposals`, { value, message })
-              Alert.alert('Proposta enviada!', 'O cliente receberá sua proposta em breve.')
-              load()
-            } catch (err) {
-              Alert.alert('Erro', getApiError(err))
-            }
-          },
-        },
-      ],
-      'plain-text',
-      '',
-      'numeric'
-    )
-  }
 }

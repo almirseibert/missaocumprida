@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, SafeAreaView, Clipboard, Image,
+  ActivityIndicator, Alert, Image,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import * as Clipboard from 'expo-clipboard'
 import { router, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft, Copy, CheckCircle } from 'lucide-react-native'
 import { api, getApiError } from '../../../src/lib/api'
@@ -58,7 +60,7 @@ export default function PagamentoScreen() {
   }
 
   function copyCode() {
-    Clipboard.setString(checkout.pix_code)
+    Clipboard.setStringAsync(checkout.pix_code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
   }
