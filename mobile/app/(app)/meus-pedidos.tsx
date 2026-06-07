@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { api } from '../../src/lib/api'
 import { Order } from '../../src/types'
-import { formatCurrency, formatDateShort, ORDER_STATUS_LABEL, ORDER_STATUS_COLOR } from '../../src/lib/utils'
+import { formatCurrency, formatDateShort } from '../../src/lib/utils'
+import { Badge, Button, ORDER_STATUS_BADGE } from '../../src/components/ui'
 
 export default function MeusPedidosScreen() {
   const [orders, setOrders] = useState<Order[]>([])
@@ -17,7 +18,6 @@ export default function MeusPedidosScreen() {
   async function load() {
     try {
       const r = await api.get('/orders')
-      // O backend retorna { orders, total, page, limit } — aceita também array direto
       const d = r.data.data
       setOrders(Array.isArray(d) ? d : (d?.orders ?? []))
     } finally {
@@ -28,12 +28,14 @@ export default function MeusPedidosScreen() {
 
   useFocusEffect(useCallback(() => { load() }, []))
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#2563eb" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-slate2-50">
       <View className="px-5 pt-6 pb-4">
-        <Text className="text-2xl font-bold text-gray-800">Meus Pedidos</Text>
+        <Text className="font-display-extrabold text-2xl text-slate2-900">
+          Meus Pedidos
+        </Text>
       </View>
       <FlatList
         data={orders}
@@ -43,24 +45,27 @@ export default function MeusPedidosScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => router.push(`/(app)/pedido/${item.id}`)}
-            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
+            activeOpacity={0.85}
+            className="bg-white rounded-2xl p-4 border border-slate2-200"
           >
             <View className="flex-row justify-between items-start">
-              <Text className="font-semibold text-gray-800 flex-1 mr-2" numberOfLines={2}>
+              <Text
+                className="font-display-bold text-slate2-900 flex-1 mr-2"
+                numberOfLines={2}
+              >
                 {item.title}
               </Text>
-              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: ORDER_STATUS_COLOR[item.status] + '20' }}>
-                <Text className="text-xs font-medium" style={{ color: ORDER_STATUS_COLOR[item.status] }}>
-                  {ORDER_STATUS_LABEL[item.status]}
-                </Text>
-              </View>
+              {(() => {
+                const b = ORDER_STATUS_BADGE[item.status]
+                return b ? <Badge variant={b.variant}>{b.label}</Badge> : null
+              })()}
             </View>
             <View className="flex-row justify-between mt-3">
-              <Text className="text-sm text-gray-500">
+              <Text className="font-sans text-sm text-slate2-500">
                 {item.desired_date ? formatDateShort(item.desired_date) : '—'}
               </Text>
               {item.client_total && (
-                <Text className="text-sm font-semibold text-blue-600">
+                <Text className="font-display-semibold text-sm text-brand-700">
                   {formatCurrency(item.client_total)}
                 </Text>
               )}
@@ -70,13 +75,14 @@ export default function MeusPedidosScreen() {
         ListEmptyComponent={
           <View className="items-center mt-20">
             <Text className="text-5xl mb-4">📋</Text>
-            <Text className="text-gray-500 text-base">Nenhum pedido ainda</Text>
-            <TouchableOpacity
-              onPress={() => router.push('/(app)/home')}
-              className="mt-4 bg-blue-600 rounded-xl px-6 py-3"
-            >
-              <Text className="text-white font-semibold">Contratar serviço</Text>
-            </TouchableOpacity>
+            <Text className="font-sans text-slate2-500 text-base">
+              Nenhum pedido ainda
+            </Text>
+            <View className="mt-4">
+              <Button variant="primary" size="md" onPress={() => router.push('/(app)/home')}>
+                Contratar serviço
+              </Button>
+            </View>
           </View>
         }
       />

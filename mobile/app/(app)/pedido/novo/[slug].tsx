@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft } from 'lucide-react-native'
 import { api, getApiError } from '../../../../src/lib/api'
 import { formatCurrency } from '../../../../src/lib/utils'
+import { PriceEstimator } from '../../../../src/components/PriceEstimator'
 
 interface Field {
   id: string
@@ -24,6 +25,7 @@ interface CategoryDetail {
   id: string
   name: string
   icon: string
+  slug: string
   base_price_min: number
   base_price_max: number
 }
@@ -41,6 +43,8 @@ export default function NovoPedidoScreen() {
   const [estimatedMax, setEstimatedMax] = useState(0)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [focused, setFocused] = useState<string | null>(null)
+  const [isUrgent, setIsUrgent] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -48,7 +52,6 @@ export default function NovoPedidoScreen() {
       api.get(`/categories/${slug}/questionnaire`),
     ]).then(([catRes, qRes]) => {
       setCategory(catRes.data.data)
-      // O endpoint de questionário retorna a categoria com os campos em questionnaire_fields
       const q = qRes.data.data
       const list = Array.isArray(q) ? q : (q?.questionnaire_fields ?? [])
       setFields(list)
@@ -59,7 +62,6 @@ export default function NovoPedidoScreen() {
 
   function setAnswer(fieldId: string, value: string | boolean) {
     setAnswers(prev => ({ ...prev, [fieldId]: value }))
-    // Recalcula estimativa com price_modifier
     const field = fields.find(f => f.id === fieldId)
     if (field?.affects_price && field.price_modifier && category) {
       const mod = field.price_modifier[String(value)] ?? 1
@@ -86,6 +88,7 @@ export default function NovoPedidoScreen() {
         desired_date: desiredDate || undefined,
         estimated_price_min: estimatedMin,
         estimated_price_max: estimatedMax,
+        is_urgent: isUrgent,
       })
       Alert.alert('Pedido criado!', 'Aguarde as propostas dos prestadores.', [
         { text: 'Ver pedido', onPress: () => router.replace(`/(app)/pedido/${data.data.id}`) },
@@ -97,123 +100,182 @@ export default function NovoPedidoScreen() {
     }
   }
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#2563eb" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="flex-row items-center px-4 py-3 bg-white border-b border-gray-100">
+    <SafeAreaView className="flex-1 bg-slate2-50">
+      {/* Header — segue mockup "Novo Pedido — Questionário" */}
+      <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100">
         <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <ArrowLeft size={22} color="#374151" />
+          <ArrowLeft size={22} color="#334155" />
         </TouchableOpacity>
-        <Text className="text-lg font-bold text-gray-800">
-          {category?.icon} {category?.name}
-        </Text>
+        <View className="w-10 h-10 bg-brand-50 rounded-xl items-center justify-center mr-2.5">
+          <Text style={{ fontSize: 20 }}>{category?.icon}</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="font-display-extrabold text-base text-slate2-900" numberOfLines={1}>
+            {category?.name}
+          </Text>
+          <Text className="font-sans text-xs text-slate2-500">
+            Estimativa atualizada em tempo real
+          </Text>
+        </View>
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="p-5 gap-5">
-        {/* Estimativa */}
-        <View className="bg-blue-50 rounded-2xl p-4">
-          <Text className="text-sm text-blue-700">Estimativa de preço</Text>
-          <Text className="text-xl font-bold text-blue-800 mt-0.5">
-            {formatCurrency(estimatedMin)} – {formatCurrency(estimatedMax)}
-          </Text>
-        </View>
+        {/* Estimativa dinâmica */}
+        {category && (
+          <PriceEstimator
+            categorySlug={category.slug ?? (slug as string)}
+            answers={answers as any}
+            fallbackMin={category.base_price_min}
+            fallbackMax={category.base_price_max}
+            onEstimate={(mn, mx) => { setEstimatedMin(mn); setEstimatedMax(mx) }}
+          />
+        )}
 
         {/* Questionário */}
         {fields.map(field => (
           <View key={field.id}>
-            <Text className="text-sm font-medium text-gray-700 mb-1.5">
+            <Text className="font-display-semibold text-sm text-slate2-900 mb-2">
               {field.question}{field.is_required ? ' *' : ''}
             </Text>
             {field.field_type === 'BOOLEAN' ? (
-              <View className="flex-row items-center justify-between bg-white rounded-xl p-4 border border-gray-200">
-                <Text className="text-gray-700">Sim</Text>
+              <View className="flex-row items-center justify-between bg-white rounded-xl p-4 border border-slate2-200">
+                <Text className="font-sans text-slate2-700">Sim</Text>
                 <Switch
                   value={Boolean(answers[field.id])}
                   onValueChange={v => setAnswer(field.id, v)}
-                  trackColor={{ true: '#2563eb' }}
+                  trackColor={{ true: '#1D4ED8' }}
                 />
               </View>
             ) : field.field_type === 'SELECT' || field.field_type === 'RADIO' ? (
-              <View className="gap-2">
-                {(field.options ?? []).map(opt => (
-                  <TouchableOpacity
-                    key={opt}
-                    onPress={() => setAnswer(field.id, opt)}
-                    className={`flex-row items-center p-3 rounded-xl border-2 ${
-                      answers[field.id] === opt ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'
-                    }`}
-                  >
-                    <View className={`w-4 h-4 rounded-full border-2 mr-3 ${
-                      answers[field.id] === opt ? 'border-blue-500 bg-blue-500' : 'border-gray-400'
-                    }`} />
-                    <Text className={answers[field.id] === opt ? 'text-blue-700 font-medium' : 'text-gray-700'}>
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View className="gap-2.5">
+                {(field.options ?? []).map(opt => {
+                  const active = answers[field.id] === opt
+                  return (
+                    <TouchableOpacity
+                      key={opt}
+                      onPress={() => setAnswer(field.id, opt)}
+                      className={`flex-row items-center gap-3 p-3.5 rounded-xl border-2 ${
+                        active
+                          ? 'border-brand-700 bg-brand-50'
+                          : 'border-slate2-200 bg-white'
+                      }`}
+                    >
+                      <View
+                        className="w-5 h-5 rounded-full"
+                        style={{
+                          borderWidth: active ? 6 : 2,
+                          borderColor: active ? '#1D4ED8' : '#CBD5E1',
+                          backgroundColor: '#fff',
+                        }}
+                      />
+                      <Text
+                        className={
+                          active
+                            ? 'font-display-bold text-sm text-brand-700'
+                            : 'font-display-medium text-sm text-slate2-800'
+                        }
+                      >
+                        {opt}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
               </View>
             ) : (
               <TextInput
-                className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
+                className={`bg-white border rounded-xl px-4 py-3 text-slate2-900 font-sans ${
+                  focused === field.id ? 'border-brand-500' : 'border-slate2-300'
+                }`}
                 placeholder={field.field_type === 'NUMBER' ? '0' : 'Sua resposta…'}
+                placeholderTextColor="#94A3B8"
                 keyboardType={field.field_type === 'NUMBER' ? 'numeric' : 'default'}
                 multiline={field.field_type === 'TEXTAREA'}
                 numberOfLines={field.field_type === 'TEXTAREA' ? 3 : 1}
                 value={String(answers[field.id] ?? '')}
                 onChangeText={v => setAnswer(field.id, v)}
+                onFocus={() => setFocused(field.id)}
+                onBlur={() => setFocused(null)}
               />
             )}
           </View>
         ))}
 
         {/* Endereço e data */}
+        {[
+          { key: 'address',  label: 'Endereço do serviço *', value: address,     setter: setAddress,     placeholder: 'Rua, número, bairro' },
+          { key: 'city',     label: 'Cidade',                value: city,        setter: setCity,        placeholder: 'Lajeado, RS' },
+          { key: 'date',     label: 'Data desejada (opcional)', value: desiredDate, setter: setDesiredDate, placeholder: 'DD/MM/AAAA' },
+        ].map(({ key, label, value, setter, placeholder }) => (
+          <View key={key}>
+            <Text className="font-display-semibold text-sm text-slate2-900 mb-2">
+              {label}
+            </Text>
+            <TextInput
+              className={`bg-white border rounded-xl px-4 py-3 text-slate2-900 font-sans ${
+                focused === key ? 'border-brand-500' : 'border-slate2-300'
+              }`}
+              placeholder={placeholder}
+              placeholderTextColor="#94A3B8"
+              value={value}
+              onChangeText={setter}
+              onFocus={() => setFocused(key)}
+              onBlur={() => setFocused(null)}
+            />
+          </View>
+        ))}
         <View>
-          <Text className="text-sm font-medium text-gray-700 mb-1.5">Endereço do serviço *</Text>
+          <Text className="font-display-semibold text-sm text-slate2-900 mb-2">
+            Detalhes adicionais
+          </Text>
           <TextInput
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
-            placeholder="Rua, número, bairro"
-            value={address}
-            onChangeText={setAddress}
-          />
-        </View>
-        <View>
-          <Text className="text-sm font-medium text-gray-700 mb-1.5">Cidade</Text>
-          <TextInput
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
-            placeholder="Lajeado, RS"
-            value={city}
-            onChangeText={setCity}
-          />
-        </View>
-        <View>
-          <Text className="text-sm font-medium text-gray-700 mb-1.5">Data desejada (opcional)</Text>
-          <TextInput
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
-            placeholder="DD/MM/AAAA"
-            value={desiredDate}
-            onChangeText={setDesiredDate}
-          />
-        </View>
-        <View>
-          <Text className="text-sm font-medium text-gray-700 mb-1.5">Detalhes adicionais</Text>
-          <TextInput
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-800"
+            className={`bg-white border rounded-xl px-4 py-3 text-slate2-900 font-sans ${
+              focused === 'desc' ? 'border-brand-500' : 'border-slate2-300'
+            }`}
             placeholder="Informações extras para o prestador…"
+            placeholderTextColor="#94A3B8"
             multiline
             numberOfLines={3}
             value={description}
             onChangeText={setDescription}
+            onFocus={() => setFocused('desc')}
+            onBlur={() => setFocused(null)}
           />
         </View>
 
         <TouchableOpacity
+          onPress={() => setIsUrgent(!isUrgent)}
+          className={`rounded-2xl p-4 mb-4 border-2 ${isUrgent ? 'border-rose-500 bg-rose-50' : 'border-slate2-200 bg-white'}`}
+        >
+          <View className="flex-row items-start gap-3">
+            <View className={`w-5 h-5 rounded border-2 items-center justify-center mt-0.5 ${isUrgent ? 'bg-rose-600 border-rose-600' : 'border-slate2-300'}`}>
+              {isUrgent && <Text className="text-white text-xs">✓</Text>}
+            </View>
+            <View className="flex-1">
+              <View className="flex-row items-center gap-2 mb-1">
+                <Text className="font-semibold text-slate2-900">🚨 Preciso urgente</Text>
+                {isUrgent && (
+                  <Text className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded-full">+25%</Text>
+                )}
+              </View>
+              <Text className="text-xs text-slate2-600">
+                Notifica prestadores próximos imediatamente. Prazo: 2h.
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           onPress={handleSubmit}
           disabled={submitting}
-          className={`rounded-2xl py-4 items-center mb-4 ${submitting ? 'bg-blue-400' : 'bg-blue-600'}`}
+          className={`rounded-2xl py-4 items-center mb-4 ${
+            submitting ? 'bg-brand-400' : 'bg-brand-700'
+          }`}
         >
-          <Text className="text-white font-bold text-base">
-            {submitting ? 'Publicando…' : 'Publicar pedido'}
+          <Text className="font-display-bold text-white text-base">
+            {submitting ? 'Publicando…' : 'Publicar pedido →'}
           </Text>
         </TouchableOpacity>
       </ScrollView>

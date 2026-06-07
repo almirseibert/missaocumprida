@@ -56,7 +56,7 @@ function SimularPagamentoButton({ orderId, onPaid }: { orderId: string; onPaid: 
     }
   }
   return (
-    <Button size="sm" onClick={simular} isLoading={loading} className="w-full bg-yellow-600 hover:bg-yellow-700">
+    <Button size="sm" onClick={simular} isLoading={loading} className="w-full bg-amber-600 hover:bg-amber-700">
       Simular confirmação do PIX
     </Button>
   )
@@ -98,12 +98,12 @@ function PixCheckoutForm({ checkout, orderId }: { checkout: CheckoutData; orderI
 
   return (
     <div className="space-y-5">
-      <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
-        <div className="flex justify-between text-gray-600">
+      <div className="bg-slate2-50 rounded-xl p-4 space-y-2 text-sm">
+        <div className="flex justify-between text-slate2-600">
           <span>Valor do serviço (c/ taxa plataforma)</span>
           <span>{formatCurrency(checkout.base_amount)}</span>
         </div>
-        <div className="flex justify-between text-gray-500">
+        <div className="flex justify-between text-slate2-500">
           <span>Taxa de processamento ({feePctLabel} — PIX)</span>
           <span>+ {formatCurrency(checkout.gateway_fee)}</span>
         </div>
@@ -128,7 +128,7 @@ function PixCheckoutForm({ checkout, orderId }: { checkout: CheckoutData; orderI
 
         {checkout.pix_code && (
           <div className="space-y-2">
-            <div className="bg-white border border-green-200 rounded-lg p-3 text-xs text-gray-600 break-all font-mono select-all text-left">
+            <div className="bg-white border border-green-200 rounded-lg p-3 text-xs text-slate2-600 break-all font-mono select-all text-left">
               {checkout.pix_code}
             </div>
             <Button variant="outline" size="sm" onClick={copyCode} className="w-full">
@@ -143,9 +143,9 @@ function PixCheckoutForm({ checkout, orderId }: { checkout: CheckoutData; orderI
         </div>
 
         {checkout.dev_mode && (
-          <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 space-y-2">
-            <p className="text-xs font-bold text-yellow-800">⚠ Modo desenvolvimento — PIX simulado</p>
-            <p className="text-xs text-yellow-700">O QR Code acima é fictício. Use o botão abaixo para simular a confirmação do pagamento.</p>
+          <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-bold text-amber-800">⚠ Modo desenvolvimento — PIX simulado</p>
+            <p className="text-xs text-amber-700">O QR Code acima é fictício. Use o botão abaixo para simular a confirmação do pagamento.</p>
             <SimularPagamentoButton orderId={orderId} onPaid={() => {
               setPolling(false)
               toast.success('Pagamento PIX confirmado!')
@@ -189,12 +189,12 @@ function CheckoutForm({ checkout, orderId }: { checkout: CheckoutData; orderId: 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Breakdown */}
-      <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
-        <div className="flex justify-between text-gray-600">
+      <div className="bg-slate2-50 rounded-xl p-4 space-y-2 text-sm">
+        <div className="flex justify-between text-slate2-600">
           <span>Valor do serviço (c/ taxa plataforma)</span>
           <span>{formatCurrency(checkout.base_amount)}</span>
         </div>
-        <div className="flex justify-between text-gray-500">
+        <div className="flex justify-between text-slate2-500">
           <span>
             Taxa de processamento ({feePctLabel} —{' '}
             {checkout.payment_method === 'pix' ? 'PIX' : 'Cartão'})
@@ -203,7 +203,7 @@ function CheckoutForm({ checkout, orderId }: { checkout: CheckoutData; orderId: 
         </div>
         <div className="flex justify-between border-t pt-2 font-bold text-base">
           <span>Total</span>
-          <span className="text-blue-600">{formatCurrency(checkout.amount)}</span>
+          <span className="text-brand-700">{formatCurrency(checkout.amount)}</span>
         </div>
       </div>
 
@@ -217,7 +217,7 @@ function CheckoutForm({ checkout, orderId }: { checkout: CheckoutData; orderId: 
 
       <PaymentElement />
 
-      <div className="flex items-center gap-2 text-xs text-gray-500">
+      <div className="flex items-center gap-2 text-xs text-slate2-500">
         <Lock className="w-3 h-3" />
         <span>Pagamento seguro via Stripe. Seus dados são criptografados.</span>
       </div>
@@ -344,8 +344,8 @@ export default function PagamentoPage() {
         <Card>
           <CardBody className="text-center py-10">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Pagamento confirmado!</h2>
-            <p className="text-gray-500 mb-6">
+            <h2 className="text-2xl font-bold text-slate2-800 mb-2">Pagamento confirmado!</h2>
+            <p className="text-slate2-500 mb-6">
               Seu pagamento foi recebido com sucesso. O serviço está agendado.
             </p>
             <Button onClick={() => router.push(`/pedido/${orderId}`)}>Ver pedido</Button>
@@ -359,7 +359,7 @@ export default function PagamentoPage() {
     return (
       <div className="max-w-md mx-auto mt-12 text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-        <p className="text-gray-600">Pedido não encontrado.</p>
+        <p className="text-slate2-600">Pedido não encontrado.</p>
         <Button variant="outline" onClick={() => router.back()} className="mt-4">Voltar</Button>
       </div>
     )
@@ -370,24 +370,24 @@ export default function PagamentoPage() {
   return (
     <div className="max-w-lg mx-auto py-8 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Pagamento</h1>
-        <p className="text-gray-500 text-sm mt-1">{order.title}</p>
+        <h1 className="text-2xl font-bold text-slate2-800">Pagamento</h1>
+        <p className="text-slate2-500 text-sm mt-1">{order.title}</p>
       </div>
 
       <Card>
         <CardHeader>
-          <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+          <h2 className="font-semibold text-slate2-700 flex items-center gap-2">
             <Lock className="w-4 h-4" />
             Pagamento seguro (escrow)
           </h2>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-slate2-500 mt-1">
             O valor fica retido até você confirmar a conclusão do serviço.
           </p>
         </CardHeader>
         <CardBody className="space-y-5">
           {/* Seleção de método de pagamento */}
           <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">Escolha o método de pagamento</p>
+            <p className="text-sm font-medium text-slate2-700 mb-2">Escolha o método de pagamento</p>
             <div className={cn('gap-3', stripePromise ? 'grid grid-cols-2' : 'flex justify-center')}>
               {stripePromise && (
               <button
@@ -396,13 +396,13 @@ export default function PagamentoPage() {
                 className={cn(
                   'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors text-sm',
                   selectedMethod === 'card'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    ? 'border-brand-500 bg-brand-50 text-brand-800'
+                    : 'border-slate2-200 hover:border-slate2-300 text-slate2-600'
                 )}
               >
                 <CreditCard className="w-6 h-6" />
                 <span className="font-medium">Cartão</span>
-                <span className="text-xs text-gray-500">Taxa 4%</span>
+                <span className="text-xs text-slate2-500">Taxa 4%</span>
               </button>
               )}
 
@@ -413,23 +413,23 @@ export default function PagamentoPage() {
                   'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors text-sm',
                   selectedMethod === 'pix'
                     ? 'border-green-500 bg-green-50 text-green-700'
-                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    : 'border-slate2-200 hover:border-slate2-300 text-slate2-600'
                 )}
               >
                 <QrCode className="w-6 h-6" />
                 <span className="font-medium">PIX</span>
-                <span className="text-xs text-gray-500">Taxa 1%</span>
+                <span className="text-xs text-slate2-500">Taxa 1%</span>
               </button>
             </div>
 
             {/* Fee preview before checkout is created */}
             {!checkout && selectedMethod && !creatingCheckout && (
-              <div className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-lg p-2 text-center">
+              <div className="mt-3 text-xs text-slate2-500 bg-slate2-50 rounded-lg p-2 text-center">
                 Preparando checkout…
               </div>
             )}
             {!selectedMethod && (
-              <p className="mt-2 text-xs text-gray-400 text-center">
+              <p className="mt-2 text-xs text-slate2-400 text-center">
                 Valor do serviço: {formatCurrency(baseAmount)} + taxa de processamento
               </p>
             )}
@@ -437,16 +437,16 @@ export default function PagamentoPage() {
 
           {/* Coleta de CPF (obrigatório para PIX) */}
           {needsCpf && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-3">
-              <p className="text-sm font-semibold text-yellow-800">CPF obrigatório para pagamento via PIX</p>
-              <p className="text-xs text-yellow-700">O Mercado Pago exige o CPF do pagador. Informe abaixo — será salvo no seu perfil.</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-semibold text-amber-800">CPF obrigatório para pagamento via PIX</p>
+              <p className="text-xs text-amber-700">O Mercado Pago exige o CPF do pagador. Informe abaixo — será salvo no seu perfil.</p>
               <input
                 type="text"
                 placeholder="000.000.000-00"
                 value={cpfInput}
                 onChange={e => setCpfInput(e.target.value)}
                 maxLength={18}
-                className="w-full border border-yellow-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
               <Button onClick={saveCpfAndPay} isLoading={savingCpf} className="w-full bg-green-600 hover:bg-green-700">
                 Salvar CPF e gerar PIX
@@ -471,8 +471,8 @@ export default function PagamentoPage() {
 
           {creatingCheckout && (
             <div className="text-center py-4">
-              <div className="inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm text-gray-500 mt-2">Preparando checkout…</p>
+              <div className="inline-block w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-slate2-500 mt-2">Preparando checkout…</p>
             </div>
           )}
         </CardBody>

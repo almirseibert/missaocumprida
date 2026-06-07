@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../../config/database'
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../../utils/jwt'
 import * as R from '../../utils/response'
+import { applyReferralOnRegister, ensureReferralCode } from '../referrals/referrals.service'
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Nome deve ter ao menos 2 caracteres'),
@@ -11,6 +12,7 @@ const registerSchema = z.object({
   password: z.string().min(6, 'Senha deve ter ao menos 6 caracteres'),
   phone: z.string().optional(),
   role: z.enum(['CLIENT', 'PROVIDER', 'BOTH']).default('CLIENT'),
+  referral_code: z.string().trim().min(3).max(20).optional(),
 })
 
 const loginSchema = z.object({
@@ -24,7 +26,7 @@ export async function register(req: Request, res: Response) {
     return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
   }
 
-  const { name, email, password, phone, role } = parsed.data
+  const { name, email, password, phone, role, referral_code } = parsed.data
 
   const exists = await prisma.user.findUnique({ where: { email } })
   if (exists) return R.conflict(res, 'E-mail já cadastrado')
@@ -34,6 +36,15 @@ export async function register(req: Request, res: Response) {
     data: { name, email, password: hashed, phone, role },
     select: { id: true, name: true, email: true, role: true, created_at: true },
   })
+
+  // Gera código de indicação próprio
+  await ensureReferralCode(user.id).catch(() => {})
+
+  // Aplica indicação se houver código válido
+  let referralBonus: { applied: boolean; reason?: string } | undefined
+  if (referral_code) {
+    referralBonus = await applyReferralOnRegister(user.id, referral_code, req.ip).catch(() => undefined)
+  }
 
   const accessToken = generateAccessToken({ userId: user.id, role: user.role })
   const refreshToken = generateRefreshToken({ userId: user.id, role: user.role })
@@ -46,7 +57,7 @@ export async function register(req: Request, res: Response) {
     },
   })
 
-  return R.created(res, { user, accessToken, refreshToken }, 'Cadastro realizado com sucesso')
+  return R.created(res, { user, accessToken, refreshToken, referral_bonus: referralBonus }, 'Cadastro realizado com sucesso')
 }
 
 export async function login(req: Request, res: Response) {

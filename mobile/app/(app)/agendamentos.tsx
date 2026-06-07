@@ -8,12 +8,13 @@ import { router, useFocusEffect } from 'expo-router'
 import { api } from '../../src/lib/api'
 import { Schedule } from '../../src/types'
 import { formatDate, SCHEDULE_STATUS_LABEL } from '../../src/lib/utils'
+import { Badge, BadgeVariant } from '../../src/components/ui'
 
-const STATUS_COLOR: Record<string, string> = {
-  CONFIRMED: '#8b5cf6',
-  IN_PROGRESS: '#06b6d4',
-  DONE: '#10b981',
-  CANCELLED: '#ef4444',
+const STATUS_VARIANT: Record<string, BadgeVariant> = {
+  CONFIRMED:   'purple',
+  IN_PROGRESS: 'fuchsia',
+  DONE:        'green',
+  CANCELLED:   'red',
 }
 
 export default function AgendamentosScreen() {
@@ -33,12 +34,14 @@ export default function AgendamentosScreen() {
 
   useFocusEffect(useCallback(() => { load() }, []))
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#2563eb" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-slate2-50">
       <View className="px-5 pt-6 pb-4">
-        <Text className="text-2xl font-bold text-gray-800">Agendamentos</Text>
+        <Text className="font-display-extrabold text-2xl text-slate2-900">
+          Agendamentos
+        </Text>
       </View>
       <FlatList
         data={schedules}
@@ -48,27 +51,33 @@ export default function AgendamentosScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => router.push(`/(app)/agendamento/${item.id}`)}
-            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
+            activeOpacity={0.85}
+            className="bg-white rounded-2xl p-4 border border-slate2-200"
           >
             <View className="flex-row justify-between items-start">
-              <Text className="font-semibold text-gray-800 flex-1 mr-2" numberOfLines={2}>
+              <Text
+                className="font-display-bold text-slate2-900 flex-1 mr-2"
+                numberOfLines={2}
+              >
                 {item.order?.title ?? 'Agendamento'}
               </Text>
-              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: STATUS_COLOR[item.status] + '20' }}>
-                <Text className="text-xs font-medium" style={{ color: STATUS_COLOR[item.status] }}>
-                  {SCHEDULE_STATUS_LABEL[item.status]}
-                </Text>
-              </View>
+              <Badge variant={STATUS_VARIANT[item.status] ?? 'gray'}>
+                {SCHEDULE_STATUS_LABEL[item.status]}
+              </Badge>
             </View>
-            <Text className="text-sm text-gray-500 mt-2">
+            <Text className="font-sans text-sm text-slate2-500 mt-2">
               📅 {formatDate(item.scheduled_at)}
             </Text>
             <View className="flex-row mt-2 gap-4">
               {item.provider && (
-                <Text className="text-xs text-gray-400">🔧 {item.provider.name}</Text>
+                <Text className="font-sans text-xs text-slate2-400">
+                  🔧 {item.provider.name}
+                </Text>
               )}
               {item.client && (
-                <Text className="text-xs text-gray-400">👤 {item.client.name}</Text>
+                <Text className="font-sans text-xs text-slate2-400">
+                  👤 {item.client.name}
+                </Text>
               )}
             </View>
           </TouchableOpacity>
@@ -76,7 +85,9 @@ export default function AgendamentosScreen() {
         ListEmptyComponent={
           <View className="items-center mt-20">
             <Text className="text-5xl mb-4">📅</Text>
-            <Text className="text-gray-500 text-base">Nenhum agendamento ainda</Text>
+            <Text className="font-sans text-slate2-500 text-base">
+              Nenhum agendamento ainda
+            </Text>
           </View>
         }
       />

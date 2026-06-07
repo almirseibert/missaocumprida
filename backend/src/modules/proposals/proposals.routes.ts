@@ -1,8 +1,9 @@
 import { Router } from 'express'
-import { authenticate } from '../../middlewares/auth'
+import { authenticate, requireVerified } from '../../middlewares/auth'
 import {
   createProposal, listOrderProposals,
   acceptProposal, rejectProposal, cancelProposal, listMyProposals,
+  boostProposal,
 } from './proposals.controller'
 
 const router = Router({ mergeParams: true })
@@ -10,7 +11,7 @@ const router = Router({ mergeParams: true })
 router.use(authenticate)
 
 // Montado em /api/orders/:orderId/proposals
-router.post('/', createProposal)
+router.post('/', requireVerified, createProposal)
 router.get('/', listOrderProposals)
 
 export default router
@@ -22,3 +23,4 @@ proposalActionsRouter.get('/mine', listMyProposals)
 proposalActionsRouter.post('/:id/accept', acceptProposal)
 proposalActionsRouter.post('/:id/reject', rejectProposal)
 proposalActionsRouter.delete('/:id', cancelProposal)
+proposalActionsRouter.post('/:id/boost', boostProposal)

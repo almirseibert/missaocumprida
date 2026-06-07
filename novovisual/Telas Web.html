@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telas Web — Missão Cumprida Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --p50:#EFF6FF;--p100:#DBEAFE;--p500:#3B82F6;--p600:#2563EB;--p700:#1D4ED8;--p800:#1E40AF;--p900:#1E3A8A;
+  --s50:#ECFDF5;--s100:#D1FAE5;--s500:#10B981;--s600:#059669;--s700:#047857;
+  --w50:#FFFBEB;--w500:#F59E0B;--w600:#D97706;
+  --e50:#FEF2F2;--e500:#EF4444;--e600:#DC2626;
+  --n50:#F8FAFC;--n100:#F1F5F9;--n200:#E2E8F0;--n300:#CBD5E1;--n400:#94A3B8;
+  --n500:#64748B;--n600:#475569;--n700:#334155;--n800:#1E293B;--n900:#0F172A;
+  --fd:'Plus Jakarta Sans',sans-serif;--fb:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#1a1f2e;font-family:var(--fb);-webkit-font-smoothing:antialiased;min-height:100vh;}
+
+/* ── Canvas chrome ── */
+.canvas-top{background:#111827;border-bottom:1px solid #374151;padding:0 32px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.canvas-title{font-family:var(--fd);font-size:14px;font-weight:700;color:#F9FAFB;display:flex;align-items:center;gap:10px;}
+.canvas-badge{background:#1D4ED8;color:#fff;font-size:11px;font-weight:600;padding:2px 10px;border-radius:100px;}
+.canvas-pill{display:flex;gap:6px;align-items:center;}
+.canvas-pill a{font-size:12px;color:#9CA3AF;text-decoration:none;padding:5px 10px;border-radius:6px;transition:.15s;}
+.canvas-pill a:hover{background:#374151;color:#fff;}
+
+/* ── Screen layout ── */
+.screens{padding:40px 40px 80px;max-width:1400px;margin:0 auto;}
+.screen-block{margin-bottom:64px;}
+.screen-label{font-family:var(--fd);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#6B7280;margin-bottom:6px;}
+.screen-title{font-family:var(--fd);font-size:22px;font-weight:800;color:#F9FAFB;margin-bottom:4px;}
+.screen-desc{font-size:13px;color:#9CA3AF;margin-bottom:20px;max-width:600px;line-height:1.5;}
+
+/* ── Browser chrome ── */
+.browser{border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+.browser-bar{background:#2D3748;padding:10px 16px;display:flex;align-items:center;gap:12px;}
+.b-dots{display:flex;gap:6px;}
+.b-dot{width:12px;height:12px;border-radius:50%;}
+.b-url{flex:1;background:#1A202C;border-radius:6px;padding:5px 14px;font-size:12px;color:#9CA3AF;font-family:monospace;max-width:500px;margin:0 auto;}
+.screen-content{overflow:hidden;}
+
+/* ── SCREEN COMPONENTS ── */
+
+/* Nav */
+.nav{background:#fff;border-bottom:1px solid var(--n200);padding:0 40px;height:60px;display:flex;align-items:center;justify-content:space-between;}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-name{font-family:var(--fd);font-size:17px;font-weight:800;color:var(--n900);}
+.nav-items{display:flex;gap:2px;}
+.nav-item{padding:7px 12px;border-radius:8px;font-size:13px;font-weight:500;color:var(--n600);text-decoration:none;display:flex;align-items:center;gap:6px;cursor:pointer;}
+.nav-item:hover{background:var(--n100);}
+.nav-item.active{background:var(--p50);color:var(--p700);}
+.nav-right{display:flex;align-items:center;gap:8px;}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--fb);font-weight:600;border:none;cursor:pointer;transition:all .15s;text-decoration:none;}
+.btn-sm{padding:7px 14px;font-size:12px;border-radius:8px;}
+.btn-md{padding:9px 18px;font-size:13px;border-radius:10px;}
+.btn-lg{padding:13px 28px;font-size:15px;border-radius:12px;}
+.btn-p{background:var(--p700);color:#fff;}
+.btn-s{background:var(--s600);color:#fff;}
+.btn-n{background:var(--n100);color:var(--n800);}
+.btn-o{background:transparent;color:var(--p700);border:2px solid var(--p700);}
+.btn-ow{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.6);}
+.btn-w{background:#fff;color:var(--p700);}
+.btn-ghost{background:transparent;color:var(--n600);}
+.btn-d{background:var(--e600);color:#fff;}
+
+/* Avatar */
+.ava{display:flex;align-items:center;justify-content:center;border-radius:50%;font-family:var(--fd);font-weight:700;color:#fff;background:linear-gradient(135deg,var(--p600),var(--s600));}
+
+/* Badge */
+.bdg{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;}
+.bdg::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.7;}
+.bdg-blue{background:var(--p100);color:var(--p700);}
+.bdg-green{background:var(--s100);color:var(--s700);}
+.bdg-amber{background:#FEF3C7;color:#92400E;}
+.bdg-gray{background:var(--n100);color:var(--n600);}
+.bdg-purple{background:#EDE9FE;color:#5B21B6;}
+.bdg-red{background:var(--e50);color:var(--e600);}
+
+/* Cards */
+.card{background:#fff;border:1px solid var(--n200);border-radius:14px;}
+.card-p{padding:20px;}
+
+/* Page bg */
+.page{background:var(--n50);min-height:700px;}
+.container{max-width:1100px;margin:0 auto;padding:32px 40px;}
+
+/* Stat card */
+.stat{background:#fff;border:1px solid var(--n200);border-radius:12px;padding:16px;transition:.2s;}
+.stat:hover{border-color:var(--p300);box-shadow:0 4px 16px rgba(29,78,216,.1);}
+
+/* Input */
+.inp{width:100%;padding:11px 16px;border:1.5px solid var(--n300);border-radius:10px;font-family:var(--fb);font-size:14px;color:var(--n900);background:#fff;outline:none;}
+
+/* Stars */
+.stars{color:#F59E0B;letter-spacing:1px;}
+
+/* Category card */
+.cat-card{background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;transition:.2s;}
+.cat-card:hover{border-color:var(--p300);box-shadow:0 4px 16px rgba(29,78,216,.1);}
+</style>
+</head>
+<body>
+
+<!-- Canvas top bar -->
+<div class="canvas-top">
+  <div class="canvas-title">
+    <svg width="24" height="24" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="g0" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#g0)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Missão Cumprida <span class="canvas-badge">Telas Web</span>
+  </div>
+  <div class="canvas-pill">
+    <a href="#s1">Landing</a>
+    <a href="#s2">Home Cliente</a>
+    <a href="#s3">Feed Prestador</a>
+    <a href="#s4">Pedido</a>
+    <a href="#s5">Agendamento</a>
+  </div>
+</div>
+
+<div class="screens">
+
+<!-- ═══ SCREEN 1: LANDING PAGE ═══════════════════════════════════ -->
+<div class="screen-block" id="s1">
+  <div class="screen-label">Tela 01 — Área pública</div>
+  <div class="screen-title">Landing Page</div>
+  <div class="screen-desc">Hero com fundo escuro institucional. Hierarquia tipográfica clara com Plus Jakarta Sans. Grid de categorias com hover elevado. CTA final em azul sólido.</div>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="b-dots"><div class="b-dot" style="background:#ff5f57;"></div><div class="b-dot" style="background:#febc2e;"></div><div class="b-dot" style="background:#28c840;"></div></div>
+      <div class="b-url">missaocumprida.com.br</div>
+    </div>
+    <div class="screen-content">
+      <!-- NAV -->
+      <div style="background:#fff;border-bottom:1px solid var(--n200);padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <svg width="36" height="36" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="g1" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#g1)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span style="font-family:var(--fd);font-size:18px;font-weight:800;color:var(--n900);">Missão Cumprida</span>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <a class="btn btn-ghost btn-md" style="color:var(--n600);">Entrar</a>
+          <a class="btn btn-p btn-md">Cadastrar grátis</a>
+        </div>
+      </div>
+
+      <!-- HERO -->
+      <div style="background:linear-gradient(135deg,#0F172A 0%,#1E3A8A 55%,#1D4ED8 100%);padding:80px 48px;text-align:center;">
+        <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:100px;padding:6px 16px;margin-bottom:24px;">
+          <span style="width:6px;height:6px;border-radius:50%;background:#10B981;display:inline-block;"></span>
+          <span style="font-size:12px;color:rgba(255,255,255,.85);font-weight:500;">+2.400 profissionais verificados</span>
+        </div>
+        <h1 style="font-family:var(--fd);font-size:52px;font-weight:800;color:#fff;max-width:680px;margin:0 auto 20px;line-height:1.08;letter-spacing:-.02em;">Profissionais verificados para qualquer serviço</h1>
+        <p style="font-size:17px;color:rgba(255,255,255,.7);margin-bottom:40px;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.6;">Descreva o que precisa, receba propostas e pague com segurança via PIX ou cartão.</p>
+        <div style="display:flex;gap:12px;justify-content:center;">
+          <a class="btn btn-w btn-lg">Contratar um serviço</a>
+          <a class="btn btn-ow btn-lg">Sou prestador de serviço</a>
+        </div>
+      </div>
+
+      <!-- CATEGORIES -->
+      <div style="background:#fff;padding:56px 48px;">
+        <div style="text-align:center;margin-bottom:36px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--p600);margin-bottom:8px;">Categorias</div>
+          <h2 style="font-family:var(--fd);font-size:32px;font-weight:800;color:var(--n900);">O que você precisa hoje?</h2>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:12px;max-width:1000px;margin:0 auto;">
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;transition:.2s;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">🏠</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Casa</div></div>
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">🚗</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Carro</div></div>
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">💆</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Você</div></div>
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">🐾</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Pet</div></div>
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">💻</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Tech</div></div>
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">📦</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Entrega</div></div>
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">🎉</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Eventos</div></div>
+          <div style="text-align:center;padding:20px 8px;border-radius:14px;border:1px solid var(--n200);cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.background='#EFF6FF'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'"><div style="font-size:28px;margin-bottom:8px;">📚</div><div style="font-size:12px;font-weight:600;color:var(--n700);">Educação</div></div>
+        </div>
+      </div>
+
+      <!-- FEATURES -->
+      <div style="background:var(--n50);padding:56px 48px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1000px;margin:0 auto;">
+          <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:24px;">
+            <div style="width:44px;height:44px;background:var(--p50);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            <div style="font-family:var(--fd);font-size:15px;font-weight:700;color:var(--n900);margin-bottom:6px;">Rápido e Fácil</div>
+            <div style="font-size:13px;color:var(--n500);line-height:1.5;">Descreva o serviço e receba propostas em minutos.</div>
+          </div>
+          <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:24px;">
+            <div style="width:44px;height:44px;background:var(--s50);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div style="font-family:var(--fd);font-size:15px;font-weight:700;color:var(--n900);margin-bottom:6px;">Verificados</div>
+            <div style="font-size:13px;color:var(--n500);line-height:1.5;">Todos os profissionais passam por verificação.</div>
+          </div>
+          <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:24px;">
+            <div style="width:44px;height:44px;background:#FEF3C7;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </div>
+            <div style="font-family:var(--fd);font-size:15px;font-weight:700;color:var(--n900);margin-bottom:6px;">Avaliação Dupla</div>
+            <div style="font-size:13px;color:var(--n500);line-height:1.5;">Cliente e prestador se avaliam mutuamente.</div>
+          </div>
+          <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:24px;">
+            <div style="width:44px;height:44px;background:var(--p50);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <div style="font-family:var(--fd);font-size:15px;font-weight:700;color:var(--n900);margin-bottom:6px;">Pagamento Seguro</div>
+            <div style="font-size:13px;color:var(--n500);line-height:1.5;">Escrow protege o pagamento até a conclusão.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOOTER CTA -->
+      <div style="background:var(--p700);padding:56px 48px;text-align:center;">
+        <h2 style="font-family:var(--fd);font-size:32px;font-weight:800;color:#fff;margin-bottom:12px;">Pronto para sua primeira missão?</h2>
+        <p style="color:rgba(255,255,255,.7);margin-bottom:28px;font-size:16px;">Cadastre-se gratuitamente. Sem mensalidade, sem taxa de adesão.</p>
+        <a class="btn btn-w btn-lg">Criar conta grátis</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 2: HOME CLIENTE ═══════════════════════════════════ -->
+<div class="screen-block" id="s2">
+  <div class="screen-label">Tela 02 — Cliente autenticado</div>
+  <div class="screen-title">Home — Dashboard do Cliente</div>
+  <div class="screen-desc">Saudação personalizada, busca em destaque e grupos de serviço com grid adaptativo. Navbar refatorada com novo esquema de cores.</div>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="b-dots"><div class="b-dot" style="background:#ff5f57;"></div><div class="b-dot" style="background:#febc2e;"></div><div class="b-dot" style="background:#28c840;"></div></div>
+      <div class="b-url">missaocumprida.com.br/home</div>
+    </div>
+    <div class="screen-content">
+      <!-- Navbar -->
+      <div style="background:#fff;border-bottom:1px solid var(--n200);padding:0 40px;height:60px;display:flex;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-right:16px;">
+          <svg width="32" height="32" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="g2" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#g2)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span style="font-family:var(--fd);font-size:16px;font-weight:800;color:var(--n900);">Missão Cumprida</span>
+        </div>
+        <div style="display:flex;gap:2px;flex:1;justify-content:center;">
+          <span style="padding:7px 12px;border-radius:8px;background:var(--p50);color:var(--p700);font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;">🏠 Início</span>
+          <span style="padding:7px 12px;border-radius:8px;color:var(--n600);font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px;">📋 Meus Pedidos</span>
+          <span style="padding:7px 12px;border-radius:8px;color:var(--n600);font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px;">📅 Agendamentos</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="position:relative;width:36px;height:36px;border-radius:9px;background:var(--n100);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--n600)" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <div style="position:absolute;top:-2px;right:-2px;width:14px;height:14px;background:var(--e500);border-radius:50%;border:2px solid #fff;font-size:8px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">3</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border-radius:10px;background:var(--n50);border:1px solid var(--n200);cursor:pointer;">
+            <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--p600),var(--s600));display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:700;font-size:11px;color:#fff;">AS</div>
+            <span style="font-size:13px;font-weight:500;color:var(--n700);">Ana</span>
+          </div>
+        </div>
+      </div>
+      <!-- Page -->
+      <div style="background:var(--n50);padding:32px 40px;min-height:620px;">
+        <div style="max-width:1060px;">
+          <div style="margin-bottom:28px;">
+            <h1 style="font-family:var(--fd);font-size:26px;font-weight:800;color:var(--n900);">Olá, Ana! O que você precisa hoje?</h1>
+            <p style="font-size:14px;color:var(--n500);margin-top:4px;">Encontre profissionais verificados na sua região.</p>
+          </div>
+          <!-- Search -->
+          <div style="position:relative;margin-bottom:36px;">
+            <svg style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--n400);" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input style="width:100%;padding:14px 16px 14px 50px;border:1.5px solid var(--n300);border-radius:12px;font-family:var(--fb);font-size:14px;background:#fff;outline:none;box-shadow:0 1px 4px rgba(0,0,0,.06);" placeholder="Buscar serviço (ex: limpeza, elétrica, cabelo...)">
+          </div>
+          <!-- Group 1 -->
+          <div style="margin-bottom:32px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+              <span style="font-size:22px;">🏠</span>
+              <span style="font-family:var(--fd);font-size:17px;font-weight:700;color:var(--n900);">Para sua Casa</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.boxShadow='0 4px 16px rgba(29,78,216,.1)'" onmouseout="this.style.borderColor='#E2E8F0';this.style.boxShadow='none'"><div style="font-size:28px;margin-bottom:10px;">🧹</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Limpeza</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 100</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.boxShadow='0 4px 16px rgba(29,78,216,.1)'" onmouseout="this.style.borderColor='#E2E8F0';this.style.boxShadow='none'"><div style="font-size:28px;margin-bottom:10px;">🔧</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Elétrica</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 120</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.boxShadow='0 4px 16px rgba(29,78,216,.1)'" onmouseout="this.style.borderColor='#E2E8F0';this.style.boxShadow='none'"><div style="font-size:28px;margin-bottom:10px;">🎨</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Pintura</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 200</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.boxShadow='0 4px 16px rgba(29,78,216,.1)'" onmouseout="this.style.borderColor='#E2E8F0';this.style.boxShadow='none'"><div style="font-size:28px;margin-bottom:10px;">🪟</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Vidraçaria</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 80</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;" onmouseover="this.style.borderColor='#93C5FD';this.style.boxShadow='0 4px 16px rgba(29,78,216,.1)'" onmouseout="this.style.borderColor='#E2E8F0';this.style.boxShadow='none'"><div style="font-size:28px;margin-bottom:10px;">🚰</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Hidráulica</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 140</div></div>
+            </div>
+          </div>
+          <!-- Group 2 -->
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+              <span style="font-size:22px;">💻</span>
+              <span style="font-family:var(--fd);font-size:17px;font-weight:700;color:var(--n900);">Tech e Digital</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;"><div style="font-size:28px;margin-bottom:10px;">🖥️</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Formatação</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 80</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;"><div style="font-size:28px;margin-bottom:10px;">📱</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Cel. e Tablet</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 60</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;"><div style="font-size:28px;margin-bottom:10px;">📷</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Foto/Vídeo</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 200</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;"><div style="font-size:28px;margin-bottom:10px;">🔒</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Segurança</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 150</div></div>
+              <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;cursor:pointer;"><div style="font-size:28px;margin-bottom:10px;">🌐</div><div style="font-family:var(--fd);font-size:13px;font-weight:700;color:var(--n900);margin-bottom:3px;">Web/Design</div><div style="font-size:11px;color:var(--n500);">A partir de R$ 300</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 3: FEED PRESTADOR ═══════════════════════════════════ -->
+<div class="screen-block" id="s3">
+  <div class="screen-label">Tela 03 — Prestador autenticado</div>
+  <div class="screen-title">Feed de Pedidos — Visão do Prestador</div>
+  <div class="screen-desc">Cards de pedido com estimativa, distância e preview do valor líquido. Métricas em destaque no topo. Design de ação clara com botão primário em cada card.</div>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="b-dots"><div class="b-dot" style="background:#ff5f57;"></div><div class="b-dot" style="background:#febc2e;"></div><div class="b-dot" style="background:#28c840;"></div></div>
+      <div class="b-url">missaocumprida.com.br/feed</div>
+    </div>
+    <div class="screen-content">
+      <!-- Navbar (provider) -->
+      <div style="background:#fff;border-bottom:1px solid var(--n200);padding:0 40px;height:60px;display:flex;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-right:16px;">
+          <svg width="32" height="32" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="g3" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#g3)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span style="font-family:var(--fd);font-size:16px;font-weight:800;color:var(--n900);">Missão Cumprida</span>
+        </div>
+        <div style="display:flex;gap:2px;flex:1;justify-content:center;">
+          <span style="padding:7px 12px;border-radius:8px;color:var(--n600);font-size:13px;font-weight:500;">🏠 Início</span>
+          <span style="padding:7px 12px;border-radius:8px;background:var(--p50);color:var(--p700);font-size:13px;font-weight:600;">📡 Feed de Pedidos</span>
+          <span style="padding:7px 12px;border-radius:8px;color:var(--n600);font-size:13px;font-weight:500;">📋 Minhas Propostas</span>
+          <span style="padding:7px 12px;border-radius:8px;color:var(--n600);font-size:13px;font-weight:500;">💰 Carteira</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:9px;background:var(--n100);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--n600)" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border-radius:10px;background:var(--n50);border:1px solid var(--n200);cursor:pointer;">
+            <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#DB2777);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:700;font-size:11px;color:#fff;">MF</div>
+            <span style="font-size:13px;font-weight:500;color:var(--n700);">Marcos</span>
+          </div>
+        </div>
+      </div>
+      <!-- Feed content -->
+      <div style="background:var(--n50);padding:32px 40px;">
+        <div style="max-width:1060px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+            <div>
+              <h1 style="font-family:var(--fd);font-size:22px;font-weight:800;color:var(--n900);">Pedidos disponíveis na sua área</h1>
+              <p style="font-size:13px;color:var(--n500);margin-top:3px;">Filtrado por suas habilidades · raio de 25km · Moema, SP</p>
+            </div>
+          </div>
+          <!-- Stats -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;">
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:12px;padding:16px;">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--n400);margin-bottom:6px;">Pedidos abertos</div>
+              <div style="font-family:var(--fd);font-size:28px;font-weight:800;color:var(--p700);">14</div>
+            </div>
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:12px;padding:16px;">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--n400);margin-bottom:6px;">Propostas enviadas</div>
+              <div style="font-family:var(--fd);font-size:28px;font-weight:800;color:var(--n900);">3</div>
+            </div>
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:12px;padding:16px;">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--n400);margin-bottom:6px;">Taxa de aceite</div>
+              <div style="font-family:var(--fd);font-size:28px;font-weight:800;color:var(--s600);">67%</div>
+            </div>
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:12px;padding:16px;">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--n400);margin-bottom:6px;">Saldo disponível</div>
+              <div style="font-family:var(--fd);font-size:28px;font-weight:800;color:var(--s600);">R$ 840</div>
+            </div>
+          </div>
+          <!-- Order cards -->
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:20px;display:flex;gap:16px;align-items:flex-start;">
+              <div style="flex:1;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                  <span style="font-size:18px;">🧹</span>
+                  <span style="background:var(--p50);color:var(--p700);padding:2px 10px;border-radius:100px;font-size:11px;font-weight:600;">Limpeza Residencial</span>
+                  <span style="font-size:11px;color:var(--n400);margin-left:auto;">há 12 min</span>
+                </div>
+                <div style="font-family:var(--fd);font-size:15px;font-weight:700;color:var(--n900);margin-bottom:6px;">Limpeza completa de apartamento 2 quartos</div>
+                <div style="font-size:13px;color:var(--n600);margin-bottom:10px;line-height:1.4;">Preciso de limpeza completa antes da mudança, incluindo banheiros, cozinha e área de serviço.</div>
+                <div style="display:flex;gap:16px;font-size:12px;color:var(--n500);">
+                  <span style="display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Moema, SP</span>
+                  <span style="color:var(--p600);font-weight:600;">2,3 km</span>
+                  <span>📅 Sáb 07 jun, 14h</span>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div style="font-size:11px;color:var(--n400);margin-bottom:2px;">Estimativa bruta</div>
+                <div style="font-family:var(--fd);font-size:20px;font-weight:800;color:var(--p700);margin-bottom:2px;">R$ 180–260</div>
+                <div style="font-size:11px;color:var(--s600);font-weight:600;margin-bottom:14px;">Você recebe ~R$ 158–229</div>
+                <button class="btn btn-p btn-sm">Enviar proposta</button>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:14px;padding:20px;display:flex;gap:16px;align-items:flex-start;">
+              <div style="flex:1;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                  <span style="font-size:18px;">🔧</span>
+                  <span style="background:var(--p50);color:var(--p700);padding:2px 10px;border-radius:100px;font-size:11px;font-weight:600;">Instalação Elétrica</span>
+                  <span style="font-size:11px;color:var(--n400);margin-left:auto;">há 38 min</span>
+                </div>
+                <div style="font-family:var(--fd);font-size:15px;font-weight:700;color:var(--n900);margin-bottom:6px;">Instalação de 3 tomadas e 1 interruptor</div>
+                <div style="font-size:13px;color:var(--n600);margin-bottom:10px;">Sala e quarto. Precisa de materiais incluídos no orçamento.</div>
+                <div style="display:flex;gap:16px;font-size:12px;color:var(--n500);">
+                  <span>📍 Vila Madalena, SP</span>
+                  <span style="color:var(--p600);font-weight:600;">5,1 km</span>
+                  <span>📅 Seg 09 jun, manhã</span>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div style="font-size:11px;color:var(--n400);margin-bottom:2px;">Estimativa bruta</div>
+                <div style="font-family:var(--fd);font-size:20px;font-weight:800;color:var(--p700);margin-bottom:2px;">R$ 240–380</div>
+                <div style="font-size:11px;color:var(--s600);font-weight:600;margin-bottom:14px;">Você recebe ~R$ 211–334</div>
+                <button class="btn btn-p btn-sm">Enviar proposta</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 4: DETALHE DO PEDIDO ═══════════════════════════════════ -->
+<div class="screen-block" id="s4">
+  <div class="screen-label">Tela 04 — Cliente autenticado</div>
+  <div class="screen-title">Detalhe do Pedido + Propostas</div>
+  <div class="screen-desc">Status visual claro com badge colorido. Propostas dos prestadores com perfil, avaliação e ação de aceite/rejeitar em destaque. Breakdown de pagamento transparente.</div>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="b-dots"><div class="b-dot" style="background:#ff5f57;"></div><div class="b-dot" style="background:#febc2e;"></div><div class="b-dot" style="background:#28c840;"></div></div>
+      <div class="b-url">missaocumprida.com.br/pedido/mc-2847</div>
+    </div>
+    <div class="screen-content" style="background:var(--n50);padding:32px 40px;min-height:700px;">
+      <div style="max-width:900px;margin:0 auto;">
+        <!-- Back -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;font-size:13px;color:var(--n500);cursor:pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Meus Pedidos
+        </div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+          <!-- Main -->
+          <div style="flex:1;">
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:24px;margin-bottom:16px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+                <span style="font-size:20px;">🧹</span>
+                <span class="bdg bdg-blue">Em propostas</span>
+                <span style="font-size:12px;color:var(--n400);margin-left:auto;">#MC-2847</span>
+              </div>
+              <h1 style="font-family:var(--fd);font-size:20px;font-weight:800;color:var(--n900);margin-bottom:16px;">Limpeza completa de apartamento 2 quartos</h1>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                <div style="background:var(--n50);border-radius:10px;padding:12px;">
+                  <div style="font-size:11px;font-weight:600;color:var(--n400);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Data desejada</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--n900);">Sáb, 07 junho · 14h00</div>
+                </div>
+                <div style="background:var(--n50);border-radius:10px;padding:12px;">
+                  <div style="font-size:11px;font-weight:600;color:var(--n400);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Endereço</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--n900);">Rua das Flores, 142 · Moema</div>
+                </div>
+              </div>
+              <div style="background:var(--n50);border-radius:10px;padding:12px;margin-bottom:4px;">
+                <div style="font-size:11px;font-weight:600;color:var(--n400);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Estimativa de preço</div>
+                <div style="font-family:var(--fd);font-size:22px;font-weight:800;color:var(--p700);">R$ 180 – R$ 260</div>
+              </div>
+            </div>
+            <!-- Proposals -->
+            <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:24px;">
+              <h2 style="font-family:var(--fd);font-size:16px;font-weight:700;color:var(--n900);margin-bottom:20px;">3 Propostas recebidas</h2>
+              <div style="display:flex;flex-direction:column;gap:16px;">
+                <!-- Proposal 1 (highlighted) -->
+                <div style="border:2px solid var(--p200);border-radius:14px;padding:18px;background:var(--p50);">
+                  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#DB2777);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:700;font-size:14px;color:#fff;flex-shrink:0;">MF</div>
+                    <div style="flex:1;">
+                      <div style="font-family:var(--fd);font-size:14px;font-weight:700;color:var(--n900);">Marcos Ferreira</div>
+                      <div style="font-size:12px;color:var(--n500);">4 anos · 87 serviços</div>
+                      <div style="font-size:12px;color:#F59E0B;">★★★★★ <span style="color:var(--n500);">4.9</span></div>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="font-family:var(--fd);font-size:22px;font-weight:800;color:var(--p700);">R$ 220</div>
+                      <div style="font-size:11px;color:var(--s600);font-weight:600;">Você paga R$ 246,40</div>
+                    </div>
+                  </div>
+                  <div style="font-size:13px;color:var(--n700);font-style:italic;background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:14px;line-height:1.5;">"Posso atender no sábado às 14h. Trabalho com produtos de limpeza próprios e garanto resultado impecável."</div>
+                  <div style="display:flex;gap:8px;">
+                    <button class="btn btn-s btn-md" style="flex:1;">✓ Aceitar proposta</button>
+                    <button class="btn btn-n btn-md">Rejeitar</button>
+                  </div>
+                </div>
+                <!-- Proposal 2 -->
+                <div style="border:1px solid var(--n200);border-radius:14px;padding:18px;">
+                  <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#0891B2,#0EA5E9);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:700;font-size:14px;color:#fff;flex-shrink:0;">CA</div>
+                    <div style="flex:1;">
+                      <div style="font-family:var(--fd);font-size:14px;font-weight:700;color:var(--n900);">Carla Andrade</div>
+                      <div style="font-size:12px;color:var(--n500);">2 anos · 34 serviços</div>
+                      <div style="font-size:12px;color:#F59E0B;">★★★★☆ <span style="color:var(--n500);">4.6</span></div>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="font-family:var(--fd);font-size:22px;font-weight:800;color:var(--n900);">R$ 190</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 5: AGENDAMENTO E CHAT ═══════════════════════════════════ -->
+<div class="screen-block" id="s5">
+  <div class="screen-label">Tela 05 — Ambas as partes</div>
+  <div class="screen-title">Agendamento — Chat e Ações</div>
+  <div class="screen-desc">Interface de chat limpa com bolhas de mensagem distintas por remetente. Barra de ações de serviço no topo. Histórico de serviço à direita.</div>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="b-dots"><div class="b-dot" style="background:#ff5f57;"></div><div class="b-dot" style="background:#febc2e;"></div><div class="b-dot" style="background:#28c840;"></div></div>
+      <div class="b-url">missaocumprida.com.br/agendamentos/sch-4821</div>
+    </div>
+    <div class="screen-content" style="background:var(--n50);">
+      <div style="max-width:1060px;margin:0 auto;padding:32px 40px;display:grid;grid-template-columns:1fr 340px;gap:20px;min-height:680px;">
+        <!-- Chat -->
+        <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;">
+          <!-- Chat header -->
+          <div style="padding:16px 20px;border-bottom:1px solid var(--n100);display:flex;align-items:center;gap:12px;">
+            <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#DB2777);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:700;font-size:13px;color:#fff;">MF</div>
+            <div>
+              <div style="font-family:var(--fd);font-size:14px;font-weight:700;color:var(--n900);">Marcos Ferreira</div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--s600);"><span style="width:7px;height:7px;border-radius:50%;background:var(--s500);display:inline-block;"></span>Online agora</div>
+            </div>
+            <div style="margin-left:auto;">
+              <span class="bdg bdg-amber">Agendado · Sáb 07 jun 14h</span>
+            </div>
+          </div>
+          <!-- Messages -->
+          <div style="flex:1;padding:20px;display:flex;flex-direction:column;gap:12px;background:var(--n50);">
+            <div style="display:flex;justify-content:flex-start;">
+              <div style="max-width:70%;background:#fff;border:1px solid var(--n200);border-radius:14px 14px 14px 4px;padding:12px 14px;">
+                <div style="font-size:14px;color:var(--n800);line-height:1.5;">Olá Ana! Confirmado para sábado às 14h. Vou levar todos os materiais de limpeza.</div>
+                <div style="font-size:11px;color:var(--n400);margin-top:6px;">10:23</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <div style="max-width:70%;background:var(--p700);border-radius:14px 14px 4px 14px;padding:12px 14px;">
+                <div style="font-size:14px;color:#fff;line-height:1.5;">Ótimo! O interfone é pelo número 12. Estarei em casa a partir das 13h30.</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:6px;">10:47</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-start;">
+              <div style="max-width:70%;background:#fff;border:1px solid var(--n200);border-radius:14px 14px 14px 4px;padding:12px 14px;">
+                <div style="font-size:14px;color:var(--n800);line-height:1.5;">Perfeito! Tenho alguma dúvida: a limpeza inclui o interior dos armários ou só as superfícies?</div>
+                <div style="font-size:11px;color:var(--n400);margin-top:6px;">11:02</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <div style="max-width:70%;background:var(--p700);border-radius:14px 14px 4px 14px;padding:12px 14px;">
+                <div style="font-size:14px;color:#fff;line-height:1.5;">O pacote padrão é superfícies, mas posso incluir os armários por R$ 30 a mais. O que prefere?</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:6px;">11:05</div>
+              </div>
+            </div>
+          </div>
+          <!-- Input -->
+          <div style="padding:14px 16px;border-top:1px solid var(--n100);display:flex;gap:10px;align-items:center;">
+            <input style="flex:1;padding:10px 14px;border:1.5px solid var(--n200);border-radius:10px;font-family:var(--fb);font-size:14px;outline:none;background:var(--n50);" placeholder="Escreva uma mensagem...">
+            <button class="btn btn-p btn-sm">Enviar</button>
+          </div>
+        </div>
+        <!-- Sidebar -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:20px;">
+            <div style="font-family:var(--fd);font-size:14px;font-weight:700;color:var(--n900);margin-bottom:14px;">Resumo do Serviço</div>
+            <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+              <div style="display:flex;justify-content:space-between;color:var(--n600);"><span>Serviço</span><span style="font-weight:600;color:var(--n900);">Limpeza Residencial</span></div>
+              <div style="display:flex;justify-content:space-between;color:var(--n600);"><span>Valor acordado</span><span style="font-weight:700;color:var(--p700);">R$ 220,00</span></div>
+              <div style="display:flex;justify-content:space-between;color:var(--n600);"><span>Taxa plataforma (12%)</span><span style="color:var(--n500);">R$ 26,40</span></div>
+              <div style="border-top:1px solid var(--n100);padding-top:10px;display:flex;justify-content:space-between;font-weight:700;color:var(--n900);"><span>Total pago</span><span>R$ 246,40</span></div>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid var(--n200);border-radius:16px;padding:20px;">
+            <div style="font-family:var(--fd);font-size:14px;font-weight:700;color:var(--n900);margin-bottom:14px;">Ações do Serviço</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <button class="btn btn-s btn-md" style="width:100%;">✓ Confirmar conclusão</button>
+              <button style="width:100%;padding:9px 18px;font-size:13px;border-radius:10px;border:1.5px solid var(--n200);background:transparent;color:var(--n600);font-family:var(--fb);font-weight:600;cursor:pointer;">Solicitar suporte</button>
+            </div>
+            <div style="margin-top:12px;background:var(--s50);border:1px solid var(--s100);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--s700);line-height:1.5;">O pagamento é liberado para o prestador somente após sua confirmação.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /screens -->
+</body>
+</html>

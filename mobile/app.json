@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2563EB"
+      "backgroundColor": "#1D4ED8"
     },
     "ios": {
       "supportsTablet": false,
@@ -19,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2563EB"
+        "backgroundColor": "#1D4ED8"
       },
       "package": "com.missaocumprida.app",
       "permissions": [
@@ -50,6 +50,14 @@
         "expo-image-picker",
         {
           "photosPermission": "Missão Cumprida precisa acessar suas fotos para enviar imagens do serviço."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1D4ED8",
+          "sounds": ["./assets/notification.wav"]
         }
       ]
     ],

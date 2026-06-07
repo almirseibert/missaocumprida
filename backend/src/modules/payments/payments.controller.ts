@@ -6,6 +6,7 @@ import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { stripe } from './stripe'
 import { mpPayment } from './mercadopago'
+import { consumeCredit } from '../referrals/referrals.service'
 
 async function pixToQrBase64(pixCode: string): Promise<string> {
   return QRCode.toDataURL(pixCode).then(url => url.replace('data:image/png;base64,', ''))
@@ -24,7 +25,7 @@ const MIN_AMOUNT = 10 // R$ 10,00 mínimo
 // Chamado pelo frontend quando o usuário seleciona o método de pagamento
 // ---------------------------------------------------------------------------
 export async function createCheckout(req: Request, res: Response) {
-  const { order_id, method } = req.body as { order_id?: string; method?: string }
+  const { order_id, method, use_credit } = req.body as { order_id?: string; method?: string; use_credit?: boolean }
   if (!order_id || !method) return R.badRequest(res, 'order_id e method são obrigatórios')
   if (!['card', 'pix'].includes(method)) return R.badRequest(res, 'method deve ser "card" ou "pix"')
 
@@ -70,7 +71,19 @@ export async function createCheckout(req: Request, res: Response) {
   }
 
   // Calcula valor total com taxa de gateway
-  const baseAmount = order.client_total ?? order.final_price ?? 0
+  let baseAmount = order.client_total ?? order.final_price ?? 0
+
+  // Aplica crédito (indicação) se solicitado e ainda não aplicado
+  let creditApplied = order.credit_applied ?? 0
+  if (use_credit && creditApplied === 0 && baseAmount > 0) {
+    const used = await consumeCredit(req.userId!, baseAmount, { reason: 'ORDER_DISCOUNT', ref_id: order.id })
+    if (used > 0) {
+      creditApplied = used
+      baseAmount = Math.max(0, Math.round((baseAmount - used) * 100) / 100)
+      await prisma.order.update({ where: { id: order.id }, data: { credit_applied: used } })
+    }
+  }
+
   const feePct = GATEWAY_FEE[method]
   const gatewayFee = Math.round(baseAmount * feePct * 100) / 100
   const totalAmount = Math.round((baseAmount + gatewayFee) * 100) / 100

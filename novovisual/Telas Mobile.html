@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telas Mobile — Missão Cumprida Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:#1a1f2e;font-family:'DM Sans',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .canvas-top{background:#111827;border-bottom:1px solid #374151;padding:0 32px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:999;}
+  .canvas-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:#F9FAFB;display:flex;align-items:center;gap:10px;}
+  .canvas-badge{background:#059669;color:#fff;font-size:11px;font-weight:600;padding:2px 10px;border-radius:100px;}
+  .canvas-pill{display:flex;gap:6px;}
+  .canvas-pill a{font-size:12px;color:#9CA3AF;text-decoration:none;padding:5px 10px;border-radius:6px;transition:.15s;}
+  .canvas-pill a:hover{background:#374151;color:#fff;}
+  #root{min-height:calc(100vh - 52px);}
+</style>
+</head>
+<body>
+
+<div class="canvas-top">
+  <div class="canvas-title">
+    <svg width="24" height="24" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="gTop" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#gTop)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Missão Cumprida <span class="canvas-badge">Telas Mobile</span>
+  </div>
+  <div class="canvas-pill">
+    <a href="#">Home Cliente</a>
+    <a href="#">Novo Pedido</a>
+    <a href="#">Feed Prestador</a>
+    <a href="#">Chat</a>
+    <a href="#">Perfil</a>
+    <a href="#">Pagamento</a>
+  </div>
+</div>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+
+<script type="text/babel">
+const C = {
+  p900:'#1E3A8A', p800:'#1E40AF', p700:'#1D4ED8', p600:'#2563EB', p500:'#3B82F6',
+  p200:'#BFDBFE', p100:'#DBEAFE', p50:'#EFF6FF',
+  s700:'#047857', s600:'#059669', s500:'#10B981', s100:'#D1FAE5', s50:'#ECFDF5',
+  w600:'#D97706', w100:'#FEF3C7', w50:'#FFFBEB',
+  e600:'#DC2626', e100:'#FEE2E2', e50:'#FEF2F2',
+  n900:'#0F172A', n800:'#1E293B', n700:'#334155', n600:'#475569',
+  n500:'#64748B', n400:'#94A3B8', n300:'#CBD5E1', n200:'#E2E8F0',
+  n100:'#F1F5F9', n50:'#F8FAFC',
+};
+const fd = "'Plus Jakarta Sans', sans-serif";
+const fb = "'DM Sans', sans-serif";
+
+/* ── Shared Components ── */
+function LogoMark({ size=30, id='gLogo' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#1D4ED8"/>
+          <stop offset="100%" stopColor="#059669"/>
+        </linearGradient>
+      </defs>
+      <rect width="48" height="48" rx="13" fill={`url(#${id})`}/>
+      <path d="M11 25L19 33L37 15" stroke="white" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+const tabDefs = [
+  { label:'Início', path:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10' },
+  { label:'Pedidos', path:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8' },
+  { label:'Feed', path:'M1.42 9a16 16 0 0 1 21.16 0M5 12.55a11 11 0 0 1 14.08 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01' },
+  { label:'Agenda', path:'M8 2v4M16 2v4M3 10h18M21 20H3V4h18zM8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01' },
+  { label:'Perfil', path:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
+];
+
+function TabBar({ active=0 }) {
+  return (
+    <div style={{ display:'flex', background:'#fff', borderTop:`1px solid ${C.n200}`, paddingBottom:4, paddingTop:6 }}>
+      {tabDefs.map(({ label, path }, i) => {
+        const active_ = i === active;
+        return (
+          <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2, padding:'4px 0', cursor:'pointer', color: active_ ? C.p700 : C.n400 }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d={path}/>
+            </svg>
+            <span style={{ fontSize:10, fontWeight: active_ ? 700 : 400, fontFamily:fb }}>{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Bdg({ color='blue', children }) {
+  const map = {
+    blue: { bg:C.p100, text:C.p700 },
+    green: { bg:C.s100, text:C.s700 },
+    amber: { bg:C.w100, text:'#92400E' },
+    red: { bg:C.e100, text:C.e600 },
+    gray: { bg:C.n100, text:C.n600 },
+    purple: { bg:'#EDE9FE', text:'#5B21B6' },
+  };
+  const s = map[color] || map.blue;
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 9px', borderRadius:100, fontSize:10, fontWeight:700, background:s.bg, color:s.text, fontFamily:fb }}>
+      <span style={{ width:5, height:5, borderRadius:'50%', background:s.text, opacity:.7, display:'inline-block' }}/>
+      {children}
+    </span>
+  );
+}
+
+function Avatar({ initials, size=40, grad='135deg,#7C3AED,#DB2777' }) {
+  return (
+    <div style={{ width:size, height:size, borderRadius:'50%', background:`linear-gradient(${grad})`, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:fd, fontWeight:700, fontSize:size*0.32, color:'#fff', flexShrink:0 }}>
+      {initials}
+    </div>
+  );
+}
+
+function Stars({ n=5, size=13 }) {
+  return <span style={{ color:'#F59E0B', fontSize:size, letterSpacing:1 }}>{'★'.repeat(n)}{'☆'.repeat(5-n)}</span>;
+}
+
+/* ══ SCREEN 1: HOME CLIENTE ══ */
+function HomeCliente() {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', background:C.n50, minHeight:640 }}>
+      {/* App header */}
+      <div style={{ background:'#fff', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:`1px solid ${C.n100}` }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <LogoMark size={28} id="gH1"/>
+          <span style={{ fontFamily:fd, fontSize:15, fontWeight:800, color:C.n900 }}>Missão Cumprida</span>
+        </div>
+        <div style={{ position:'relative', width:36, height:36, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:9, background:C.n100 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.n600} strokeWidth="2" strokeLinecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <div style={{ position:'absolute', top:-2, right:-2, width:14, height:14, background:C.e600, borderRadius:'50%', border:'2px solid #fff', fontSize:8, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>2</div>
+        </div>
+      </div>
+
+      <div style={{ flex:1, overflowY:'hidden', padding:'16px' }}>
+        {/* Greeting */}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontFamily:fd, fontSize:20, fontWeight:800, color:C.n900 }}>Olá, Ana!</div>
+          <div style={{ fontSize:13, color:C.n500, marginTop:2 }}>O que você precisa hoje?</div>
+        </div>
+
+        {/* Search */}
+        <div style={{ position:'relative', marginBottom:16 }}>
+          <svg style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:C.n400 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <div style={{ padding:'11px 14px 11px 40px', border:`1.5px solid ${C.n200}`, borderRadius:12, background:'#fff', fontSize:13, color:C.n400, fontFamily:fb }}>Buscar serviço (limpeza, elétrica…)</div>
+        </div>
+
+        {/* Active order banner */}
+        <div style={{ background:`linear-gradient(135deg,${C.p800},${C.p700})`, borderRadius:14, padding:'14px 16px', marginBottom:18 }}>
+          <div style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.55)', textTransform:'uppercase', letterSpacing:'.09em', marginBottom:3 }}>Pedido em andamento</div>
+          <div style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:'#fff', marginBottom:8 }}>Limpeza Residencial · Sáb 07/06 14h</div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <div style={{ width:22, height:22, borderRadius:'50%', background:'rgba(255,255,255,.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, color:'#fff', fontWeight:700, fontFamily:fd }}>MF</div>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,.8)', fontFamily:fb }}>Marcos Ferreira</span>
+            </div>
+            <span style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,.95)', background:'rgba(255,255,255,.15)', padding:'3px 10px', borderRadius:100, fontFamily:fb }}>Agendado</span>
+          </div>
+        </div>
+
+        {/* Categories */}
+        <div style={{ marginBottom:12, fontFamily:fd, fontSize:15, fontWeight:700, color:C.n900 }}>Para sua Casa</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          {[['🧹','Limpeza','De R$ 100'],['🔧','Elétrica','De R$ 120'],['🎨','Pintura','De R$ 200'],['🚰','Hidráulica','De R$ 140']].map(([icon,name,price],i) => (
+            <div key={i} style={{ background:'#fff', border:`1px solid ${C.n200}`, borderRadius:14, padding:'14px 12px', cursor:'pointer' }}>
+              <div style={{ fontSize:26, marginBottom:8 }}>{icon}</div>
+              <div style={{ fontFamily:fd, fontSize:13, fontWeight:700, color:C.n900, marginBottom:2 }}>{name}</div>
+              <div style={{ fontSize:11, color:C.n500, fontFamily:fb }}>{price}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <TabBar active={0}/>
+    </div>
+  );
+}
+
+/* ══ SCREEN 2: NOVO PEDIDO — QUESTIONÁRIO ══ */
+function NovoPedidoScreen() {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', background:'#fff', minHeight:600 }}>
+      {/* Progress */}
+      <div style={{ padding:'12px 16px 0' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+          <span style={{ fontSize:11, color:C.n500, fontFamily:fb }}>Passo 2 de 4</span>
+          <span style={{ fontSize:11, color:C.p700, fontWeight:600, fontFamily:fb }}>50%</span>
+        </div>
+        <div style={{ height:4, background:C.n100, borderRadius:4 }}>
+          <div style={{ width:'50%', height:'100%', background:`linear-gradient(90deg,${C.p600},${C.s500})`, borderRadius:4 }}/>
+        </div>
+      </div>
+
+      <div style={{ flex:1, padding:'20px 16px' }}>
+        {/* Category header */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+          <div style={{ width:48, height:48, background:C.p50, borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>🧹</div>
+          <div>
+            <div style={{ fontFamily:fd, fontSize:17, fontWeight:800, color:C.n900 }}>Limpeza Residencial</div>
+            <div style={{ fontSize:12, color:C.n500, fontFamily:fb }}>Estimativa atualizada em tempo real</div>
+          </div>
+        </div>
+
+        {/* Question */}
+        <div style={{ fontFamily:fd, fontSize:15, fontWeight:700, color:C.n900, marginBottom:14 }}>
+          Qual o tamanho do imóvel?
+        </div>
+
+        {/* Radio options */}
+        <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:20 }}>
+          {[
+            ['Studio ou kitnet','Até 35m²'],
+            ['Apartamento 1–2 quartos','35–80m²'],
+            ['Apartamento 3+ quartos','Acima de 80m²'],
+            ['Casa ou sobrado','Qualquer tamanho'],
+          ].map(([label, sub], i) => (
+            <div key={i} style={{
+              display:'flex', alignItems:'center', gap:12, padding:'12px 14px',
+              border: i===1 ? `2px solid ${C.p600}` : `1.5px solid ${C.n200}`,
+              borderRadius:12, background: i===1 ? C.p50 : '#fff', cursor:'pointer'
+            }}>
+              <div style={{
+                width:20, height:20, borderRadius:'50%', flexShrink:0,
+                border: i===1 ? `6px solid ${C.p700}` : `2px solid ${C.n300}`,
+                background: i===1 ? '#fff' : '#fff'
+              }}/>
+              <div>
+                <div style={{ fontFamily:fd, fontSize:14, fontWeight: i===1 ? 700 : 500, color: i===1 ? C.p700 : C.n800 }}>{label}</div>
+                <div style={{ fontSize:11, color: i===1 ? C.p500 : C.n400, marginTop:1, fontFamily:fb }}>{sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Price estimate */}
+        <div style={{ background:`linear-gradient(135deg,${C.s50},${C.p50})`, border:`1px solid ${C.n200}`, borderRadius:14, padding:'14px 16px', marginBottom:20 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:C.n500, textTransform:'uppercase', letterSpacing:'.08em', fontFamily:fb, marginBottom:4 }}>Estimativa de preço</div>
+          <div style={{ fontFamily:fd, fontSize:24, fontWeight:800, color:C.p700 }}>R$ 140 – R$ 220</div>
+          <div style={{ fontSize:11, color:C.n500, marginTop:3, fontFamily:fb }}>Baseada nas suas respostas. O prestador pode fazer uma proposta diferente.</div>
+        </div>
+      </div>
+
+      {/* Bottom action */}
+      <div style={{ padding:'12px 16px 20px', borderTop:`1px solid ${C.n100}` }}>
+        <div style={{ background:C.p700, borderRadius:14, padding:'15px 20px', textAlign:'center', cursor:'pointer' }}>
+          <span style={{ fontFamily:fd, fontSize:15, fontWeight:700, color:'#fff' }}>Continuar →</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══ SCREEN 3: FEED DO PRESTADOR ══ */
+function FeedPrestador() {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', background:C.n50, minHeight:640 }}>
+      {/* Header */}
+      <div style={{ background:C.p700, padding:'14px 16px 18px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+          <LogoMark size={26} id="gFeed"/>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <div style={{ width:26, height:26, borderRadius:8, background:'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            </div>
+            <Avatar initials="MF" size={30} grad="135deg,#7C3AED,#DB2777"/>
+          </div>
+        </div>
+        <div style={{ fontFamily:fd, fontSize:17, fontWeight:800, color:'#fff', marginBottom:2 }}>Olá, Marcos!</div>
+        <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', fontFamily:fb }}>14 pedidos disponíveis na sua área</div>
+      </div>
+
+      {/* Stats strip */}
+      <div style={{ display:'flex', gap:10, padding:'14px 14px 6px', background:'#fff', borderBottom:`1px solid ${C.n100}` }}>
+        {[['💰','R$ 840','Saldo'],['📋','3','Propostas'],['⭐','4.9','Avaliação']].map(([icon,val,lbl],i) => (
+          <div key={i} style={{ flex:1, textAlign:'center', padding:'10px 0' }}>
+            <div style={{ fontSize:18, marginBottom:2 }}>{icon}</div>
+            <div style={{ fontFamily:fd, fontSize:15, fontWeight:800, color:C.n900 }}>{val}</div>
+            <div style={{ fontSize:10, color:C.n500, fontFamily:fb }}>{lbl}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Order cards */}
+      <div style={{ flex:1, padding:'12px 14px', display:'flex', flexDirection:'column', gap:10, overflowY:'hidden' }}>
+        {/* Card 1 */}
+        <div style={{ background:'#fff', border:`1px solid ${C.n200}`, borderRadius:14, padding:'14px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+            <span style={{ fontSize:16 }}>🧹</span>
+            <Bdg color="blue">Limpeza Residencial</Bdg>
+            <span style={{ marginLeft:'auto', fontSize:10, color:C.n400, fontFamily:fb }}>há 12min</span>
+          </div>
+          <div style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:C.n900, marginBottom:4 }}>Limpeza completa apto 2 quartos</div>
+          <div style={{ display:'flex', gap:10, fontSize:11, color:C.n500, marginBottom:10, fontFamily:fb }}>
+            <span>📍 Moema, SP</span>
+            <span style={{ color:C.p600, fontWeight:600 }}>2,3 km</span>
+            <span>📅 Sáb 14h</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div>
+              <div style={{ fontFamily:fd, fontSize:17, fontWeight:800, color:C.p700 }}>R$ 180–260</div>
+              <div style={{ fontSize:10, color:C.s600, fontWeight:600, fontFamily:fb }}>~R$ 158–229 para você</div>
+            </div>
+            <div style={{ background:C.p700, borderRadius:10, padding:'8px 14px', fontSize:12, fontWeight:700, color:'#fff', fontFamily:fd, cursor:'pointer' }}>Proposta</div>
+          </div>
+        </div>
+        {/* Card 2 */}
+        <div style={{ background:'#fff', border:`1px solid ${C.n200}`, borderRadius:14, padding:'14px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+            <span style={{ fontSize:16 }}>🔧</span>
+            <Bdg color="blue">Instalação Elétrica</Bdg>
+            <span style={{ marginLeft:'auto', fontSize:10, color:C.n400, fontFamily:fb }}>há 38min</span>
+          </div>
+          <div style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:C.n900, marginBottom:4 }}>3 tomadas e 1 interruptor</div>
+          <div style={{ display:'flex', gap:10, fontSize:11, color:C.n500, marginBottom:10, fontFamily:fb }}>
+            <span>📍 Vila Madalena</span>
+            <span style={{ color:C.p600, fontWeight:600 }}>5,1 km</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div style={{ fontFamily:fd, fontSize:17, fontWeight:800, color:C.p700 }}>R$ 240–380</div>
+            <div style={{ background:C.p700, borderRadius:10, padding:'8px 14px', fontSize:12, fontWeight:700, color:'#fff', fontFamily:fd, cursor:'pointer' }}>Proposta</div>
+          </div>
+        </div>
+      </div>
+
+      <TabBar active={2}/>
+    </div>
+  );
+}
+
+/* ══ SCREEN 4: CHAT / AGENDAMENTO ══ */
+function ChatScreen() {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', background:C.n50, minHeight:640 }}>
+      {/* Chat header */}
+      <div style={{ background:'#fff', padding:'12px 16px', borderBottom:`1px solid ${C.n100}`, display:'flex', alignItems:'center', gap:12 }}>
+        <Avatar initials="AS" size={38} grad="135deg,#0891B2,#2563EB"/>
+        <div style={{ flex:1 }}>
+          <div style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:C.n900 }}>Ana Silva</div>
+          <div style={{ fontSize:11, color:C.s600, fontFamily:fb, display:'flex', alignItems:'center', gap:4 }}>
+            <span style={{ width:6, height:6, background:C.s500, borderRadius:'50%', display:'inline-block' }}/>
+            Online agora
+          </div>
+        </div>
+        <Bdg color="amber">Agendado · 07/06</Bdg>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex:1, padding:'14px', display:'flex', flexDirection:'column', gap:10, overflowY:'hidden' }}>
+        {/* Date divider */}
+        <div style={{ textAlign:'center' }}>
+          <span style={{ fontSize:10, color:C.n400, background:C.n100, padding:'2px 10px', borderRadius:100, fontFamily:fb }}>Hoje</span>
+        </div>
+        {/* Incoming */}
+        <div style={{ display:'flex', alignItems:'flex-end', gap:8 }}>
+          <Avatar initials="AS" size={28} grad="135deg,#0891B2,#2563EB"/>
+          <div style={{ background:'#fff', border:`1px solid ${C.n200}`, borderRadius:'14px 14px 14px 4px', padding:'10px 12px', maxWidth:'75%' }}>
+            <div style={{ fontSize:13, color:C.n800, lineHeight:1.5, fontFamily:fb }}>Confirmado para sábado às 14h! Vou levar todos os materiais.</div>
+            <div style={{ fontSize:10, color:C.n400, marginTop:5, fontFamily:fb }}>10:23</div>
+          </div>
+        </div>
+        {/* Outgoing */}
+        <div style={{ display:'flex', justifyContent:'flex-end' }}>
+          <div style={{ background:C.p700, borderRadius:'14px 14px 4px 14px', padding:'10px 12px', maxWidth:'75%' }}>
+            <div style={{ fontSize:13, color:'#fff', lineHeight:1.5, fontFamily:fb }}>Ótimo! Interfone pelo número 12. Estarei em casa a partir das 13h30.</div>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,.55)', marginTop:5, fontFamily:fb }}>10:47</div>
+          </div>
+        </div>
+        {/* Incoming */}
+        <div style={{ display:'flex', alignItems:'flex-end', gap:8 }}>
+          <Avatar initials="AS" size={28} grad="135deg,#0891B2,#2563EB"/>
+          <div style={{ background:'#fff', border:`1px solid ${C.n200}`, borderRadius:'14px 14px 14px 4px', padding:'10px 12px', maxWidth:'75%' }}>
+            <div style={{ fontSize:13, color:C.n800, lineHeight:1.5, fontFamily:fb }}>Perfeito! A limpeza inclui interior dos armários?</div>
+            <div style={{ fontSize:10, color:C.n400, marginTop:5, fontFamily:fb }}>11:02</div>
+          </div>
+        </div>
+        {/* Outgoing */}
+        <div style={{ display:'flex', justifyContent:'flex-end' }}>
+          <div style={{ background:C.p700, borderRadius:'14px 14px 4px 14px', padding:'10px 12px', maxWidth:'75%' }}>
+            <div style={{ fontSize:13, color:'#fff', lineHeight:1.5, fontFamily:fb }}>O padrão é superfícies. Posso incluir armários por +R$ 30. Prefere?</div>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,.55)', marginTop:5, fontFamily:fb }}>11:05</div>
+          </div>
+        </div>
+        {/* Action card */}
+        <div style={{ background:`linear-gradient(135deg,${C.s50},${C.p50})`, border:`1px solid ${C.n200}`, borderRadius:14, padding:'12px 14px', marginTop:4 }}>
+          <div style={{ fontFamily:fd, fontSize:12, fontWeight:700, color:C.n700, marginBottom:8 }}>Ação necessária</div>
+          <div style={{ background:C.s600, borderRadius:10, padding:'10px 16px', textAlign:'center', cursor:'pointer' }}>
+            <span style={{ fontFamily:fd, fontSize:13, fontWeight:700, color:'#fff' }}>✓ Confirmar conclusão do serviço</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Input bar */}
+      <div style={{ padding:'10px 12px', background:'#fff', borderTop:`1px solid ${C.n100}`, display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ flex:1, background:C.n50, border:`1.5px solid ${C.n200}`, borderRadius:12, padding:'10px 14px', fontSize:13, color:C.n400, fontFamily:fb }}>Escreva uma mensagem...</div>
+        <div style={{ width:40, height:40, background:C.p700, borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══ SCREEN 5: PERFIL ══ */
+function PerfilScreen() {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', background:C.n50, minHeight:640 }}>
+      {/* Profile header */}
+      <div style={{ background:`linear-gradient(160deg,${C.p900},${C.p700})`, padding:'24px 16px 36px', textAlign:'center' }}>
+        <div style={{ width:80, height:80, borderRadius:'50%', background:'linear-gradient(135deg,#7C3AED,#DB2777)', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:fd, fontWeight:800, fontSize:28, color:'#fff', margin:'0 auto 12px', border:'3px solid rgba(255,255,255,.3)' }}>MF</div>
+        <div style={{ fontFamily:fd, fontSize:20, fontWeight:800, color:'#fff', marginBottom:4 }}>Marcos Ferreira</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginBottom:8 }}>
+          <Stars n={5} size={14}/>
+          <span style={{ fontSize:13, color:'rgba(255,255,255,.8)', fontFamily:fb }}>4.9 · 87 avaliações</span>
+        </div>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(255,255,255,.12)', border:'1px solid rgba(255,255,255,.2)', borderRadius:100, padding:'4px 12px' }}>
+          <span style={{ width:6, height:6, background:C.s400||'#34D399', borderRadius:'50%', display:'inline-block' }}/>
+          <span style={{ fontSize:11, color:'rgba(255,255,255,.85)', fontFamily:fb }}>Verificado pela plataforma</span>
+        </div>
+      </div>
+
+      {/* Stats strip */}
+      <div style={{ display:'flex', background:'#fff', borderBottom:`1px solid ${C.n100}`, marginBottom:12 }}>
+        {[['87','Serviços'],['4.9','Avaliação'],['R$ 4.200','Este mês']].map(([val,lbl],i) => (
+          <div key={i} style={{ flex:1, textAlign:'center', padding:'14px 0', borderRight: i<2 ? `1px solid ${C.n100}` : 'none' }}>
+            <div style={{ fontFamily:fd, fontSize:18, fontWeight:800, color:C.p700 }}>{val}</div>
+            <div style={{ fontSize:11, color:C.n500, marginTop:2, fontFamily:fb }}>{lbl}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ flex:1, padding:'0 14px', display:'flex', flexDirection:'column', gap:12 }}>
+        {/* Skills */}
+        <div style={{ background:'#fff', border:`1px solid ${C.n200}`, borderRadius:14, padding:'16px' }}>
+          <div style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:C.n900, marginBottom:12, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span>Habilidades</span>
+            <span style={{ fontSize:12, color:C.p600, fontWeight:600, cursor:'pointer', fontFamily:fb }}>+ Adicionar</span>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {[['🧹','Limpeza Residencial','4 anos · 25km'],['🔧','Instalação Elétrica','2 anos · 20km'],['🎨','Pintura','6 anos · 30km']].map(([icon,name,detail],i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background:C.n50, borderRadius:10 }}>
+                <span style={{ fontSize:18 }}>{icon}</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.n900, fontFamily:fd }}>{name}</div>
+                  <div style={{ fontSize:11, color:C.n500, fontFamily:fb }}>{detail}</div>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.n300} strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent rating */}
+        <div style={{ background:'#fff', border:`1px solid ${C.n200}`, borderRadius:14, padding:'16px' }}>
+          <div style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:C.n900, marginBottom:10 }}>Avaliação recente</div>
+          <div style={{ display:'flex', gap:10 }}>
+            <Avatar initials="AS" size={36} grad="135deg,#0891B2,#2563EB"/>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                <span style={{ fontFamily:fd, fontSize:13, fontWeight:600, color:C.n900 }}>Ana Silva</span>
+                <Stars n={5} size={11}/>
+              </div>
+              <div style={{ fontSize:12, color:C.n700, fontFamily:fb, lineHeight:1.5, fontStyle:'italic' }}>"Excelente profissional, muito cuidadoso e pontual. Recomendo!"</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit button */}
+      <div style={{ padding:'12px 14px 16px' }}>
+        <div style={{ border:`2px solid ${C.p700}`, borderRadius:14, padding:'13px 20px', textAlign:'center', cursor:'pointer' }}>
+          <span style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:C.p700 }}>Editar Perfil</span>
+        </div>
+      </div>
+
+      <TabBar active={4}/>
+    </div>
+  );
+}
+
+/* ══ SCREEN 6: PAGAMENTO PIX ══ */
+function PagamentoScreen() {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', background:'#fff', minHeight:600 }}>
+      {/* Order summary */}
+      <div style={{ background:C.p700, padding:'16px' }}>
+        <div style={{ fontFamily:fd, fontSize:11, fontWeight:700, color:'rgba(255,255,255,.6)', textTransform:'uppercase', letterSpacing:'.09em', marginBottom:3 }}>Pagamento do pedido</div>
+        <div style={{ fontFamily:fd, fontSize:16, fontWeight:800, color:'#fff', marginBottom:6 }}>Limpeza Residencial #MC-2847</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end' }}>
+          <div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,.6)', marginBottom:2, fontFamily:fb }}>Total a pagar</div>
+            <div style={{ fontFamily:fd, fontSize:28, fontWeight:800, color:'#fff' }}>R$ 246,40</div>
+          </div>
+          <Bdg color="green">PIX</Bdg>
+        </div>
+      </div>
+
+      <div style={{ flex:1, padding:'20px 16px' }}>
+        {/* QR Code placeholder */}
+        <div style={{ textAlign:'center', marginBottom:20 }}>
+          <div style={{ fontFamily:fd, fontSize:14, fontWeight:700, color:C.n900, marginBottom:16 }}>Escaneie o QR Code</div>
+          <div style={{ width:180, height:180, margin:'0 auto', background:C.n50, border:`2px solid ${C.n200}`, borderRadius:16, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            {/* QR pattern simulation */}
+            <svg width="160" height="160" viewBox="0 0 160 160" fill="none">
+              <rect x="10" y="10" width="60" height="60" rx="4" stroke={C.n900} strokeWidth="8" fill="none"/>
+              <rect x="24" y="24" width="32" height="32" rx="2" fill={C.n900}/>
+              <rect x="90" y="10" width="60" height="60" rx="4" stroke={C.n900} strokeWidth="8" fill="none"/>
+              <rect x="104" y="24" width="32" height="32" rx="2" fill={C.n900}/>
+              <rect x="10" y="90" width="60" height="60" rx="4" stroke={C.n900} strokeWidth="8" fill="none"/>
+              <rect x="24" y="104" width="32" height="32" rx="2" fill={C.n900}/>
+              {[90,100,110,120,130,140].map((x,i)=>[90,100,110,120,130,140].map((y,j)=>(
+                (i+j)%2===0 ? <rect key={`${i}${j}`} x={x} y={y} width="8" height="8" fill={C.n900}/> : null
+              )))}
+            </svg>
+          </div>
+        </div>
+
+        {/* Countdown */}
+        <div style={{ textAlign:'center', marginBottom:16 }}>
+          <div style={{ fontSize:11, color:C.n500, fontFamily:fb, marginBottom:4 }}>QR Code expira em</div>
+          <div style={{ fontFamily:fd, fontSize:22, fontWeight:800, color:C.w600 }}>14:32</div>
+        </div>
+
+        {/* Copy code */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:11, color:C.n500, fontFamily:fb, marginBottom:6 }}>Ou copie o código PIX</div>
+          <div style={{ display:'flex', gap:8 }}>
+            <div style={{ flex:1, background:C.n50, border:`1.5px solid ${C.n200}`, borderRadius:10, padding:'10px 12px', fontSize:11, color:C.n600, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              00020126580014br.gov.bcb.pix...missaocumprida
+            </div>
+            <div style={{ background:C.p700, borderRadius:10, padding:'10px 14px', display:'flex', alignItems:'center', cursor:'pointer' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Info */}
+        <div style={{ background:C.s50, border:`1px solid ${C.s100}`, borderRadius:12, padding:'10px 12px', display:'flex', gap:8 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.s600} strokeWidth="2" style={{ flexShrink:0, marginTop:1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div style={{ fontSize:11, color:C.s700, lineHeight:1.5, fontFamily:fb }}>O pagamento é confirmado automaticamente. O serviço será agendado assim que o PIX for recebido.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══ MAIN APP ══ */
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="cliente" title="Visão do Cliente" subtitle="Home, criação de pedido e pagamento">
+        <DCArtboard id="c1" label="01 · Home — Cliente" width={400}>
+          <IOSDevice>
+            <HomeCliente/>
+          </IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="c2" label="02 · Novo Pedido — Questionário" width={400}>
+          <IOSDevice title="Novo Pedido">
+            <NovoPedidoScreen/>
+          </IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="c3" label="03 · Pagamento PIX" width={400}>
+          <IOSDevice title="Pagamento">
+            <PagamentoScreen/>
+          </IOSDevice>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="prestador" title="Visão do Prestador" subtitle="Feed de pedidos, chat e perfil profissional">
+        <DCArtboard id="p1" label="04 · Feed de Pedidos" width={400}>
+          <IOSDevice>
+            <FeedPrestador/>
+          </IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="p2" label="05 · Chat — Agendamento" width={400}>
+          <IOSDevice title="Marcos Ferreira">
+            <ChatScreen/>
+          </IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="p3" label="06 · Perfil do Prestador" width={400}>
+          <IOSDevice>
+            <PerfilScreen/>
+          </IOSDevice>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

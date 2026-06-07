@@ -2,6 +2,8 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
+import { maybeCompleteReferral } from '../referrals/referrals.service'
+import { notify } from '../push/push.service'
 
 const rateSchema = z.object({
   score: z.number().int().min(1).max(5),
@@ -58,7 +60,21 @@ export async function rateSchedule(req: Request, res: Response) {
   const ratingsCount = await prisma.rating.count({ where: { schedule_id: schedule.id } })
   if (ratingsCount >= 2) {
     await prisma.order.update({ where: { id: schedule.order_id }, data: { status: 'RATED' } })
+    // Completa indicação pendente do cliente (se houver)
+    await maybeCompleteReferral(schedule.client_id, schedule.order_id).catch(() => {})
   }
+
+  // Notifica o avaliado
+  const stars = '⭐'.repeat(parsed.data.score)
+  await notify(reviewedId, {
+    type: 'GENERAL' as never,
+    title: `Você recebeu ${parsed.data.score} estrelas ${stars}`,
+    body: parsed.data.comment
+      ? `"${parsed.data.comment.slice(0, 80)}${parsed.data.comment.length > 80 ? '…' : ''}"`
+      : 'Toque para ver detalhes da avaliação.',
+    data: { schedule_id: schedule.id, rating_id: rating.id },
+    channel: 'general',
+  }).catch(() => {})
 
   return R.created(res, rating, 'Avaliação registrada com sucesso')
 }

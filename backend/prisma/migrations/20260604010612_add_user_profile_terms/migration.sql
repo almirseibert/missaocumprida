@@ -1,0 +1,18 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN     "address_city" TEXT,
+ADD COLUMN     "address_complement" TEXT,
+ADD COLUMN     "address_neighborhood" TEXT,
+ADD COLUMN     "address_number" TEXT,
+ADD COLUMN     "address_state" TEXT,
+ADD COLUMN     "address_street" TEXT,
+ADD COLUMN     "address_zip" TEXT,
+ADD COLUMN     "birth_date" TIMESTAMP(3),
+ADD COLUMN     "emergency_contact_name" TEXT,
+ADD COLUMN     "emergency_contact_phone" TEXT,
+ADD COLUMN     "mother_name" TEXT,
+ADD COLUMN     "no_show_count" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "rg" TEXT,
+ADD COLUMN     "suspended_until" TIMESTAMP(3),
+ADD COLUMN     "terms_accepted_at" TIMESTAMP(3),
+ADD COLUMN     "terms_accepted_ip" TEXT,
+ADD COLUMN     "terms_version" TEXT;

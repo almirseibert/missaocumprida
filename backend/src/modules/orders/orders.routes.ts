@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authenticate } from '../../middlewares/auth'
+import { authenticate, requireVerified } from '../../middlewares/auth'
 import { upload } from '../../middlewares/upload'
 import {
   createOrder, listMyOrders, getProviderFeed,
@@ -10,7 +10,7 @@ const router = Router()
 
 router.use(authenticate)
 
-router.post('/', createOrder)
+router.post('/', requireVerified, createOrder)
 router.get('/', listMyOrders)
 router.get('/feed', getProviderFeed)
 router.get('/:id', getOrder)

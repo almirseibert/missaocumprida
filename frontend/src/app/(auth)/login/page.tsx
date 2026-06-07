@@ -12,6 +12,7 @@ import { api, getApiErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { Logo } from '@/components/Logo'
 
 const schema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -43,18 +44,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate2-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <span className="text-3xl">✅</span>
-            <span className="text-2xl font-bold text-gray-900">Missão Cumprida</span>
+          <Link href="/" className="inline-flex items-center gap-2.5">
+            <Logo size={40} />
+            <span className="font-display text-2xl font-extrabold text-slate2-900">
+              Missão Cumprida
+            </span>
           </Link>
-          <p className="mt-2 text-gray-600">Acesse sua conta</p>
+          <p className="mt-2 text-slate2-500">Acesse sua conta</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+        <div className="bg-white rounded-2xl border border-slate2-200 shadow-elv-1 p-8">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Input
               label="E-mail"
@@ -65,35 +67,33 @@ export default function LoginPage() {
               {...register('email')}
             />
 
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">Senha</label>
-              <div className="relative">
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  className={`block w-full rounded-lg border px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent pr-10 ${errors.password ? 'border-red-400' : 'border-gray-300'}`}
-                  {...register('password')}
-                />
+            <Input
+              label="Senha"
+              type={showPass ? 'text' : 'password'}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              error={errors.password?.message}
+              rightSlot={
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="text-slate2-400 hover:text-slate2-600 transition-colors"
+                  aria-label={showPass ? 'Ocultar senha' : 'Mostrar senha'}
                 >
                   {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-              </div>
-              {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
-            </div>
+              }
+              {...register('password')}
+            />
 
             <Button type="submit" fullWidth isLoading={isSubmitting} size="lg">
               Entrar
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-gray-600">
+          <p className="mt-6 text-center text-sm text-slate2-500">
             Não tem conta?{' '}
-            <Link href="/register" className="font-medium text-brand-600 hover:text-brand-700">
+            <Link href="/register" className="font-semibold text-brand-700 hover:text-brand-800">
               Cadastre-se grátis
             </Link>
           </p>

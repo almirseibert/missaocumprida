@@ -33,7 +33,7 @@ export function StarRating({ value = 0, onChange, readonly = false, size = 'md' 
             <Star
               className={cn(
                 starSize[size],
-                filled ? 'fill-yellow-400 text-yellow-400' : 'fill-gray-200 text-gray-200'
+                filled ? 'fill-amber-400 text-amber-400' : 'fill-slate2-200 text-slate2-200'
               )}
             />
           </button>

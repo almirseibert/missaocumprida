@@ -37,7 +37,10 @@ export default function PerfilPage() {
     if (!user) return
 
     api.get('/users/me/skills').then((r) => setSkills(r.data.data)).catch(() => {})
-    api.get(`/users/${user.id}/ratings`, { params: { limit: 5 } }).then((r) => setRatings(r.data.data)).catch(() => {})
+    api.get(`/users/${user.id}/ratings`, { params: { limit: 5 } }).then((r) => {
+      const d = r.data.data
+      setRatings(Array.isArray(d) ? d : (d?.ratings ?? []))
+    }).catch(() => {})
 
     if (canManageSkills) {
       api.get('/categories').then((r) => setCategories(r.data.data)).catch(() => {})
@@ -102,7 +105,7 @@ export default function PerfilPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Profile header */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <div className="bg-white rounded-2xl border border-slate2-200 p-6">
         <div className="flex items-start gap-4">
           <div className="relative">
             <Avatar name={user.name} avatar={user.avatar} size="xl" />
@@ -115,9 +118,9 @@ export default function PerfilPage() {
           <div className="flex-1">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <h1 className="text-xl font-bold text-gray-900">{user.name}</h1>
-                <p className="text-sm text-gray-500">{user.email}</p>
-                {user.phone && <p className="text-sm text-gray-500">{user.phone}</p>}
+                <h1 className="text-xl font-bold text-slate2-900">{user.name}</h1>
+                <p className="text-sm text-slate2-500">{user.email}</p>
+                {user.phone && <p className="text-sm text-slate2-500">{user.phone}</p>}
               </div>
               <Link href="/perfil/editar">
                 <Button variant="outline" size="sm">
@@ -128,44 +131,44 @@ export default function PerfilPage() {
 
             <div className="flex items-center gap-3 mt-3 flex-wrap">
               <Badge>{roleLabel[user.role]}</Badge>
-              {user.document_verified && <Badge variant="success">✓ Verificado</Badge>}
+              {user.document_verified && <Badge variant="green">✓ Verificado</Badge>}
               {user.rating_count > 0 && (
                 <div className="flex items-center gap-1 text-sm">
-                  <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                  <span className="font-medium">{user.rating_avg.toFixed(1)}</span>
-                  <span className="text-gray-400">({user.rating_count} avaliações)</span>
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  <span className="font-medium">{(user.rating_avg ?? 0).toFixed(1)}</span>
+                  <span className="text-slate2-400">({user.rating_count} avaliações)</span>
                 </div>
               )}
             </div>
 
-            {user.bio && <p className="mt-3 text-sm text-gray-600">{user.bio}</p>}
+            {user.bio && <p className="mt-3 text-sm text-slate2-600">{user.bio}</p>}
           </div>
         </div>
       </div>
 
       {/* Skills (provider only) */}
       {canManageSkills && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <div className="bg-white rounded-2xl border border-slate2-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">Minhas Habilidades</h2>
+            <h2 className="font-semibold text-slate2-900">Minhas Habilidades</h2>
             <Button size="sm" onClick={() => setSkillModal(true)}>
               <Plus className="w-4 h-4" /> Adicionar
             </Button>
           </div>
 
           {skills.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
+            <p className="text-sm text-slate2-500 text-center py-4">
               Nenhuma habilidade cadastrada. Adicione as categorias de serviço que você oferece.
             </p>
           ) : (
             <div className="space-y-3">
               {skills.map((skill) => (
-                <div key={skill.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-200">
+                <div key={skill.id} className="flex items-center justify-between p-3 rounded-xl bg-slate2-50 border border-slate2-200">
                   <div className="flex items-center gap-3">
                     <span className="text-xl">{skill.category?.icon}</span>
                     <div>
-                      <p className="font-medium text-gray-900 text-sm">{skill.category?.name}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="font-medium text-slate2-900 text-sm">{skill.category?.name}</p>
+                      <p className="text-xs text-slate2-500">
                         {skill.years_experience && `${skill.years_experience} anos exp.`}
                         {skill.hourly_rate && ` · R$${skill.hourly_rate}/h`}
                         {skill.service_radius_km && ` · ${skill.service_radius_km}km de raio`}
@@ -174,7 +177,7 @@ export default function PerfilPage() {
                   </div>
                   <button
                     onClick={() => removeSkill(skill.id)}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-slate2-400 hover:text-red-500 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -187,19 +190,19 @@ export default function PerfilPage() {
 
       {/* Ratings */}
       {ratings.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Avaliações recebidas</h2>
+        <div className="bg-white rounded-2xl border border-slate2-200 p-6">
+          <h2 className="font-semibold text-slate2-900 mb-4">Avaliações recebidas</h2>
           <div className="space-y-4">
             {ratings.map((rating) => (
               <div key={rating.id} className="flex gap-3">
                 <Avatar name={rating.reviewer?.name || 'U'} avatar={rating.reviewer?.avatar} size="sm" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm text-gray-900">{rating.reviewer?.name}</p>
+                    <p className="font-medium text-sm text-slate2-900">{rating.reviewer?.name}</p>
                     <StarRating value={rating.score} readonly size="sm" />
                   </div>
-                  {rating.comment && <p className="text-sm text-gray-600 mt-0.5">{rating.comment}</p>}
-                  <p className="text-xs text-gray-400 mt-1">{formatRelative(rating.created_at)}</p>
+                  {rating.comment && <p className="text-sm text-slate2-600 mt-0.5">{rating.comment}</p>}
+                  <p className="text-xs text-slate2-400 mt-1">{formatRelative(rating.created_at)}</p>
                 </div>
               </div>
             ))}
@@ -211,11 +214,11 @@ export default function PerfilPage() {
       <Modal isOpen={skillModal} onClose={() => setSkillModal(false)} title="Adicionar habilidade">
         <div className="space-y-4">
           <div className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">Categoria *</label>
+            <label className="text-sm font-medium text-slate2-700">Categoria *</label>
             <select
               value={selectedCatId}
               onChange={(e) => setSelectedCatId(e.target.value)}
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               <option value="">Selecione uma categoria...</option>
               {categories.filter((c) => !skills.find((s) => s.category_id === c.id)).map((cat) => (
@@ -226,18 +229,18 @@ export default function PerfilPage() {
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">Anos exp.</label>
+              <label className="text-sm font-medium text-slate2-700">Anos exp.</label>
               <input
                 type="number"
                 min="0"
                 placeholder="0"
                 value={yearsExp}
                 onChange={(e) => setYearsExp(e.target.value)}
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">R$/hora</label>
+              <label className="text-sm font-medium text-slate2-700">R$/hora</label>
               <input
                 type="number"
                 step="0.01"
@@ -245,21 +248,26 @@ export default function PerfilPage() {
                 placeholder="0.00"
                 value={hourlyRate}
                 onChange={(e) => setHourlyRate(e.target.value)}
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">Raio (km)</label>
+              <label className="text-sm font-medium text-slate2-700">Raio (km)</label>
               <input
                 type="number"
                 min="1"
                 placeholder="50"
                 value={radius}
                 onChange={(e) => setRadius(e.target.value)}
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
           </div>
+
+          <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
+            💡 Quanto maior o raio de atendimento, mais propostas de trabalho você recebe.
+            Pedidos fora do seu raio não aparecem no seu feed.
+          </p>
 
           <div className="flex gap-3">
             <Button fullWidth onClick={addSkill} isLoading={addingSkill}>

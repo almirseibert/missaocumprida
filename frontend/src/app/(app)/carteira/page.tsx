@@ -26,8 +26,8 @@ const withdrawalStatusLabel: Record<string, string> = {
   REJECTED: 'Rejeitado',
 }
 
-const withdrawalStatusColor: Record<string, 'yellow' | 'blue' | 'green' | 'red' | 'gray'> = {
-  REQUESTED: 'yellow',
+const withdrawalStatusColor: Record<string, 'amber' | 'blue' | 'green' | 'red' | 'gray'> = {
+  REQUESTED: 'amber',
   PROCESSING: 'blue',
   PAID: 'green',
   REJECTED: 'red',
@@ -124,7 +124,7 @@ export default function CarteiraPage() {
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+      <h1 className="text-2xl font-bold text-slate2-800 flex items-center gap-2">
         <Wallet className="w-6 h-6" />
         Minha Carteira
       </h1>
@@ -134,13 +134,18 @@ export default function CarteiraPage() {
         <CardBody>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Saldo disponível para saque</p>
+              <p className="text-sm text-slate2-500">Saldo disponível para saque</p>
               <p className="text-4xl font-bold text-green-600 mt-1">
                 {formatCurrency(balance?.available_balance ?? 0)}
               </p>
             </div>
             <Button
-              onClick={() => setShowWithdrawForm(true)}
+              onClick={() => {
+                if (balance?.available_balance) {
+                  withdrawForm.setValue('amount', Number(balance.available_balance.toFixed(2)))
+                }
+                setShowWithdrawForm(true)
+              }}
               disabled={!balance?.available_balance || balance.available_balance < 10}
               className="flex items-center gap-2"
             >
@@ -155,7 +160,7 @@ export default function CarteiraPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+            <h2 className="font-semibold text-slate2-700 flex items-center gap-2">
               <Key className="w-4 h-4" />
               Chave PIX para recebimento
             </h2>
@@ -167,13 +172,13 @@ export default function CarteiraPage() {
         <CardBody>
           {balance?.pix_key ? (
             <div className="text-sm">
-              <span className="text-gray-500">Tipo: </span>
+              <span className="text-slate2-500">Tipo: </span>
               <span className="font-medium">{pixKeyTypeOptions.find(o => o.value === balance.pix_key_type)?.label}</span>
-              <span className="text-gray-400 mx-2">|</span>
+              <span className="text-slate2-400 mx-2">|</span>
               <span className="font-mono">{balance.pix_key}</span>
             </div>
           ) : (
-            <p className="text-sm text-gray-400">Nenhuma chave PIX cadastrada. Cadastre para poder sacar.</p>
+            <p className="text-sm text-slate2-400">Nenhuma chave PIX cadastrada. Cadastre para poder sacar.</p>
           )}
 
           {showPixForm && (
@@ -203,7 +208,7 @@ export default function CarteiraPage() {
       {showWithdrawForm && (
         <Card>
           <CardHeader>
-            <h2 className="font-semibold text-gray-700">Solicitar saque</h2>
+            <h2 className="font-semibold text-slate2-700">Solicitar saque</h2>
           </CardHeader>
           <CardBody>
             <form onSubmit={withdrawForm.handleSubmit(onWithdraw)} className="space-y-4">
@@ -227,8 +232,8 @@ export default function CarteiraPage() {
                 error={withdrawForm.formState.errors.pix_key?.message}
                 {...withdrawForm.register('pix_key')}
               />
-              <p className="text-xs text-gray-500">
-                Saques são processados em até 2 dias úteis. Valor mínimo: R$ 10,00.
+              <p className="text-xs text-slate2-500">
+                Saques são processados em até 7 dias úteis. Valor mínimo: R$ 10,00.
               </p>
               <div className="flex gap-2">
                 <Button type="submit" isLoading={withdrawForm.formState.isSubmitting}>Solicitar saque</Button>
@@ -242,22 +247,22 @@ export default function CarteiraPage() {
       {/* Histórico de saques */}
       <Card>
         <CardHeader>
-          <h2 className="font-semibold text-gray-700">Histórico de saques</h2>
+          <h2 className="font-semibold text-slate2-700">Histórico de saques</h2>
         </CardHeader>
         <CardBody>
           {withdrawals.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">Nenhum saque solicitado ainda.</p>
+            <p className="text-sm text-slate2-400 text-center py-4">Nenhum saque solicitado ainda.</p>
           ) : (
             <div className="space-y-3">
               {withdrawals.map((w) => (
                 <div key={w.id} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
                   <div>
-                    <p className="font-medium text-gray-800">{formatCurrency(w.amount)}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-medium text-slate2-800">{formatCurrency(w.amount)}</p>
+                    <p className="text-xs text-slate2-500">
                       {pixKeyTypeOptions.find(o => o.value === w.pix_key_type)?.label}: {w.pix_key}
                     </p>
-                    <p className="text-xs text-gray-400">{formatDate(w.created_at)}</p>
-                    {w.notes && <p className="text-xs text-gray-500 italic mt-1">{w.notes}</p>}
+                    <p className="text-xs text-slate2-400">{formatDate(w.created_at)}</p>
+                    {w.notes && <p className="text-xs text-slate2-500 italic mt-1">{w.notes}</p>}
                   </div>
                   <Badge variant={withdrawalStatusColor[w.status] ?? 'gray'}>
                     {withdrawalStatusLabel[w.status] ?? w.status}

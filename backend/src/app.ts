@@ -15,6 +15,19 @@ import ratingsRoutes, { rateRouter } from './modules/ratings/ratings.routes'
 import messagesRoutes from './modules/messages/messages.routes'
 import paymentsRoutes, { webhookRouter } from './modules/payments/payments.routes'
 import notificationsRoutes from './modules/notifications/notifications.routes'
+import pushRoutes from './modules/push/push.routes'
+import referralsRoutes from './modules/referrals/referrals.routes'
+import { sharePrivateRouter, sharePublicRouter } from './modules/public-share/public-share.routes'
+import analyticsRoutes from './modules/analytics/analytics.routes'
+import packagesRoutes, { providerPackagesRouter } from './modules/packages/packages.routes'
+import {
+  myAvailabilityRouter, providerAvailabilityRouter, directBookRouter,
+} from './modules/availability/availability.routes'
+import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes'
+import verificationRoutes from './modules/verification/verification.routes'
+import recommendationsRoutes from './modules/recommendations/recommendations.routes'
+import legalRoutes from './modules/legal/legal.routes'
+import supportRoutes from './modules/support/support.routes'
 
 const app = express()
 
@@ -51,6 +64,21 @@ app.use('/api/schedules', rateRouter)                             // POST /api/s
 app.use('/api/schedules/:scheduleId/messages', messagesRoutes)    // GET/POST /api/schedules/:scheduleId/messages
 app.use('/api/payments', paymentsRoutes)
 app.use('/api/notifications', notificationsRoutes)
+app.use('/api/push', pushRoutes)
+app.use('/api/referrals', referralsRoutes)
+app.use('/api/orders', sharePrivateRouter)        // POST/DELETE /api/orders/:id/share
+app.use('/api/public', sharePublicRouter)         // GET /api/public/orders/:slug
+app.use('/api/analytics', analyticsRoutes)
+app.use('/api/packages', packagesRoutes)
+app.use('/api/users', providerPackagesRouter)       // GET /api/users/:providerId/packages
+app.use('/api/users/me/availability', myAvailabilityRouter)
+app.use('/api/users', providerAvailabilityRouter)   // GET /api/users/:providerId/availability
+app.use('/api/orders', directBookRouter)            // POST /api/orders/direct-book
+app.use('/api/subscriptions', subscriptionsRoutes)
+app.use('/api/verification', verificationRoutes)
+app.use('/api/recommendations', recommendationsRoutes)
+app.use('/api/legal', legalRoutes)
+app.use('/api/support', supportRoutes)
 
 // ---- 404 ----
 app.use((_req, res) => {

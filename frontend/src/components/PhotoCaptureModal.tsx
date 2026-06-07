@@ -237,7 +237,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onCapture, title }: Props) 
     <Modal isOpen={isOpen} onClose={handleClose} title={title}>
       <div className="space-y-4">
         {/* Location status */}
-        <div className={`flex items-center gap-2 text-sm ${locating ? 'text-yellow-600' : location ? 'text-green-600' : 'text-red-500'}`}>
+        <div className={`flex items-center gap-2 text-sm ${locating ? 'text-amber-600' : location ? 'text-green-600' : 'text-red-500'}`}>
           <MapPin className="w-4 h-4 flex-shrink-0" />
           <span className="truncate">{locating ? 'Obtendo localização GPS…' : address}</span>
         </div>
@@ -270,7 +270,7 @@ export function PhotoCaptureModal({ isOpen, onClose, onCapture, title }: Props) 
           </div>
         )}
 
-        <button onClick={handleClose} className="w-full text-sm text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1">
+        <button onClick={handleClose} className="w-full text-sm text-slate2-400 hover:text-slate2-600 flex items-center justify-center gap-1">
           <X className="w-3 h-3" /> Cancelar
         </button>
       </div>

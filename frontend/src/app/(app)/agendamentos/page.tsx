@@ -23,13 +23,13 @@ export default function AgendamentosPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Agendamentos</h1>
+      <h1 className="text-2xl font-bold text-slate2-900">Agendamentos</h1>
 
       {schedules.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-4xl mb-3">📅</p>
-          <p className="text-lg font-medium text-gray-700">Nenhum agendamento</p>
-          <p className="text-sm text-gray-500 mt-1">Os agendamentos aparecem após aceite de proposta</p>
+          <p className="text-lg font-medium text-slate2-700">Nenhum agendamento</p>
+          <p className="text-sm text-slate2-500 mt-1">Os agendamentos aparecem após aceite de proposta</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -41,7 +41,7 @@ export default function AgendamentosPage() {
               <Link
                 key={schedule.id}
                 href={`/agendamentos/${schedule.id}`}
-                className="block bg-white rounded-2xl border border-gray-200 p-5 hover:border-brand-300 hover:shadow-sm transition-all"
+                className="block bg-white rounded-2xl border border-slate2-200 p-5 hover:border-brand-300 hover:shadow-sm transition-all"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
@@ -49,16 +49,16 @@ export default function AgendamentosPage() {
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${SCHEDULE_STATUS_COLOR[schedule.status]}`}>
                         {SCHEDULE_STATUS_LABEL[schedule.status]}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-slate2-500">
                         {isProvider ? 'Você é o prestador' : 'Você é o cliente'}
                       </span>
                     </div>
 
-                    <h3 className="font-semibold text-gray-900">
+                    <h3 className="font-semibold text-slate2-900">
                       {schedule.order?.title || 'Serviço agendado'}
                     </h3>
 
-                    <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-500">
+                    <div className="flex flex-wrap gap-3 mt-2 text-sm text-slate2-500">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />
                         {formatDateTime(schedule.scheduled_at)}
@@ -76,8 +76,8 @@ export default function AgendamentosPage() {
                     <div className="flex items-center gap-2">
                       <Avatar name={otherParty.name} avatar={otherParty.avatar} size="sm" />
                       <div className="hidden sm:block">
-                        <p className="text-xs text-gray-500">{isProvider ? 'Cliente' : 'Prestador'}</p>
-                        <p className="text-sm font-medium text-gray-800">{otherParty.name.split(' ')[0]}</p>
+                        <p className="text-xs text-slate2-500">{isProvider ? 'Cliente' : 'Prestador'}</p>
+                        <p className="text-sm font-medium text-slate2-800">{otherParty.name.split(' ')[0]}</p>
                       </div>
                     </div>
                   )}

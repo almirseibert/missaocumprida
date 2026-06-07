@@ -1,10 +1,11 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
-import { estimatePrice } from '../../utils/priceEstimator'
+import { estimatePriceDynamic } from '../../utils/priceEstimator'
 import { haversineDistance } from '../../utils/geo'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
+import { sendToUsers } from '../push/push.service'
 
 const createOrderSchema = z.object({
   category_id: z.string().uuid(),
@@ -17,19 +18,38 @@ const createOrderSchema = z.object({
   state: z.string().length(2).default('SP'),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  is_urgent: z.boolean().optional().default(false),
+  urgency_radius_km: z.number().int().min(1).max(50).optional(),
 })
+
+const URGENCY_FEE_PCT = 0.25 // 25% sobre o preço estimado
+const URGENCY_DEADLINE_HOURS = 2
+const URGENCY_DEFAULT_RADIUS_KM = 10
 
 export async function createOrder(req: Request, res: Response) {
   const parsed = createOrderSchema.safeParse(req.body)
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
 
-  const { category_id, description, answers, desired_date, address, neighborhood, city, state, latitude, longitude } = parsed.data
+  const { category_id, description, answers, desired_date, address, neighborhood, city, state, is_urgent, urgency_radius_km } = parsed.data
+  let { latitude, longitude } = parsed.data
 
   const category = await prisma.category.findUnique({
     where: { id: category_id },
     include: { questionnaire_fields: true },
   })
   if (!category) return R.notFound(res, 'Categoria não encontrada')
+
+  // Fallback: se o cliente não enviou coordenadas no formulário, herda do perfil
+  if (latitude == null || longitude == null) {
+    const client = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { latitude: true, longitude: true },
+    })
+    if (client?.latitude != null && client?.longitude != null) {
+      latitude = client.latitude
+      longitude = client.longitude
+    }
+  }
 
   // Validar campos obrigatórios
   const requiredFields = category.questionnaire_fields.filter(f => f.is_required && f.field_type !== 'PHOTO')
@@ -39,15 +59,31 @@ export async function createOrder(req: Request, res: Response) {
     }
   }
 
-  // Estimar preço
-  const priceFields = category.questionnaire_fields.map(f => ({
-    affects_price: f.affects_price,
-    price_modifier: f.price_modifier as Record<string, number> | null,
-  }))
-  const price = estimatePrice(category.base_price_min, category.base_price_max, priceFields, answers)
+  // Estimar preço (engine dinâmico — usa pricing_formula se existir, senão fallback legado)
+  const price = estimatePriceDynamic(
+    (category as any).pricing_formula,
+    category.questionnaire_fields.map((f) => ({
+      id: f.id,
+      key: (f as any).key ?? null,
+      field_type: f.field_type,
+      affects_price: f.affects_price,
+      price_modifier: f.price_modifier,
+      pricing_effect: (f as any).pricing_effect,
+    })),
+    answers,
+    category.base_price_min,
+    category.base_price_max,
+    state,
+  )
 
   const locationLabel = [neighborhood, city].filter(Boolean).join(', ')
-  const title = `${category.name} — ${locationLabel || city}`
+  const title = `${is_urgent ? '🚨 URGENTE — ' : ''}${category.name} — ${locationLabel || city}`
+
+  // Aplica acréscimo de urgência
+  const finalMin = is_urgent ? Math.round(price.min * (1 + URGENCY_FEE_PCT) * 100) / 100 : price.min
+  const finalMax = is_urgent ? Math.round(price.max * (1 + URGENCY_FEE_PCT) * 100) / 100 : price.max
+  const urgencyFeeValue = is_urgent ? Math.round((finalMax - price.max) * 100) / 100 : null
+  const urgencyDeadline = is_urgent ? new Date(Date.now() + URGENCY_DEADLINE_HOURS * 60 * 60 * 1000) : null
 
   const order = await prisma.order.create({
     data: {
@@ -63,8 +99,13 @@ export async function createOrder(req: Request, res: Response) {
       state,
       latitude,
       longitude,
-      estimated_price_min: price.min,
-      estimated_price_max: price.max,
+      estimated_price_min: finalMin,
+      estimated_price_max: finalMax,
+      is_urgent,
+      urgency_fee_pct: is_urgent ? URGENCY_FEE_PCT : null,
+      urgency_fee_value: urgencyFeeValue,
+      urgency_deadline: urgencyDeadline,
+      urgency_radius_km: is_urgent ? (urgency_radius_km ?? URGENCY_DEFAULT_RADIUS_KM) : null,
     },
     include: {
       category: { select: { id: true, name: true, icon: true } },
@@ -74,20 +115,55 @@ export async function createOrder(req: Request, res: Response) {
 
   // Notify providers who have this category skill and are active
   try {
-    const providers = await prisma.providerSkill.findMany({
-      where: { category_id: category_id },
-      select: { provider_id: true },
+    const skills = await prisma.providerSkill.findMany({
+      where: { category_id: category_id, is_active: true },
+      select: {
+        provider_id: true,
+        service_radius_km: true,
+        provider: { select: { id: true, latitude: true, longitude: true } },
+      },
     })
-    if (providers.length > 0) {
+    // Filtra por raio. Urgente usa raio especial (urgency_radius_km),
+    // pedidos normais respeitam o raio individual de cada prestador.
+    let targets: string[]
+    if (latitude != null && longitude != null) {
+      const urgentRadius = urgency_radius_km ?? URGENCY_DEFAULT_RADIUS_KM
+      targets = skills
+        .filter((s) => {
+          const plat = s.provider?.latitude
+          const plng = s.provider?.longitude
+          if (plat == null || plng == null) return false
+          const dist = haversineDistance(latitude, longitude, plat!, plng!)
+          const radius = is_urgent ? urgentRadius : (s.service_radius_km ?? 20)
+          return dist <= radius
+        })
+        .map((s) => s.provider_id)
+    } else {
+      // Pedido sem coordenadas: notifica todos da categoria como fallback (não dá pra calcular distância)
+      targets = skills.map((s) => s.provider_id)
+    }
+    if (targets.length > 0) {
+      const title = is_urgent
+        ? `🚨 URGENTE: ${category.name} perto de você!`
+        : 'Novo pedido na sua área!'
+      const body = is_urgent
+        ? `Cliente precisa em até ${URGENCY_DEADLINE_HOURS}h. Atendimento prioritário em ${city}.`
+        : `Um novo pedido de ${category.name} foi publicado em ${city}.`
       await prisma.notification.createMany({
-        data: providers.map((p) => ({
-          user_id: p.provider_id,
+        data: targets.map((id) => ({
+          user_id: id,
           type: 'NEW_ORDER_NEARBY' as never,
-          title: 'Novo pedido na sua área!',
-          body: `Um novo pedido de ${category.name} foi publicado em ${city}.`,
-          data: { order_id: order.id } as never,
+          title,
+          body,
+          data: { order_id: order.id, urgent: is_urgent } as never,
         })),
         skipDuplicates: true,
+      })
+      await sendToUsers(targets, {
+        title,
+        body,
+        data: { order_id: order.id, type: 'NEW_ORDER_NEARBY', urgent: is_urgent },
+        channel: is_urgent ? 'urgent_orders' : 'general',
       })
     }
   } catch {
@@ -166,9 +242,10 @@ export async function getProviderFeed(req: Request, res: Response) {
   if (city) where.city = { contains: city as string, mode: 'insensitive' }
 
   // Busca todos os pedidos candidatos para filtrar por distância em memória
+  // Urgentes primeiro (com deadline ainda vigente), depois por data
   const allOrders = await prisma.order.findMany({
     where,
-    orderBy: { created_at: 'desc' },
+    orderBy: [{ is_urgent: 'desc' }, { created_at: 'desc' }],
     include: {
       category: { select: { id: true, name: true, icon: true } },
       client: { select: { id: true, name: true, avatar: true, rating_avg: true } },
@@ -195,8 +272,12 @@ export async function getProviderFeed(req: Request, res: Response) {
   })
 
   const filtered = enriched.filter(order => {
-    if (!providerHasLocation || order.distance_km == null) return true
+    // Prestador sem localização cadastrada: mostra tudo (não dá pra filtrar)
+    if (!providerHasLocation) return true
     const radius = radiusByCategory.get(order.category_id) ?? 20
+    // Pedido sem coordenadas é excluído quando o prestador tem localização —
+    // evita mostrar pedido potencialmente a 50 km pra quem atende só 5 km.
+    if (order.distance_km == null) return false
     return order.distance_km <= radius
   })
 

@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Identidade Visual — Missão Cumprida</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --p50:#EFF6FF; --p100:#DBEAFE; --p200:#BFDBFE; --p300:#93C5FD;
+  --p400:#60A5FA; --p500:#3B82F6; --p600:#2563EB; --p700:#1D4ED8;
+  --p800:#1E40AF; --p900:#1E3A8A;
+  --s50:#ECFDF5; --s100:#D1FAE5; --s300:#6EE7B7; --s500:#10B981;
+  --s600:#059669; --s700:#047857; --s900:#064E3B;
+  --w50:#FFFBEB; --w400:#FCD34D; --w500:#F59E0B; --w600:#D97706;
+  --e50:#FEF2F2; --e400:#F87171; --e500:#EF4444; --e600:#DC2626;
+  --n50:#F8FAFC; --n100:#F1F5F9; --n200:#E2E8F0; --n300:#CBD5E1;
+  --n400:#94A3B8; --n500:#64748B; --n600:#475569; --n700:#334155;
+  --n800:#1E293B; --n900:#0F172A;
+  --fd:'Plus Jakarta Sans',sans-serif;
+  --fb:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--fb);background:var(--n50);color:var(--n900);display:flex;min-height:100vh;-webkit-font-smoothing:antialiased;}
+
+/* ── Sidebar ── */
+.sidebar{width:224px;background:#fff;border-right:1px solid var(--n200);position:fixed;top:0;left:0;height:100vh;overflow-y:auto;padding:0;z-index:10;display:flex;flex-direction:column;}
+.sb-top{padding:20px;border-bottom:1px solid var(--n100);}
+.sb-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.sb-name{font-family:var(--fd);font-weight:800;font-size:14px;color:var(--n900);line-height:1.2;}
+.sb-name span{display:block;font-weight:400;font-size:11px;color:var(--n400);letter-spacing:.05em;}
+.sb-group{padding:20px 12px 4px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--n400);}
+.sb-link{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:1px 8px;border-radius:8px;font-size:13px;font-weight:500;color:var(--n600);text-decoration:none;transition:.15s;}
+.sb-link:hover{background:var(--p50);color:var(--p700);}
+.sb-dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.4;}
+
+/* ── Main ── */
+main{margin-left:224px;flex:1;padding:56px 60px;max-width:1120px;}
+
+/* ── Section ── */
+.sec{margin-bottom:88px;scroll-margin-top:32px;}
+.sec-head{margin-bottom:36px;}
+.sec-eyebrow{font-family:var(--fd);font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--p600);margin-bottom:6px;}
+.sec-title{font-family:var(--fd);font-size:32px;font-weight:800;color:var(--n900);line-height:1.1;}
+.sec-sub{font-size:15px;color:var(--n500);margin-top:8px;line-height:1.6;max-width:580px;}
+
+/* ── Cards ── */
+.card{background:#fff;border:1px solid var(--n200);border-radius:16px;overflow:hidden;}
+.card-p{padding:28px;}
+.label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--n400);margin-bottom:16px;}
+
+/* ── Grid ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.col{display:flex;flex-direction:column;gap:12px;}
+hr.div{border:none;border-top:1px solid var(--n100);margin:24px 0;}
+
+/* ── Logo canvas ── */
+.logo-bg{display:flex;align-items:center;justify-content:center;border-radius:14px;padding:40px 32px;}
+.bg-white{background:#fff;border:1px solid var(--n200);}
+.bg-dark{background:var(--n900);}
+.bg-brand{background:var(--p700);}
+.bg-grad{background:linear-gradient(135deg,var(--p800),var(--s700));}
+.lockup{display:flex;align-items:center;gap:14px;}
+.lockup-v{display:flex;flex-direction:column;align-items:center;gap:10px;}
+.wm{font-family:var(--fd);font-size:22px;font-weight:800;color:var(--n900);line-height:1.0;}
+.wm-light{color:#fff;}
+.wm-sub{font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--n500);}
+.wm-sub-light{color:rgba(255,255,255,.65);}
+.tagline{font-size:12px;color:var(--n500);font-weight:400;letter-spacing:.04em;text-align:center;}
+.tagline-light{color:rgba(255,255,255,.5);}
+
+/* Icon sizes demo */
+.icon-sizes{display:flex;align-items:flex-end;gap:20px;padding:32px;}
+
+/* ── Color ── */
+.scale{display:flex;border-radius:12px;overflow:hidden;height:72px;}
+.sw{flex:1;}
+.sw-info{margin-top:6px;display:flex;flex-direction:column;gap:2px;}
+.sw-label{font-size:11px;font-weight:600;color:var(--n700);}
+.sw-hex{font-size:10px;color:var(--n400);font-family:monospace;}
+.semantic-table{width:100%;border-collapse:collapse;}
+.semantic-table th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--n400);padding:8px 12px;border-bottom:1px solid var(--n100);}
+.semantic-table td{padding:10px 12px;border-bottom:1px solid var(--n100);font-size:13px;}
+.semantic-table tr:last-child td{border:none;}
+.dot-sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:middle;}
+
+/* ── Typography ── */
+.type-row{display:flex;align-items:baseline;gap:24px;padding:18px 0;border-bottom:1px solid var(--n100);}
+.type-row:last-child{border:none;}
+.type-meta{width:140px;flex-shrink:0;}
+.type-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--n400);}
+.type-spec{font-size:11px;color:var(--n400);font-family:monospace;margin-top:2px;}
+.font-family-card{padding:28px;}
+.ff-name{font-size:13px;font-weight:700;color:var(--n600);margin-bottom:6px;font-family:var(--fb);}
+.ff-weights{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;}
+.ff-chip{font-size:11px;background:var(--n100);color:var(--n600);padding:2px 8px;border-radius:4px;}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--fb);font-weight:600;border:none;cursor:pointer;transition:all .15s;text-decoration:none;white-space:nowrap;}
+.btn-sm{padding:7px 14px;font-size:13px;border-radius:8px;}
+.btn-md{padding:10px 20px;font-size:14px;border-radius:10px;}
+.btn-lg{padding:13px 28px;font-size:15px;border-radius:12px;}
+.bp{background:var(--p700);color:#fff;}          .bp:hover{background:var(--p800);}
+.bs{background:var(--s600);color:#fff;}          .bs:hover{background:var(--s700);}
+.bn{background:var(--n100);color:var(--n800);}   .bn:hover{background:var(--n200);}
+.bo{background:transparent;color:var(--p700);border:2px solid var(--p700);}
+.bg-ghost{background:transparent;color:var(--n600);}  .bg-ghost:hover{background:var(--n100);}
+.bd{background:var(--e600);color:#fff;}          .bd:hover{background:#B91C1C;}
+.btn-dis{opacity:.45;pointer-events:none;}
+.btn-load{opacity:.75;pointer-events:none;}
+
+/* ── Inputs ── */
+.inp-wrap{display:flex;flex-direction:column;gap:6px;}
+.inp-wrap label{font-size:13px;font-weight:500;color:var(--n700);}
+.inp-wrap input,.inp-wrap select{padding:10px 14px;border:1.5px solid var(--n300);border-radius:10px;font-family:var(--fb);font-size:14px;color:var(--n900);background:#fff;outline:none;width:100%;}
+.inp-focused input{border-color:var(--p500);box-shadow:0 0 0 3px rgba(59,130,246,.15);}
+.inp-error input{border-color:var(--e500);box-shadow:0 0 0 3px rgba(239,68,68,.12);}
+.inp-hint{font-size:12px;color:var(--n400);}
+.inp-err-msg{font-size:12px;color:var(--e600);}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:100px;font-size:12px;font-weight:600;}
+.badge::before{content:'';display:block;width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.6;}
+.ba{background:var(--p100);color:var(--p700);}
+.bg2{background:var(--s100);color:var(--s700);}
+.bw{background:#FEF3C7;color:#92400E;}
+.be{background:var(--e50);color:var(--e600);}
+.bn2{background:var(--n100);color:var(--n600);}
+.bpu{background:#EDE9FE;color:#5B21B6;}
+.bpi{background:#FDF2F8;color:#9D174D;}
+
+/* ── Cards ── */
+.service-card{background:#fff;border:1px solid var(--n200);border-radius:14px;padding:16px;transition:all .2s;cursor:pointer;}
+.service-card:hover{border-color:var(--p300);box-shadow:0 4px 16px rgba(29,78,216,.1);}
+.order-card{background:#fff;border:1px solid var(--n200);border-radius:14px;padding:18px;}
+.avatar{display:flex;align-items:center;justify-content:center;border-radius:50%;font-family:var(--fd);font-weight:700;color:#fff;flex-shrink:0;}
+
+/* ── Elevation ── */
+.elv0{box-shadow:none;border:1px solid var(--n200);}
+.elv1{box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.elv2{box-shadow:0 4px 16px rgba(0,0,0,.08);}
+.elv3{box-shadow:0 8px 32px rgba(0,0,0,.12);}
+.elv4{box-shadow:0 16px 48px rgba(0,0,0,.16);}
+
+/* ── Radius ── */
+.r-demo{background:var(--p700);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600;height:64px;}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sb-top">
+    <a class="sb-brand" href="#">
+      <svg width="32" height="32" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="lg1" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs>
+        <rect width="48" height="48" rx="13" fill="url(#lg1)"/>
+        <path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="sb-name">Missão Cumprida <span>Guia de Identidade</span></div>
+    </a>
+  </div>
+  <div class="sb-group">Fundação</div>
+  <a class="sb-link" href="#logo"><span class="sb-dot"></span>Logo</a>
+  <a class="sb-link" href="#cores"><span class="sb-dot"></span>Cores</a>
+  <a class="sb-link" href="#tipografia"><span class="sb-dot"></span>Tipografia</a>
+  <div class="sb-group">Componentes</div>
+  <a class="sb-link" href="#botoes"><span class="sb-dot"></span>Botões</a>
+  <a class="sb-link" href="#inputs"><span class="sb-dot"></span>Inputs</a>
+  <a class="sb-link" href="#badges"><span class="sb-dot"></span>Badges e Tags</a>
+  <a class="sb-link" href="#cards"><span class="sb-dot"></span>Cards</a>
+  <a class="sb-link" href="#espacamento"><span class="sb-dot"></span>Espaçamento</a>
+</aside>
+
+<main>
+
+<!-- ══ LOGO ══════════════════════════════════════ -->
+<section class="sec" id="logo">
+  <div class="sec-head">
+    <div class="sec-eyebrow">01 — Fundação</div>
+    <h1 class="sec-title">Logo</h1>
+    <p class="sec-sub">O símbolo da Missão Cumprida combina um checkmark bold com uma forma quadrada arredondada. O degradê azul→verde reforça a transição de confiança (azul) para conclusão bem-sucedida (verde), o núcleo do produto.</p>
+  </div>
+
+  <!-- Logo mark large -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-p">
+      <div class="label">Símbolo — Ícone</div>
+      <div class="icon-sizes">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+          <svg width="128" height="128" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="lg2" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#lg2)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="sw-hex">128px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+          <svg width="64" height="64" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="lg3" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#lg3)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="sw-hex">64px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="lg4" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#lg4)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="sw-hex">48px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+          <svg width="32" height="32" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="lg5" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#lg5)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="sw-hex">32px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+          <svg width="20" height="20" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="lg6" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#lg6)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="sw-hex">20px</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lockups on backgrounds -->
+  <div class="g2" style="margin-bottom:16px;">
+    <div>
+      <div class="label" style="margin-bottom:8px;">Fundo claro</div>
+      <div class="logo-bg bg-white">
+        <div class="lockup">
+          <svg width="44" height="44" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="lg7" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#059669"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#lg7)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div>
+            <div class="wm">Missão Cumprida</div>
+            <div class="wm-sub">Sua missão, cumprida.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:8px;">Fundo escuro</div>
+      <div class="logo-bg bg-dark">
+        <div class="lockup">
+          <svg width="44" height="44" viewBox="0 0 48 48" fill="none"><defs><linearGradient id="lg8" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#60A5FA"/><stop offset="100%" stop-color="#34D399"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#lg8)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div>
+            <div class="wm wm-light">Missão Cumprida</div>
+            <div class="wm-sub wm-sub-light">Sua missão, cumprida.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="g2">
+    <div>
+      <div class="label" style="margin-bottom:8px;">Fundo primário</div>
+      <div class="logo-bg bg-brand">
+        <div class="lockup-v">
+          <svg width="52" height="52" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="13" fill="rgba(255,255,255,.15)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div style="text-align:center;">
+            <div class="wm wm-light">Missão Cumprida</div>
+            <div class="tagline tagline-light" style="margin-top:4px;">Sua missão, cumprida.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:8px;">Gradiente institucional</div>
+      <div class="logo-bg bg-grad">
+        <div class="lockup-v">
+          <svg width="52" height="52" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="13" fill="rgba(255,255,255,.15)"/><path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div style="text-align:center;">
+            <div class="wm wm-light">Missão Cumprida</div>
+            <div class="tagline tagline-light" style="margin-top:4px;">Sua missão, cumprida.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CORES ══════════════════════════════════════ -->
+<section class="sec" id="cores">
+  <div class="sec-head">
+    <div class="sec-eyebrow">02 — Fundação</div>
+    <h1 class="sec-title">Paleta de Cores</h1>
+    <p class="sec-sub">Azul para confiança e tecnologia; verde esmeralda para conclusão e sucesso. Os neutros em ardósia têm um tinte azul discreto que harmoniza com a paleta primária.</p>
+  </div>
+
+  <!-- Primary -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-p">
+      <div class="label">Primária — Azul Confiança</div>
+      <div class="scale">
+        <div class="sw" style="background:#EFF6FF;"></div><div class="sw" style="background:#DBEAFE;"></div>
+        <div class="sw" style="background:#BFDBFE;"></div><div class="sw" style="background:#93C5FD;"></div>
+        <div class="sw" style="background:#60A5FA;"></div><div class="sw" style="background:#3B82F6;"></div>
+        <div class="sw" style="background:#2563EB;"></div>
+        <div class="sw" style="background:#1D4ED8;position:relative;"><div style="position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(255,255,255,.8);font-weight:700;white-space:nowrap;">Principal</div></div>
+        <div class="sw" style="background:#1E40AF;"></div><div class="sw" style="background:#1E3A8A;"></div>
+      </div>
+      <div style="display:flex;gap:0;margin-top:8px;">
+        <div style="flex:1;" class="sw-info"><span class="sw-label">50</span><span class="sw-hex">#EFF6FF</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">100</span><span class="sw-hex">#DBEAFE</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">200</span><span class="sw-hex">#BFDBFE</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">300</span><span class="sw-hex">#93C5FD</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">400</span><span class="sw-hex">#60A5FA</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">500</span><span class="sw-hex">#3B82F6</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">600</span><span class="sw-hex">#2563EB</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label" style="color:var(--p700);">700 ★</span><span class="sw-hex">#1D4ED8</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">800</span><span class="sw-hex">#1E40AF</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">900</span><span class="sw-hex">#1E3A8A</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success -->
+  <div class="g2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="card-p">
+        <div class="label">Sucesso — Verde Missão</div>
+        <div class="scale" style="height:56px;">
+          <div class="sw" style="background:#ECFDF5;"></div>
+          <div class="sw" style="background:#D1FAE5;"></div>
+          <div class="sw" style="background:#6EE7B7;"></div>
+          <div class="sw" style="background:#10B981;"></div>
+          <div class="sw" style="background:#059669;"></div>
+          <div class="sw" style="background:#047857;"></div>
+          <div class="sw" style="background:#064E3B;"></div>
+        </div>
+        <div style="display:flex;gap:0;margin-top:8px;">
+          <div style="flex:1;" class="sw-info"><span class="sw-label">50</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">100</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">300</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">500</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label" style="color:var(--s600);">600 ★</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">700</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">900</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-p">
+        <div class="label">Atenção / Erro</div>
+        <div class="scale" style="height:56px;">
+          <div class="sw" style="background:#FFFBEB;"></div>
+          <div class="sw" style="background:#FEF3C7;"></div>
+          <div class="sw" style="background:#FCD34D;"></div>
+          <div class="sw" style="background:#F59E0B;"></div>
+          <div class="sw" style="background:#FEF2F2;"></div>
+          <div class="sw" style="background:#EF4444;"></div>
+          <div class="sw" style="background:#DC2626;"></div>
+        </div>
+        <div style="display:flex;gap:0;margin-top:8px;">
+          <div style="flex:1;" class="sw-info"><span class="sw-label">W-50</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">W-100</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">W-300</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">W-500</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">E-50</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">E-500</span></div>
+          <div style="flex:1;" class="sw-info"><span class="sw-label">E-600</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Neutrals -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-p">
+      <div class="label">Neutros — Ardósia</div>
+      <div class="scale">
+        <div class="sw" style="background:#F8FAFC;border:1px solid #e2e8f0;"></div>
+        <div class="sw" style="background:#F1F5F9;"></div><div class="sw" style="background:#E2E8F0;"></div>
+        <div class="sw" style="background:#CBD5E1;"></div><div class="sw" style="background:#94A3B8;"></div>
+        <div class="sw" style="background:#64748B;"></div><div class="sw" style="background:#475569;"></div>
+        <div class="sw" style="background:#334155;"></div><div class="sw" style="background:#1E293B;"></div>
+        <div class="sw" style="background:#0F172A;"></div>
+      </div>
+      <div style="display:flex;gap:0;margin-top:8px;">
+        <div style="flex:1;" class="sw-info"><span class="sw-label">50</span><span class="sw-hex">#F8FAFC</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">100</span><span class="sw-hex">#F1F5F9</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">200</span><span class="sw-hex">#E2E8F0</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">300</span><span class="sw-hex">#CBD5E1</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">400</span><span class="sw-hex">#94A3B8</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">500</span><span class="sw-hex">#64748B</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">600</span><span class="sw-hex">#475569</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">700</span><span class="sw-hex">#334155</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">800</span><span class="sw-hex">#1E293B</span></div>
+        <div style="flex:1;" class="sw-info"><span class="sw-label">900</span><span class="sw-hex">#0F172A</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Semantic tokens -->
+  <div class="card">
+    <div class="card-p">
+      <div class="label">Tokens Semânticos</div>
+      <table class="semantic-table">
+        <thead><tr><th>Token</th><th>Valor</th><th>Uso</th></tr></thead>
+        <tbody>
+          <tr><td><code>--color-brand</code></td><td><span class="dot-sw" style="background:#1D4ED8;border-radius:3px;"></span>#1D4ED8</td><td>Ações primárias, links ativos, elementos de destaque</td></tr>
+          <tr><td><code>--color-brand-hover</code></td><td><span class="dot-sw" style="background:#1E40AF;border-radius:3px;"></span>#1E40AF</td><td>Estado hover de elementos primários</td></tr>
+          <tr><td><code>--color-success</code></td><td><span class="dot-sw" style="background:#059669;border-radius:3px;"></span>#059669</td><td>Confirmação, serviço concluído, saldo positivo</td></tr>
+          <tr><td><code>--color-warning</code></td><td><span class="dot-sw" style="background:#D97706;border-radius:3px;"></span>#D97706</td><td>Alertas, pagamento pendente, aviso</td></tr>
+          <tr><td><code>--color-error</code></td><td><span class="dot-sw" style="background:#DC2626;border-radius:3px;"></span>#DC2626</td><td>Erros, cancelamento, ação destrutiva</td></tr>
+          <tr><td><code>--color-text</code></td><td><span class="dot-sw" style="background:#0F172A;border-radius:3px;"></span>#0F172A</td><td>Texto principal</td></tr>
+          <tr><td><code>--color-text-muted</code></td><td><span class="dot-sw" style="background:#64748B;border-radius:3px;"></span>#64748B</td><td>Texto secundário, datas, metadados</td></tr>
+          <tr><td><code>--color-surface</code></td><td><span class="dot-sw" style="background:#FFFFFF;border:1px solid #e2e8f0;border-radius:3px;"></span>#FFFFFF</td><td>Fundo de cards e modais</td></tr>
+          <tr><td><code>--color-bg</code></td><td><span class="dot-sw" style="background:#F8FAFC;border:1px solid #e2e8f0;border-radius:3px;"></span>#F8FAFC</td><td>Fundo de página</td></tr>
+          <tr><td><code>--color-border</code></td><td><span class="dot-sw" style="background:#E2E8F0;border-radius:3px;"></span>#E2E8F0</td><td>Bordas de cards e inputs</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TIPOGRAFIA ══════════════════════════════════════ -->
+<section class="sec" id="tipografia">
+  <div class="sec-head">
+    <div class="sec-eyebrow">03 — Fundação</div>
+    <h1 class="sec-title">Tipografia</h1>
+    <p class="sec-sub">Duas famílias complementares: <strong>Plus Jakarta Sans</strong> para títulos e a marca — geométrica, moderna e com personalidade; <strong>DM Sans</strong> para corpo e UI — neutra, altamente legível.</p>
+  </div>
+
+  <div class="g2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="font-family-card">
+        <div class="ff-name">Plus Jakarta Sans — Display</div>
+        <div class="ff-weights">
+          <span class="ff-chip">400 Regular</span><span class="ff-chip">500 Medium</span>
+          <span class="ff-chip">600 SemiBold</span><span class="ff-chip">700 Bold</span><span class="ff-chip">800 ExtraBold</span>
+        </div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;">
+          <div style="font-size:36px;font-weight:800;color:var(--n900);line-height:1.1;margin-bottom:8px;">Missão Cumprida</div>
+          <div style="font-size:20px;font-weight:600;color:var(--n700);margin-bottom:6px;">Profissionais verificados</div>
+          <div style="font-size:14px;font-weight:400;color:var(--n500);">ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>abcdefghijklmnopqrstuvwxyz 0123456789</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="font-family-card">
+        <div class="ff-name">DM Sans — Body / UI</div>
+        <div class="ff-weights">
+          <span class="ff-chip">300 Light</span><span class="ff-chip">400 Regular</span>
+          <span class="ff-chip">500 Medium</span><span class="ff-chip">600 SemiBold</span>
+        </div>
+        <div style="font-family:'DM Sans',sans-serif;">
+          <div style="font-size:20px;font-weight:600;color:var(--n900);margin-bottom:8px;">Conectamos você ao profissional certo</div>
+          <div style="font-size:15px;font-weight:400;color:var(--n600);line-height:1.6;margin-bottom:6px;">Descreva o serviço que precisa e receba propostas de prestadores verificados na sua região, com pagamento seguro via PIX ou cartão.</div>
+          <div style="font-size:13px;font-weight:400;color:var(--n400);">ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Type scale -->
+  <div class="card">
+    <div class="card-p">
+      <div class="label">Escala Tipográfica</div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">Display</div><div class="type-spec">48px / 800</div></div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:48px;font-weight:800;color:var(--n900);line-height:1.0;">Missão Cumprida</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">H1</div><div class="type-spec">36px / 800</div></div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:36px;font-weight:800;color:var(--n900);line-height:1.1;">Encontre um profissional</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">H2</div><div class="type-spec">28px / 700</div></div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:28px;font-weight:700;color:var(--n900);">Categorias de Serviços</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">H3</div><div class="type-spec">22px / 600</div></div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:600;color:var(--n900);">Limpeza Residencial</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">Lead</div><div class="type-spec">17px / 400</div></div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:17px;font-weight:400;color:var(--n700);line-height:1.5;">Descreva o serviço e receba propostas em minutos.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">Body</div><div class="type-spec">15px / 400</div></div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:15px;font-weight:400;color:var(--n700);line-height:1.6;">O prestador irá até você no endereço informado. Taxa de plataforma: 12%.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">Small</div><div class="type-spec">13px / 400</div></div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:400;color:var(--n500);">Publicado em 3 de junho de 2026 · 2 propostas recebidas</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta"><div class="type-lbl">Caption</div><div class="type-spec">11px / 600</div></div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:var(--n400);letter-spacing:.06em;text-transform:uppercase;">Status do pedido · Agendado</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ BOTÕES ══════════════════════════════════════ -->
+<section class="sec" id="botoes">
+  <div class="sec-head">
+    <div class="sec-eyebrow">04 — Componentes</div>
+    <h1 class="sec-title">Botões</h1>
+    <p class="sec-sub">Seis variantes cobrindo toda a hierarquia de ação. O Primary é exclusivo para a ação mais importante da tela. Danger apenas para ações destrutivas confirmadas.</p>
+  </div>
+  <div class="card">
+    <div class="card-p">
+      <div class="label">Variantes — Tamanho Médio</div>
+      <div class="row" style="margin-bottom:24px;">
+        <button class="btn btn-md bp">Contratar Serviço</button>
+        <button class="btn btn-md bs">✓ Confirmar Conclusão</button>
+        <button class="btn btn-md bn">Cancelar</button>
+        <button class="btn btn-md bo">Ver propostas</button>
+        <button class="btn btn-md bg-ghost">Editar</button>
+        <button class="btn btn-md bd">Excluir pedido</button>
+      </div>
+      <hr class="div">
+      <div class="label">Tamanhos</div>
+      <div class="row" style="margin-bottom:24px;align-items:center;">
+        <button class="btn btn-sm bp">Pequeno</button>
+        <button class="btn btn-md bp">Médio</button>
+        <button class="btn btn-lg bp">Grande</button>
+      </div>
+      <hr class="div">
+      <div class="label">Estados</div>
+      <div class="row">
+        <button class="btn btn-md bp">Normal</button>
+        <button class="btn btn-md bp btn-dis">Desativado</button>
+        <button class="btn btn-md bp btn-load">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity=".3"/><path d="M12 2a10 10 0 0 1 10 10" style="animation:spin 1s linear infinite;transform-origin:center;"/></svg>
+          Enviando...
+        </button>
+        <button class="btn btn-md bp" style="width:100%;max-width:280px;">Largura completa</button>
+      </div>
+    </div>
+  </div>
+  <style>@keyframes spin{to{transform:rotate(360deg);}}</style>
+</section>
+
+<!-- ══ INPUTS ══════════════════════════════════════ -->
+<section class="sec" id="inputs">
+  <div class="sec-head">
+    <div class="sec-eyebrow">05 — Componentes</div>
+    <h1 class="sec-title">Inputs e Formulários</h1>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-p">
+        <div class="label">Estados</div>
+        <div class="col">
+          <div class="inp-wrap">
+            <label>Normal</label>
+            <input type="text" placeholder="Ex: Limpeza completa do apartamento">
+          </div>
+          <div class="inp-wrap inp-focused">
+            <label style="color:var(--p700);">Focado</label>
+            <input type="text" value="Instalação de ar condicionado">
+          </div>
+          <div class="inp-wrap inp-error">
+            <label style="color:var(--e600);">Erro</label>
+            <input type="text" value="abc" class="error">
+            <div class="inp-err-msg">Telefone inválido. Use o formato (XX) XXXXX-XXXX</div>
+          </div>
+          <div class="inp-wrap">
+            <label style="color:var(--n300);">Desabilitado</label>
+            <input type="text" value="Não editável" disabled style="background:var(--n50);color:var(--n400);">
+            <div class="inp-hint">Este campo não pode ser alterado agora.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-p">
+        <div class="label">Tipos de Campo</div>
+        <div class="col">
+          <div class="inp-wrap">
+            <label>Endereço</label>
+            <div style="position:relative;">
+              <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--n400);" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <input type="text" placeholder="Rua, número, bairro" style="padding-left:40px;">
+            </div>
+          </div>
+          <div class="inp-wrap">
+            <label>Select — Tipo de serviço</label>
+            <select>
+              <option>Limpeza Residencial</option>
+              <option>Instalação Elétrica</option>
+              <option>Pintura de Paredes</option>
+            </select>
+          </div>
+          <div class="inp-wrap">
+            <label>Área de texto</label>
+            <textarea style="padding:10px 14px;border:1.5px solid var(--n300);border-radius:10px;font-family:var(--fb);font-size:14px;color:var(--n900);resize:vertical;width:100%;min-height:80px;outline:none;" placeholder="Descreva detalhes adicionais do serviço…"></textarea>
+            <div class="inp-hint">Máximo 500 caracteres.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ BADGES ══════════════════════════════════════ -->
+<section class="sec" id="badges">
+  <div class="sec-head">
+    <div class="sec-eyebrow">06 — Componentes</div>
+    <h1 class="sec-title">Badges e Status</h1>
+    <p class="sec-sub">Cada status de pedido e agendamento tem uma cor semântica própria. O ponto antes do texto indica o estado de forma acessível.</p>
+  </div>
+  <div class="card">
+    <div class="card-p">
+      <div class="label">Status de Pedidos</div>
+      <div class="row" style="margin-bottom:20px;">
+        <span class="badge bn2">Aberto</span>
+        <span class="badge ba">Em propostas</span>
+        <span class="badge" style="background:#EDE9FE;color:#5B21B6;">Aceito</span>
+        <span class="badge bw">Agendado</span>
+        <span class="badge" style="background:#FDF4FF;color:#86198F;">Em andamento</span>
+        <span class="badge bg2">Concluído</span>
+        <span class="badge" style="background:#F0FDF4;color:#15803D;">Avaliado</span>
+        <span class="badge be">Cancelado</span>
+        <span class="badge" style="background:#FFF1F2;color:#BE123C;">Em disputa</span>
+      </div>
+      <hr class="div">
+      <div class="label">Tags de Categoria</div>
+      <div class="row">
+        <span style="display:inline-flex;align-items:center;gap:6px;background:var(--p50);color:var(--p700);padding:5px 12px;border-radius:100px;font-size:13px;font-weight:600;">🏠 Para sua Casa</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:var(--p50);color:var(--p700);padding:5px 12px;border-radius:100px;font-size:13px;font-weight:600;">🚗 Para seu Carro</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:var(--p50);color:var(--p700);padding:5px 12px;border-radius:100px;font-size:13px;font-weight:600;">💻 Tech e Digital</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:var(--p50);color:var(--p700);padding:5px 12px;border-radius:100px;font-size:13px;font-weight:600;">🐾 Para seu Pet</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CARDS ══════════════════════════════════════ -->
+<section class="sec" id="cards">
+  <div class="sec-head">
+    <div class="sec-eyebrow">07 — Componentes</div>
+    <h1 class="sec-title">Cards</h1>
+  </div>
+  <div class="g3">
+    <!-- Service category card -->
+    <div>
+      <div class="label" style="margin-bottom:8px;">Card de Categoria</div>
+      <div class="service-card">
+        <div style="font-size:36px;margin-bottom:12px;">🔧</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:700;color:var(--n900);margin-bottom:4px;">Instalação Elétrica</div>
+        <div style="font-size:12px;color:var(--n500);margin-bottom:10px;">A partir de R$ 120</div>
+        <div style="font-size:12px;color:var(--n400);">~2h estimadas</div>
+      </div>
+    </div>
+    <!-- Order card -->
+    <div>
+      <div class="label" style="margin-bottom:8px;">Card de Pedido</div>
+      <div class="order-card">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+          <span style="font-size:16px;">🧹</span>
+          <span class="badge ba" style="font-size:11px;">Em propostas</span>
+        </div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:700;color:var(--n900);margin-bottom:4px;">Limpeza completa de apartamento 2 quartos</div>
+        <div style="font-size:12px;color:var(--n500);margin-bottom:12px;display:flex;gap:8px;">
+          <span>📍 Moema, SP</span>
+          <span>📅 10 jun 14h</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:10px;color:var(--n400);font-family:'DM Sans';font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Estimativa</div>
+            <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--p700);">R$ 180–260</div>
+          </div>
+          <button class="btn btn-sm bp">Ver propostas</button>
+        </div>
+      </div>
+    </div>
+    <!-- Provider card -->
+    <div>
+      <div class="label" style="margin-bottom:8px;">Card de Prestador</div>
+      <div class="order-card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <div class="avatar" style="width:48px;height:48px;font-size:18px;background:linear-gradient(135deg,var(--p600),var(--s600));">MF</div>
+          <div>
+            <div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:15px;color:var(--n900);">Marcos Ferreira</div>
+            <div style="font-size:12px;color:var(--n500);">4 anos de experiência</div>
+            <div style="display:flex;gap:2px;margin-top:2px;">
+              <span style="color:#F59E0B;font-size:13px;">★★★★★</span>
+              <span style="font-size:12px;color:var(--n500);margin-left:4px;">4.9 (87 avaliações)</span>
+            </div>
+          </div>
+        </div>
+        <div style="background:var(--n50);border-radius:10px;padding:12px;font-size:13px;color:var(--n700);font-style:italic;line-height:1.5;margin-bottom:12px;">"Profissional pontual e cuidadoso. Podemos começar na data que preferir."</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm bp" style="flex:1;">✓ Aceitar — R$ 220</button>
+          <button class="btn btn-sm bn">Rejeitar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ESPAÇAMENTO E ELEVAÇÃO ══════════════════════════════════════ -->
+<section class="sec" id="espacamento">
+  <div class="sec-head">
+    <div class="sec-eyebrow">08 — Tokens</div>
+    <h1 class="sec-title">Espaçamento, Raios e Elevação</h1>
+  </div>
+  <div class="g3">
+    <!-- Spacing -->
+    <div class="card">
+      <div class="card-p">
+        <div class="label">Espaçamento (base 4px)</div>
+        <div class="col" style="gap:8px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:4px;height:20px;background:var(--p400);border-radius:2px;"></div>
+            <code style="font-size:12px;color:var(--n500);">4px</code><span style="font-size:12px;color:var(--n600);">gap-1 — separadores internos</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:8px;height:20px;background:var(--p400);border-radius:2px;"></div>
+            <code style="font-size:12px;color:var(--n500);">8px</code><span style="font-size:12px;color:var(--n600);">gap-2 — ícones e labels</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:12px;height:20px;background:var(--p400);border-radius:2px;"></div>
+            <code style="font-size:12px;color:var(--n500);">12px</code><span style="font-size:12px;color:var(--n600);">gap-3 — chips, badges</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:16px;height:20px;background:var(--p400);border-radius:2px;"></div>
+            <code style="font-size:12px;color:var(--n500);">16px</code><span style="font-size:12px;color:var(--n600);">gap-4 — padding interno card</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:24px;height:20px;background:var(--p500);border-radius:2px;"></div>
+            <code style="font-size:12px;color:var(--n500);">24px</code><span style="font-size:12px;color:var(--n600);">gap-6 — padding card lg</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:32px;height:20px;background:var(--p600);border-radius:2px;"></div>
+            <code style="font-size:12px;color:var(--n500);">32px</code><span style="font-size:12px;color:var(--n600);">gap-8 — seções</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:48px;height:20px;background:var(--p700);border-radius:2px;"></div>
+            <code style="font-size:12px;color:var(--n500);">48px</code><span style="font-size:12px;color:var(--n600);">gap-12 — seções maiores</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Border radius -->
+    <div class="card">
+      <div class="card-p">
+        <div class="label">Raios de Borda</div>
+        <div class="col" style="gap:10px;">
+          <div>
+            <div class="r-demo" style="border-radius:4px;width:80px;font-size:11px;">4px</div>
+            <div style="font-size:11px;color:var(--n500);margin-top:4px;">Chips, badges, tags</div>
+          </div>
+          <div>
+            <div class="r-demo" style="border-radius:8px;width:100px;">8px</div>
+            <div style="font-size:11px;color:var(--n500);margin-top:4px;">Botões SM, menus dropdown</div>
+          </div>
+          <div>
+            <div class="r-demo" style="border-radius:10px;width:120px;">10px</div>
+            <div style="font-size:11px;color:var(--n500);margin-top:4px;">Inputs, botões MD</div>
+          </div>
+          <div>
+            <div class="r-demo" style="border-radius:14px;width:140px;">14px</div>
+            <div style="font-size:11px;color:var(--n500);margin-top:4px;">Cards</div>
+          </div>
+          <div>
+            <div class="r-demo" style="border-radius:20px;width:160px;">20px</div>
+            <div style="font-size:11px;color:var(--n500);margin-top:4px;">Cards hero, modais</div>
+          </div>
+          <div>
+            <div class="r-demo" style="border-radius:9999px;width:100px;font-size:11px;">∞ Pill</div>
+            <div style="font-size:11px;color:var(--n500);margin-top:4px;">Badges de status</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Elevation -->
+    <div class="card">
+      <div class="card-p">
+        <div class="label">Elevação (Sombras)</div>
+        <div class="col" style="gap:16px;">
+          <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:none;border:1px solid var(--n200);">
+            <div style="font-size:12px;font-weight:700;color:var(--n700);margin-bottom:2px;">Elevation 0</div>
+            <div style="font-size:11px;color:var(--n400);">Apenas borda — elementos planos</div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+            <div style="font-size:12px;font-weight:700;color:var(--n700);margin-bottom:2px;">Elevation 1</div>
+            <div style="font-size:11px;color:var(--n400);">Cards no feed, itens de lista</div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 4px 16px rgba(0,0,0,.08);">
+            <div style="font-size:12px;font-weight:700;color:var(--n700);margin-bottom:2px;">Elevation 2</div>
+            <div style="font-size:11px;color:var(--n400);">Cards hover, dropdowns</div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.12);">
+            <div style="font-size:12px;font-weight:700;color:var(--n700);margin-bottom:2px;">Elevation 3</div>
+            <div style="font-size:11px;color:var(--n400);">Modais, notificações</div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 16px 48px rgba(0,0,0,.16);">
+            <div style="font-size:12px;font-weight:700;color:var(--n700);margin-bottom:2px;">Elevation 4</div>
+            <div style="font-size:11px;color:var(--n400);">Drawers, overlays de foco</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+</body>
+</html>

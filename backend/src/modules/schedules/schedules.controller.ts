@@ -3,6 +3,7 @@ import path from 'path'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
+import { sendToUser, PushChannel } from '../push/push.service'
 
 const scheduleInclude = {
   order: {
@@ -15,11 +16,23 @@ const scheduleInclude = {
   ratings: { select: { id: true, score: true, reviewer_role: true, reviewer_id: true } },
 }
 
-// Helper: create in-app notification
-async function notify(userId: string, type: string, title: string, body: string, data?: object) {
-  await prisma.notification.create({
-    data: { user_id: userId, type: type as never, title, body, data: data ?? undefined },
-  })
+// Helper: create in-app notification + send push
+async function notify(
+  userId: string,
+  type: string,
+  title: string,
+  body: string,
+  data?: object,
+  channel: PushChannel = 'schedule_update'
+) {
+  try {
+    await prisma.notification.create({
+      data: { user_id: userId, type: type as never, title, body, data: data ?? undefined },
+    })
+  } catch (err) {
+    console.error('[notify] db error:', err)
+  }
+  await sendToUser(userId, { title, body, data: data as any, channel })
 }
 
 // Helper: build public URL for an uploaded file
@@ -185,14 +198,16 @@ export async function confirmByClient(req: Request, res: Response) {
   await prisma.$transaction(ops)
 
   // Notify provider
+  const paymentReleased = payment?.status === 'PAID'
   await notify(
     schedule.provider_id,
-    'SERVICE_CONFIRMED',
-    'Serviço confirmado pelo cliente',
-    payment?.status === 'PAID'
-      ? 'O cliente confirmou o serviço. O pagamento foi liberado para sua carteira.'
+    paymentReleased ? 'PAYMENT_RECEIVED' : 'SERVICE_CONFIRMED',
+    paymentReleased ? 'Pagamento liberado 💰' : 'Serviço confirmado pelo cliente',
+    paymentReleased
+      ? `R$ ${(payment?.provider_amount ?? 0).toFixed(2)} caíram no seu saldo. O cliente confirmou o serviço.`
       : 'O cliente confirmou a conclusão do serviço.',
-    { schedule_id: schedule.id },
+    { schedule_id: schedule.id, payment_id: payment?.id },
+    paymentReleased ? 'payment' : 'schedule_update',
   )
 
   return R.ok(res, null, 'Serviço confirmado! O pagamento foi liberado ao prestador. Agora avalie o serviço.')

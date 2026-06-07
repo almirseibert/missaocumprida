@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Missão Cumprida — Nova Identidade Visual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{min-height:100vh;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;background:#0F172A;color:#F8FAFC;}
+
+  .hero{
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:60px 32px;
+    background:radial-gradient(ellipse 80% 60% at 50% 0%,#1D4ED822 0%,transparent 70%),
+               radial-gradient(ellipse 60% 40% at 80% 100%,#05966920 0%,transparent 60%),
+               #0F172A;
+    text-align:center;
+    position:relative;
+    overflow:hidden;
+  }
+
+  /* Grid de fundo */
+  .hero::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+    background-size:60px 60px;
+    pointer-events:none;
+  }
+
+  .hero-content{position:relative;z-index:1;max-width:700px;}
+
+  .logo-lockup{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:40px;}
+  .brand-name{text-align:left;}
+  .brand-name .line1{font-family:'Plus Jakarta Sans',sans-serif;font-size:28px;font-weight:800;color:#F8FAFC;line-height:1.0;}
+  .brand-name .line2{font-size:12px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:#64748B;margin-top:2px;}
+
+  .tagline{
+    font-family:'Plus Jakarta Sans',sans-serif;
+    font-size:clamp(36px,5vw,56px);
+    font-weight:800;
+    line-height:1.08;
+    letter-spacing:-.025em;
+    color:#F8FAFC;
+    margin-bottom:16px;
+  }
+  .tagline em{
+    font-style:normal;
+    background:linear-gradient(90deg,#60A5FA,#34D399);
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+
+  .subtitle{font-size:17px;color:#94A3B8;line-height:1.6;margin-bottom:52px;max-width:500px;margin-left:auto;margin-right:auto;}
+
+  /* Deliverable cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%;max-width:860px;margin:0 auto 60px;}
+
+  .card{
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;
+    padding:28px 24px;
+    text-decoration:none;
+    color:inherit;
+    transition:all .2s;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    text-align:left;
+  }
+  .card:hover{
+    background:rgba(255,255,255,.07);
+    border-color:rgba(255,255,255,.15);
+    transform:translateY(-3px);
+    box-shadow:0 20px 40px rgba(0,0,0,.4);
+  }
+
+  .card-icon{
+    width:52px;height:52px;border-radius:14px;
+    display:flex;align-items:center;justify-content:center;
+    margin-bottom:4px;
+  }
+  .card-num{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#475569;margin-bottom:2px;font-family:'DM Sans',sans-serif;}
+  .card-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:#F1F5F9;}
+  .card-desc{font-size:13px;color:#64748B;line-height:1.55;font-family:'DM Sans',sans-serif;}
+  .card-arrow{margin-top:auto;font-size:13px;font-weight:600;color:#3B82F6;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:5px;}
+
+  /* Token pills */
+  .tokens{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:48px;}
+  .token{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);border-radius:100px;padding:6px 14px 6px 10px;font-size:12px;color:#94A3B8;font-family:'DM Sans',sans-serif;}
+  .token-dot{width:10px;height:10px;border-radius:50%;}
+
+  /* Color preview strip */
+  .color-strip{display:flex;border-radius:12px;overflow:hidden;width:100%;max-width:500px;height:8px;margin:0 auto 40px;}
+  .cs{flex:1;}
+
+  .footer-note{font-size:12px;color:#334155;font-family:'DM Sans',sans-serif;line-height:1.6;}
+
+  @media(max-width:640px){
+    .cards{grid-template-columns:1fr;}
+    .logo-lockup{gap:12px;}
+    .brand-name .line1{font-size:22px;}
+  }
+</style>
+</head>
+<body>
+<section class="hero">
+  <div class="hero-content">
+
+    <!-- Logo lockup -->
+    <div class="logo-lockup">
+      <svg width="56" height="56" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gIdx" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#1D4ED8"/>
+            <stop offset="100%" stop-color="#059669"/>
+          </linearGradient>
+        </defs>
+        <rect width="48" height="48" rx="13" fill="url(#gIdx)"/>
+        <path d="M11 25L19 33L37 15" stroke="white" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="brand-name">
+        <div class="line1">Missão Cumprida</div>
+        <div class="line2">Nova Identidade Visual · 2026</div>
+      </div>
+    </div>
+
+    <!-- Tagline -->
+    <h1 class="tagline">Um sistema <em>mais confiante,</em> mais moderno.</h1>
+    <p class="subtitle">Nova marca, paleta de cores, tipografia, componentes UI e telas redesenhadas — web e mobile — para o marketplace de serviços locais.</p>
+
+    <!-- Color preview -->
+    <div class="color-strip" style="margin-bottom:32px;">
+      <div class="cs" style="background:#EFF6FF;"></div>
+      <div class="cs" style="background:#BFDBFE;"></div>
+      <div class="cs" style="background:#60A5FA;"></div>
+      <div class="cs" style="background:#2563EB;"></div>
+      <div class="cs" style="background:#1D4ED8;"></div>
+      <div class="cs" style="background:#1E3A8A;"></div>
+      <div class="cs" style="background:#064E3B;"></div>
+      <div class="cs" style="background:#047857;"></div>
+      <div class="cs" style="background:#059669;"></div>
+      <div class="cs" style="background:#10B981;"></div>
+    </div>
+
+    <!-- Token pills -->
+    <div class="tokens">
+      <div class="token"><div class="token-dot" style="background:#1D4ED8;"></div>Azul Confiança</div>
+      <div class="token"><div class="token-dot" style="background:#059669;"></div>Verde Missão</div>
+      <div class="token"><div class="token-dot" style="background:#D97706;"></div>Âmbar Atenção</div>
+      <div class="token"><div class="token-dot" style="background:#DC2626;"></div>Vermelho Erro</div>
+      <div class="token"><div class="token-dot" style="background:#64748B;"></div>Ardósia Neutro</div>
+      <div class="token" style="border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.06);">Plus Jakarta Sans + DM Sans</div>
+    </div>
+
+    <!-- Cards -->
+    <div class="cards">
+      <a class="card" href="Identidade Visual.html">
+        <div class="card-icon" style="background:linear-gradient(135deg,#1D4ED820,#05966920);border:1px solid rgba(29,78,216,.2);">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="url(#gCard1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <defs><linearGradient id="gCard1" x1="0" y1="0" x2="24" y2="24"><stop stop-color="#3B82F6"/><stop offset="1" stop-color="#10B981"/></linearGradient></defs>
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+            <line x1="9" y1="9" x2="9.01" y2="9"/>
+            <line x1="15" y1="9" x2="15.01" y2="9"/>
+          </svg>
+        </div>
+        <div class="card-num">01 — Fundação</div>
+        <div class="card-title">Identidade Visual</div>
+        <div class="card-desc">Logo em todas as variações, paleta de cores com tokens semânticos, escala tipográfica, componentes UI — botões, inputs, badges, cards e elevação.</div>
+        <div class="card-arrow">Ver guia <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </a>
+
+      <a class="card" href="Telas Web.html">
+        <div class="card-icon" style="background:linear-gradient(135deg,#1D4ED820,#1D4ED808);border:1px solid rgba(29,78,216,.2);">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div class="card-num">02 — Web</div>
+        <div class="card-title">Telas Web</div>
+        <div class="card-desc">5 telas redesenhadas: Landing Page, Home do Cliente, Feed do Prestador, Detalhe do Pedido e Agendamento com Chat.</div>
+        <div class="card-arrow">Ver mockups <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </a>
+
+      <a class="card" href="Telas Mobile.html">
+        <div class="card-icon" style="background:linear-gradient(135deg,#05966920,#05966808);border:1px solid rgba(5,150,105,.2);">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+            <line x1="12" y1="18" x2="12.01" y2="18"/>
+          </svg>
+        </div>
+        <div class="card-num">03 — Mobile</div>
+        <div class="card-title">Telas Mobile</div>
+        <div class="card-desc">6 telas em frames iOS: Home, Questionário de Pedido, Feed do Prestador, Chat, Perfil Profissional e Pagamento PIX.</div>
+        <div class="card-arrow">Ver mockups <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </a>
+    </div>
+
+    <p class="footer-note">
+      Identidade projetada para o mercado brasileiro · Azul para confiança · Verde para conclusão bem-sucedida<br>
+      Plus Jakarta Sans (display) + DM Sans (body) · Componentes compatíveis com TailwindCSS e React Native
+    </p>
+
+  </div>
+</section>
+</body>
+</html>

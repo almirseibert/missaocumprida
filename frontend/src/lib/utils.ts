@@ -51,16 +51,18 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   DISPUTED: 'Em disputa',
 }
 
+// Cores semânticas alinhadas ao guia (seção 06 — Badges e Status).
+// Para um componente <Badge>, prefira `ORDER_STATUS_BADGE` em ui/Badge.tsx.
 export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
-  OPEN: 'bg-blue-100 text-blue-700',
-  IN_PROPOSAL: 'bg-yellow-100 text-yellow-700',
-  ACCEPTED: 'bg-purple-100 text-purple-700',
-  SCHEDULED: 'bg-indigo-100 text-indigo-700',
-  IN_PROGRESS: 'bg-orange-100 text-orange-700',
-  DONE: 'bg-green-100 text-green-700',
-  RATED: 'bg-green-200 text-green-800',
-  CANCELLED: 'bg-red-100 text-red-700',
-  DISPUTED: 'bg-red-200 text-red-800',
+  OPEN:        'bg-slate2-100 text-slate2-600',
+  IN_PROPOSAL: 'bg-brand-100 text-brand-700',
+  ACCEPTED:    'bg-violet-100 text-violet-700',
+  SCHEDULED:   'bg-amber-100 text-amber-800',
+  IN_PROGRESS: 'bg-fuchsia-50 text-fuchsia-700',
+  DONE:        'bg-accent-100 text-accent-700',
+  RATED:       'bg-accent-100 text-accent-700',
+  CANCELLED:   'bg-red-50 text-red-600',
+  DISPUTED:    'bg-red-50 text-red-600',
 }
 
 export const PROPOSAL_STATUS_LABEL: Record<ProposalStatus, string> = {
@@ -78,8 +80,8 @@ export const SCHEDULE_STATUS_LABEL: Record<ScheduleStatus, string> = {
 }
 
 export const SCHEDULE_STATUS_COLOR: Record<ScheduleStatus, string> = {
-  CONFIRMED: 'bg-indigo-100 text-indigo-700',
-  IN_PROGRESS: 'bg-orange-100 text-orange-700',
-  DONE: 'bg-green-100 text-green-700',
-  CANCELLED: 'bg-red-100 text-red-700',
+  CONFIRMED:   'bg-violet-100 text-violet-700',
+  IN_PROGRESS: 'bg-fuchsia-50 text-fuchsia-700',
+  DONE:        'bg-accent-100 text-accent-700',
+  CANCELLED:   'bg-red-50 text-red-600',
 }

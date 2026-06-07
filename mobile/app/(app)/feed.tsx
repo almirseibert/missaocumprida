@@ -1,13 +1,14 @@
 import { useCallback, useState } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity, Modal,
-  ActivityIndicator, RefreshControl, Alert, TextInput,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { api, getApiError } from '../../src/lib/api'
 import { Order } from '../../src/types'
 import { formatCurrency, formatDateShort } from '../../src/lib/utils'
+import { Button, Input } from '../../src/components/ui'
 
 export default function FeedScreen() {
   const [orders, setOrders] = useState<Order[]>([])
@@ -22,7 +23,6 @@ export default function FeedScreen() {
   async function load() {
     try {
       const r = await api.get('/orders/feed')
-      // O backend retorna { orders, total, ... } — aceita também array direto
       const d = r.data.data
       setOrders(Array.isArray(d) ? d : (d?.orders ?? []))
     } finally {
@@ -59,57 +59,65 @@ export default function FeedScreen() {
     setPropostaVisible(true)
   }
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#2563eb" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-slate2-50">
       <Modal visible={propostaVisible} transparent animationType="slide">
         <View className="flex-1 justify-end bg-black/40">
           <View className="bg-white rounded-t-2xl p-6 gap-4">
-            <Text className="text-lg font-bold text-gray-800">Enviar Proposta</Text>
-            <View>
-              <Text className="text-sm text-gray-500 mb-1">Valor (R$)</Text>
-              <TextInput
-                className="border border-gray-200 rounded-xl px-3 py-2.5 text-gray-800"
-                placeholder="Ex: 150,00"
-                keyboardType="decimal-pad"
-                value={propostaValor}
-                onChangeText={setPropostaValor}
-              />
-            </View>
-            <View>
-              <Text className="text-sm text-gray-500 mb-1">Mensagem (opcional)</Text>
-              <TextInput
-                className="border border-gray-200 rounded-xl px-3 py-2.5 text-gray-800"
-                placeholder="Descreva sua proposta…"
-                multiline
-                numberOfLines={3}
-                value={propostaMensagem}
-                onChangeText={setPropostaMensagem}
-              />
-            </View>
+            <Text className="font-display-bold text-lg text-slate2-900">
+              Enviar Proposta
+            </Text>
+            <Input
+              label="Valor (R$)"
+              placeholder="Ex: 150,00"
+              keyboardType="decimal-pad"
+              value={propostaValor}
+              onChangeText={setPropostaValor}
+            />
+            <Input
+              label="Mensagem (opcional)"
+              placeholder="Descreva sua proposta…"
+              multiline
+              numberOfLines={3}
+              value={propostaMensagem}
+              onChangeText={setPropostaMensagem}
+            />
             <View className="flex-row gap-3">
-              <TouchableOpacity
-                onPress={() => { setPropostaVisible(false); setPropostaValor(''); setPropostaMensagem('') }}
-                className="flex-1 border border-gray-300 rounded-xl py-3 items-center"
-              >
-                <Text className="text-gray-600">Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={confirmarProposta}
-                disabled={enviando}
-                className={`flex-1 rounded-xl py-3 items-center ${enviando ? 'bg-green-400' : 'bg-green-600'}`}
-              >
-                <Text className="text-white font-semibold">{enviando ? 'Enviando…' : 'Enviar'}</Text>
-              </TouchableOpacity>
+              <View className="flex-1">
+                <Button
+                  variant="secondary"
+                  size="md"
+                  fullWidth
+                  onPress={() => { setPropostaVisible(false); setPropostaValor(''); setPropostaMensagem('') }}
+                >
+                  Cancelar
+                </Button>
+              </View>
+              <View className="flex-1">
+                <Button
+                  variant="success"
+                  size="md"
+                  fullWidth
+                  loading={enviando}
+                  onPress={confirmarProposta}
+                >
+                  {enviando ? 'Enviando…' : '✓ Enviar'}
+                </Button>
+              </View>
             </View>
           </View>
         </View>
       </Modal>
 
       <View className="px-5 pt-6 pb-4">
-        <Text className="text-2xl font-bold text-gray-800">Feed de Pedidos</Text>
-        <Text className="text-gray-500 text-sm mt-1">Pedidos próximos às suas habilidades</Text>
+        <Text className="font-display-extrabold text-2xl text-slate2-900">
+          Feed de Pedidos
+        </Text>
+        <Text className="font-sans text-slate2-500 text-sm mt-1">
+          Pedidos próximos às suas habilidades
+        </Text>
       </View>
       <FlatList
         data={orders}
@@ -119,30 +127,41 @@ export default function FeedScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => router.push(`/(app)/pedido/${item.id}`)}
-            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100"
+            activeOpacity={0.85}
+            className={`rounded-2xl p-4 border-2 ${(item as any).is_urgent ? 'bg-rose-50 border-rose-500' : 'bg-white border-slate2-200'}`}
           >
+            {(item as any).is_urgent && (
+              <View className="flex-row items-center mb-2">
+                <Text className="text-[10px] font-bold bg-rose-600 text-white px-2 py-1 rounded-full">
+                  🚨 URGENTE
+                </Text>
+              </View>
+            )}
             <View className="flex-row justify-between items-start">
-              <Text className="font-semibold text-gray-800 flex-1 mr-2" numberOfLines={2}>
+              <Text
+                className="font-display-bold text-slate2-900 flex-1 mr-2"
+                numberOfLines={2}
+              >
                 {item.title}
               </Text>
               {item.distance_km != null && (
-                <Text className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded-full">
+                <Text className="font-sans-semibold text-xs text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full">
                   {item.distance_km.toFixed(1)} km
                 </Text>
               )}
             </View>
 
             {item.category && (
-              <Text className="text-xs text-gray-400 mt-1">
+              <Text className="font-sans text-xs text-slate2-400 mt-1">
                 {item.category.icon} {item.category.name}
               </Text>
             )}
 
             <View className="flex-row justify-between items-center mt-3">
-              <Text className="text-sm text-gray-500">
+              <Text className="font-sans text-sm text-slate2-500">
                 {item.desired_date ? '📅 ' + formatDateShort(item.desired_date) : '📅 A combinar'}
               </Text>
-              <Text className="text-sm font-bold text-green-600">
+              <Text className="font-display-extrabold text-sm text-accent-600">
                 {item.estimated_price_min
                   ? formatCurrency(item.estimated_price_min) + '+'
                   : 'Ver proposta'}
@@ -150,23 +169,25 @@ export default function FeedScreen() {
             </View>
 
             {item.address && (
-              <Text className="text-xs text-gray-400 mt-1.5" numberOfLines={1}>
+              <Text
+                className="font-sans text-xs text-slate2-400 mt-1.5"
+                numberOfLines={1}
+              >
                 📍 {item.address}{item.city ? `, ${item.city}` : ''}
               </Text>
             )}
 
-            <TouchableOpacity
-              onPress={() => enviarProposta(item.id)}
-              className="mt-3 bg-green-600 rounded-xl py-2.5 items-center"
-            >
-              <Text className="text-white font-semibold text-sm">Enviar Proposta</Text>
-            </TouchableOpacity>
+            <View className="mt-3">
+              <Button variant="primary" size="sm" fullWidth onPress={() => enviarProposta(item.id)}>
+                Enviar Proposta
+              </Button>
+            </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View className="items-center mt-20">
             <Text className="text-5xl mb-4">🔍</Text>
-            <Text className="text-gray-500 text-base text-center">
+            <Text className="font-sans text-slate2-500 text-base text-center">
               Nenhum pedido disponível{'\n'}nas suas categorias de atendimento
             </Text>
           </View>
@@ -174,5 +195,4 @@ export default function FeedScreen() {
       />
     </SafeAreaView>
   )
-
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../lib/api'
+import { resetNotificationCache, unregisterPushToken } from '../lib/notifications'
 import { User } from '../types'
 
 interface AuthState {
@@ -34,7 +35,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const refreshToken = await AsyncStorage.getItem('refreshToken')
       if (refreshToken) await api.post('/auth/logout', { refreshToken }).catch(() => {})
     } catch {}
+    await unregisterPushToken()
     await AsyncStorage.multiRemove(['accessToken', 'refreshToken'])
+    await resetNotificationCache()
     set({ user: null, accessToken: null })
   },
 

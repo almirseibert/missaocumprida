@@ -64,7 +64,7 @@ export default function MeusPedidosPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Meus Pedidos</h1>
+        <h1 className="text-2xl font-bold text-slate2-900">Meus Pedidos</h1>
         <Link href="/home">
           <Button size="sm">
             <Plus className="w-4 h-4" /> Novo pedido
@@ -81,7 +81,7 @@ export default function MeusPedidosPage() {
             className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
               statusFilter === f.value
                 ? 'bg-brand-500 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:border-gray-400'
+                : 'bg-white border border-slate2-300 text-slate2-600 hover:border-slate2-400'
             }`}
           >
             {f.label}
@@ -95,8 +95,8 @@ export default function MeusPedidosPage() {
       ) : orders.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-4xl mb-3">📋</p>
-          <p className="text-lg font-medium text-gray-700">Nenhum pedido encontrado</p>
-          <p className="text-sm text-gray-500 mt-1 mb-6">Solicite um serviço e ele aparecerá aqui</p>
+          <p className="text-lg font-medium text-slate2-700">Nenhum pedido encontrado</p>
+          <p className="text-sm text-slate2-500 mt-1 mb-6">Solicite um serviço e ele aparecerá aqui</p>
           <Link href="/home">
             <Button>Solicitar serviço</Button>
           </Link>
@@ -107,7 +107,7 @@ export default function MeusPedidosPage() {
             <Link
               key={order.id}
               href={`/pedido/${order.id}`}
-              className="block bg-white rounded-2xl border border-gray-200 p-5 hover:border-brand-300 hover:shadow-sm transition-all"
+              className="block bg-white rounded-2xl border border-slate2-200 p-5 hover:border-brand-300 hover:shadow-sm transition-all"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -116,17 +116,17 @@ export default function MeusPedidosPage() {
                       {ORDER_STATUS_LABEL[order.status]}
                     </span>
                     {order.category && (
-                      <span className="text-xs text-gray-500">{order.category.name}</span>
+                      <span className="text-xs text-slate2-500">{order.category.name}</span>
                     )}
                   </div>
-                  <h3 className="font-semibold text-gray-900 truncate">{order.title}</h3>
-                  <p className="text-sm text-gray-500 mt-0.5">{formatDate(order.created_at)}</p>
+                  <h3 className="font-semibold text-slate2-900 truncate">{order.title}</h3>
+                  <p className="text-sm text-slate2-500 mt-0.5">{formatDate(order.created_at)}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
                   {order.final_price ? (
                     <p className="font-bold text-green-600">{formatCurrency(order.final_price)}</p>
                   ) : order.estimated_price_min ? (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-slate2-500">
                       {formatCurrency(order.estimated_price_min)}–{formatCurrency(order.estimated_price_max!)}
                     </p>
                   ) : null}
@@ -148,7 +148,7 @@ export default function MeusPedidosPage() {
           <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
             Anterior
           </Button>
-          <span className="px-4 py-2 text-sm text-gray-600">
+          <span className="px-4 py-2 text-sm text-slate2-600">
             {page} / {totalPages}
           </span>
           <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>

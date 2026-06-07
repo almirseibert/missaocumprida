@@ -16,6 +16,9 @@ export interface User {
   avatar?: string
   bio?: string
   document_verified: boolean
+  is_verified_pro?: boolean
+  verified_pro_since?: string | null
+  verified_pro_expires?: string | null
   rating_avg: number
   rating_count: number
   latitude?: number | null
@@ -25,6 +28,66 @@ export interface User {
   pix_key?: string
   pix_key_type?: string
   provider_balance?: number
+  rg?: string | null
+  birth_date?: string | null
+  mother_name?: string | null
+  address_zip?: string | null
+  address_street?: string | null
+  address_number?: string | null
+  address_complement?: string | null
+  address_neighborhood?: string | null
+  address_city?: string | null
+  address_state?: string | null
+  emergency_contact_name?: string | null
+  emergency_contact_phone?: string | null
+  no_show_count?: number
+  suspended_until?: string | null
+  terms_accepted_at?: string | null
+  terms_version?: string | null
+  document_photo_url?: string | null
+  selfie_photo_url?: string | null
+  document_submitted_at?: string | null
+  document_verification_status?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  document_rejection_reason?: string | null
+  document_reviewed_at?: string | null
+  onboarding_state?: Record<string, OnboardingFlowState>
+  notification_preferences?: Record<string, boolean>
+  referral_code?: string | null
+  referred_by_id?: string | null
+  credit_balance?: number
+}
+
+export interface ServicePackage {
+  id: string
+  title: string
+  description: string
+  price: number
+  duration_min: number
+  includes: string[]
+  photos: string[]
+  is_active: boolean
+  purchases_count: number
+  rating_avg: number
+  created_at: string
+  category: { id: string; name: string; slug: string; icon: string }
+  provider: {
+    id: string
+    name: string
+    avatar: string | null
+    bio: string | null
+    rating_avg: number
+    rating_count: number
+    is_verified_pro?: boolean
+  }
+  distance_km?: number | null
+  is_pro_highlighted?: boolean
+}
+
+export interface OnboardingFlowState {
+  step?: number
+  completed?: boolean
+  completed_at?: string
+  data?: Record<string, any>
 }
 
 export interface Category {
@@ -71,6 +134,11 @@ export interface Order {
   category?: Category
   client?: User
   distance_km?: number
+  is_urgent?: boolean
+  urgency_fee_pct?: number | null
+  urgency_fee_value?: number | null
+  urgency_deadline?: string | null
+  urgency_radius_km?: number | null
 }
 
 export interface Proposal {
@@ -80,6 +148,9 @@ export interface Proposal {
   value: number
   message: string
   status: ProposalStatus
+  boost_level?: number
+  boost_paid_at?: string | null
+  boost_value?: number | null
   created_at: string
   provider?: User
 }

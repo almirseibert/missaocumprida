@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { PageSpinner } from '@/components/ui/Spinner'
 import { formatCurrency } from '@/lib/utils'
+import { PriceEstimator } from '@/components/PriceEstimator'
 
 interface CategoryWithQuestionnaire extends Category {
   questionnaire_fields: QuestionnaireField[]
@@ -35,6 +36,7 @@ export default function NovoOrderPage() {
   const [priceRange, setPriceRange] = useState<PriceRange | null>(null)
   const [gpsCoords, setGpsCoords] = useState<{ latitude: number; longitude: number } | null>(null)
   const [gettingGps, setGettingGps] = useState(false)
+  const [isUrgent, setIsUrgent] = useState(false)
 
   const { register, handleSubmit, formState: { errors }, watch } = useForm<{
     description: string
@@ -124,6 +126,7 @@ export default function NovoOrderPage() {
         neighborhood: formData.neighborhood,
         city: formData.city,
         state: formData.state,
+        is_urgent: isUrgent,
         ...(gpsCoords ?? {}),
       }
 
@@ -157,17 +160,17 @@ export default function NovoOrderPage() {
       case 'NUMBER':
         return (
           <div key={field.id} className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-slate2-700">
               {field.question}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            {field.help_text && <p className="text-xs text-gray-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-slate2-500">{field.help_text}</p>}
             <input
               type={field.field_type === 'NUMBER' ? 'number' : 'text'}
               placeholder={field.placeholder || ''}
               value={value}
               onChange={(e) => handleAnswerChange(field.id, e.target.value)}
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
         )
@@ -175,17 +178,17 @@ export default function NovoOrderPage() {
       case 'TEXTAREA':
         return (
           <div key={field.id} className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-slate2-700">
               {field.question}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            {field.help_text && <p className="text-xs text-gray-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-slate2-500">{field.help_text}</p>}
             <textarea
               placeholder={field.placeholder || ''}
               value={value}
               onChange={(e) => handleAnswerChange(field.id, e.target.value)}
               rows={3}
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
         )
@@ -193,15 +196,15 @@ export default function NovoOrderPage() {
       case 'SELECT':
         return (
           <div key={field.id} className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-slate2-700">
               {field.question}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            {field.help_text && <p className="text-xs text-gray-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-slate2-500">{field.help_text}</p>}
             <select
               value={value}
               onChange={(e) => handleAnswerChange(field.id, e.target.value)}
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             >
               <option value="">Selecione...</option>
               {(field.options || []).map((opt) => (
@@ -214,11 +217,11 @@ export default function NovoOrderPage() {
       case 'RADIO':
         return (
           <div key={field.id} className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-slate2-700">
               {field.question}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            {field.help_text && <p className="text-xs text-gray-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-slate2-500">{field.help_text}</p>}
             <div className="flex flex-wrap gap-2">
               {(field.options || []).map((opt) => (
                 <button
@@ -228,7 +231,7 @@ export default function NovoOrderPage() {
                   className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
                     value === opt
                       ? 'border-brand-500 bg-brand-50 text-brand-700'
-                      : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                      : 'border-slate2-300 text-slate2-700 hover:border-slate2-400'
                   }`}
                 >
                   {opt}
@@ -241,11 +244,11 @@ export default function NovoOrderPage() {
       case 'BOOLEAN':
         return (
           <div key={field.id} className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-slate2-700">
               {field.question}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            {field.help_text && <p className="text-xs text-gray-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-slate2-500">{field.help_text}</p>}
             <div className="flex gap-3">
               {['Sim', 'Não'].map((opt) => (
                 <button
@@ -255,7 +258,7 @@ export default function NovoOrderPage() {
                   className={`px-6 py-2 rounded-lg border text-sm font-medium transition-colors ${
                     value === opt
                       ? 'border-brand-500 bg-brand-50 text-brand-700'
-                      : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                      : 'border-slate2-300 text-slate2-700 hover:border-slate2-400'
                   }`}
                 >
                   {opt}
@@ -268,17 +271,17 @@ export default function NovoOrderPage() {
       case 'DATE':
         return (
           <div key={field.id} className="space-y-1">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-slate2-700">
               {field.question}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            {field.help_text && <p className="text-xs text-gray-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-slate2-500">{field.help_text}</p>}
             <input
               type="date"
               value={value}
               min={new Date().toISOString().split('T')[0]}
               onChange={(e) => handleAnswerChange(field.id, e.target.value)}
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
         )
@@ -302,38 +305,33 @@ export default function NovoOrderPage() {
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={() => router.back()}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="p-2 rounded-lg hover:bg-slate2-100 transition-colors"
         >
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
+          <ArrowLeft className="w-5 h-5 text-slate2-600" />
         </button>
         <div>
-          <h1 className="text-xl font-bold text-gray-900">{category.name}</h1>
-          <p className="text-sm text-gray-500">{category.description}</p>
+          <h1 className="text-xl font-bold text-slate2-900">{category.name}</h1>
+          <p className="text-sm text-slate2-500">{category.description}</p>
         </div>
       </div>
 
-      {/* Price estimate */}
-      <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-brand-600 font-medium uppercase tracking-wide">Estimativa de preço</p>
-          <p className="text-lg font-bold text-brand-700">
-            {formatCurrency(category.base_price_min)} – {formatCurrency(category.base_price_max)}
-          </p>
-          <p className="text-xs text-brand-500">O preço final será definido pelo prestador</p>
-        </div>
-        {category.estimated_hours && (
-          <div className="text-right">
-            <p className="text-xs text-brand-600">Duração estimada</p>
-            <p className="font-bold text-brand-700">{category.estimated_hours}h</p>
-          </div>
-        )}
+      {/* Estimativa dinâmica de preço */}
+      <div className="mb-6">
+        <PriceEstimator
+          categorySlug={category.slug}
+          answers={answers}
+          state={watch('state') || undefined}
+          fallbackMin={category.base_price_min}
+          fallbackMax={category.base_price_max}
+          onEstimate={(min, max) => setPriceRange({ min, max })}
+        />
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Questionnaire */}
         {(category.questionnaire_fields ?? []).filter((f) => f.field_type !== 'PHOTO').length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
-            <h2 className="font-semibold text-gray-900">Detalhes do Serviço</h2>
+          <div className="bg-white rounded-2xl border border-slate2-200 p-6 space-y-5">
+            <h2 className="font-semibold text-slate2-900">Detalhes do Serviço</h2>
             {(category.questionnaire_fields ?? [])
               .filter((f) => f.field_type !== 'PHOTO')
               .sort((a, b) => a.order - b.order)
@@ -341,9 +339,35 @@ export default function NovoOrderPage() {
           </div>
         )}
 
+        {/* Urgência */}
+        <div className={`rounded-2xl border-2 p-5 transition-colors ${isUrgent ? 'border-rose-500 bg-rose-50' : 'border-slate2-200 bg-white'}`}>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isUrgent}
+              onChange={(e) => setIsUrgent(e.target.checked)}
+              className="mt-1 w-5 h-5 accent-rose-600"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🚨</span>
+                <h2 className="font-semibold text-slate2-900">Preciso urgente</h2>
+                {isUrgent && (
+                  <span className="text-xs bg-rose-600 text-white px-2 py-0.5 rounded-full">
+                    +25% no valor
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate2-600 mt-1">
+                Notifica prestadores próximos (raio 10km) imediatamente. Prazo de aceite: 2h.
+              </p>
+            </div>
+          </label>
+        </div>
+
         {/* Description */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Descrição adicional</h2>
+        <div className="bg-white rounded-2xl border border-slate2-200 p-6">
+          <h2 className="font-semibold text-slate2-900 mb-4">Descrição adicional</h2>
           <Textarea
             placeholder="Descreva detalhes importantes sobre o serviço que precisar..."
             {...register('description')}
@@ -351,16 +375,16 @@ export default function NovoOrderPage() {
         </div>
 
         {/* Photos */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="font-semibold text-gray-900 mb-1">
+        <div className="bg-white rounded-2xl border border-slate2-200 p-6">
+          <h2 className="font-semibold text-slate2-900 mb-1">
             Fotos do local / serviço
             {photoRequired && <span className="text-red-500 ml-1">*</span>}
           </h2>
-          <p className="text-xs text-gray-500 mb-4">Até 5 fotos. Ajuda os prestadores a fazer uma proposta mais precisa.</p>
+          <p className="text-xs text-slate2-500 mb-4">Até 5 fotos. Ajuda os prestadores a fazer uma proposta mais precisa.</p>
 
           <div className="flex flex-wrap gap-3">
             {photoPreviews.map((src, i) => (
-              <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden border border-gray-200">
+              <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden border border-slate2-200">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={src} alt="" className="w-full h-full object-cover" />
                 <button
@@ -374,9 +398,9 @@ export default function NovoOrderPage() {
             ))}
 
             {photos.length < 5 && (
-              <label className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition-colors">
-                <Upload className="w-5 h-5 text-gray-400" />
-                <span className="text-xs text-gray-400 mt-1">Adicionar</span>
+              <label className="w-24 h-24 rounded-xl border-2 border-dashed border-slate2-300 flex flex-col items-center justify-center cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition-colors">
+                <Upload className="w-5 h-5 text-slate2-400" />
+                <span className="text-xs text-slate2-400 mt-1">Adicionar</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -390,28 +414,28 @@ export default function NovoOrderPage() {
         </div>
 
         {/* Schedule & Location */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-900">Agendamento e Local</h2>
+        <div className="bg-white rounded-2xl border border-slate2-200 p-6 space-y-4">
+          <h2 className="font-semibold text-slate2-900">Agendamento e Local</h2>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+              <label className="text-sm font-medium text-slate2-700 flex items-center gap-1">
                 <Calendar className="w-4 h-4" /> Data preferida
               </label>
               <input
                 type="date"
                 min={new Date().toISOString().split('T')[0]}
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 {...register('desired_date')}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+              <label className="text-sm font-medium text-slate2-700 flex items-center gap-1">
                 <Clock className="w-4 h-4" /> Horário preferido
               </label>
               <input
                 type="time"
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 {...register('desired_time')}
               />
             </div>
@@ -420,7 +444,7 @@ export default function NovoOrderPage() {
           <div className="space-y-3">
             {/* GPS capture */}
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+              <label className="text-sm font-medium text-slate2-700 flex items-center gap-1">
                 <Navigation className="w-4 h-4" /> Localização GPS
               </label>
               <div className="flex items-center gap-3">
@@ -428,7 +452,7 @@ export default function NovoOrderPage() {
                   type="button"
                   onClick={captureGps}
                   disabled={gettingGps}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate2-300 text-sm font-medium hover:bg-slate2-50 disabled:opacity-50 transition-colors"
                 >
                   {gettingGps
                     ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -441,39 +465,39 @@ export default function NovoOrderPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-slate2-400">
                 Recomendado — permite que prestadores vejam a distância até o local do serviço
               </p>
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+              <label className="text-sm font-medium text-slate2-700 flex items-center gap-1">
                 <MapPin className="w-4 h-4" /> Endereço completo
               </label>
               <input
                 placeholder="Rua e número (ex: Av. Paulista, 1000)"
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 {...register('address')}
               />
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-slate2-400">
                 Endereço exato só é revelado ao prestador após aceite da proposta
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700">Bairro</label>
+                <label className="text-sm font-medium text-slate2-700">Bairro</label>
                 <input
                   placeholder="Nome do bairro"
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                   {...register('neighborhood')}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700">Cidade</label>
+                <label className="text-sm font-medium text-slate2-700">Cidade</label>
                 <input
                   placeholder="Cidade"
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                   {...register('city')}
                 />
               </div>
@@ -483,7 +507,7 @@ export default function NovoOrderPage() {
               <input
                 placeholder="UF"
                 maxLength={2}
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-brand-500"
                 {...register('state')}
               />
             </div>

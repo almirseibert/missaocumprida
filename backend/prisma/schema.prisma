@@ -75,50 +75,204 @@ enum WithdrawalStatus {
   REJECTED
 }
 
+enum VerificationStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ============================================================
 // USUÁRIOS
 // ============================================================
 
 model User {
-  id                String    @id @default(uuid())
-  name              String
-  email             String    @unique
-  password          String
-  phone             String?
-  role              UserRole  @default(CLIENT)
-  avatar            String?
-  bio               String?
-  document_verified Boolean   @default(false)
-  rating_avg        Float     @default(0)
-  rating_count      Int       @default(0)
-  latitude          Float?
-  longitude         Float?
-  cpf               String?   // CPF ou CNPJ (obrigatório para PIX via Mercado Pago)
-  stripe_customer_id String?
-  pix_key           String?
-  pix_key_type      String?   // CPF, CNPJ, EMAIL, PHONE, RANDOM
-  provider_balance  Float     @default(0)
-  hourly_rate       Float?
-  is_active         Boolean   @default(true)
-  created_at        DateTime  @default(now())
-  updated_at        DateTime  @updatedAt
+  id                           String             @id @default(uuid())
+  name                         String
+  email                        String             @unique
+  password                     String
+  phone                        String?
+  role                         UserRole           @default(CLIENT)
+  avatar                       String?
+  bio                          String?
+  document_verified            Boolean            @default(false)
+  rating_avg                   Float              @default(0)
+  rating_count                 Int                @default(0)
+  latitude                     Float?
+  longitude                    Float?
+  cpf                          String? // CPF ou CNPJ (obrigatório para PIX via Mercado Pago)
+  rg                           String?
+  birth_date                   DateTime?
+  mother_name                  String?
+  address_zip                  String?
+  address_street               String?
+  address_number               String?
+  address_complement           String?
+  address_neighborhood         String?
+  address_city                 String?
+  address_state                String?
+  emergency_contact_name       String?
+  emergency_contact_phone      String?
+  stripe_customer_id           String?
+  pix_key                      String?
+  pix_key_type                 String? // CPF, CNPJ, EMAIL, PHONE, RANDOM
+  provider_balance             Float              @default(0)
+  hourly_rate                  Float?
+  is_active                    Boolean            @default(true)
+  no_show_count                Int                @default(0)
+  suspended_until              DateTime?
+  document_photo_url           String?
+  selfie_photo_url             String?
+  document_submitted_at        DateTime?
+  document_verification_status VerificationStatus @default(NONE)
+  document_rejection_reason    String?
+  document_reviewed_at         DateTime?
+  terms_accepted_at            DateTime?
+  terms_version                String?
+  terms_accepted_ip            String?
+  // Onboarding state (web/mobile guided flow)
+  onboarding_state             Json               @default("{}")
+  // Per-channel notification preferences ({ urgent_orders: true, chat_message: true, ... })
+  notification_preferences     Json               @default("{}")
+  // ---- Programa de indicação (feature #4) ----
+  referral_code                String?            @unique
+  referred_by_id               String?
+  credit_balance               Float              @default(0)
+  // ---- Selo Verificado (feature #7) ----
+  is_verified_pro              Boolean            @default(false)
+  verified_pro_since           DateTime?
+  verified_pro_expires         DateTime?
+  verification_data            Json?
+  created_at                   DateTime           @default(now())
+  updated_at                   DateTime           @updatedAt
 
   // Relações
-  refresh_tokens    RefreshToken[]
-  provider_skills   ProviderSkill[]
-  orders_as_client  Order[]         @relation("ClientOrders")
-  proposals         Proposal[]
-  schedules_client  Schedule[]      @relation("ClientSchedules")
-  schedules_provider Schedule[]     @relation("ProviderSchedules")
-  ratings_given     Rating[]        @relation("RatingsGiven")
-  ratings_received  Rating[]        @relation("RatingsReceived")
-  messages_sent     Message[]
-  payments_client   Payment[]       @relation("ClientPayments")
-  payments_provider Payment[]       @relation("ProviderPayments")
-  withdrawals       ProviderWithdrawal[]
-  notifications     Notification[]
+  refresh_tokens          RefreshToken[]
+  provider_skills         ProviderSkill[]
+  orders_as_client        Order[]                   @relation("ClientOrders")
+  proposals               Proposal[]
+  schedules_client        Schedule[]                @relation("ClientSchedules")
+  schedules_provider      Schedule[]                @relation("ProviderSchedules")
+  ratings_given           Rating[]                  @relation("RatingsGiven")
+  ratings_received        Rating[]                  @relation("RatingsReceived")
+  messages_sent           Message[]
+  payments_client         Payment[]                 @relation("ClientPayments")
+  payments_provider       Payment[]                 @relation("ProviderPayments")
+  withdrawals             ProviderWithdrawal[]
+  notifications           Notification[]
+  push_tokens             PushToken[]
+  referrals_made          ReferralEvent[]           @relation("Referrer")
+  referrals_got           ReferralEvent[]           @relation("Referred")
+  credit_txs              CreditTransaction[]
+  service_packages        ServicePackage[]
+  availability_rules      AvailabilityRule[]
+  availability_exceptions AvailabilityException[]
+  subscriptions_client    Subscription[]            @relation("SubClient")
+  subscriptions_provider  Subscription[]            @relation("SubProvider")
+  boost_purchases         BoostPurchase[]
+  verified_pro_subs       VerifiedProSubscription[]
+  support_tickets         SupportTicket[]           @relation("UserTickets")
+  support_assigned        SupportTicket[]           @relation("TicketAssignee")
+  support_messages        SupportTicketMessage[]
 
   @@map("users")
+}
+
+// ============================================================
+// PACOTES DE SERVIÇO (feature #2)
+// ============================================================
+
+model ServicePackage {
+  id              String   @id @default(uuid())
+  provider_id     String
+  category_id     String
+  title           String
+  description     String
+  price           Float
+  duration_min    Int      @default(60)
+  includes        String[] @default([])
+  photos          String[] @default([])
+  is_active       Boolean  @default(true)
+  purchases_count Int      @default(0)
+  rating_avg      Float    @default(0)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  provider User     @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [category_id], references: [id])
+  orders   Order[]
+
+  @@index([provider_id])
+  @@index([category_id, is_active])
+  @@map("service_packages")
+}
+
+// ============================================================
+// PROGRAMA DE INDICAÇÃO (feature #4)
+// ============================================================
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+model ReferralEvent {
+  id                 String         @id @default(uuid())
+  referrer_id        String
+  referred_id        String         @unique
+  status             ReferralStatus @default(PENDING)
+  referrer_reward    Float          @default(30)
+  referred_reward    Float          @default(20)
+  triggered_order_id String?
+  created_at         DateTime       @default(now())
+  completed_at       DateTime?
+
+  referrer User @relation("Referrer", fields: [referrer_id], references: [id])
+  referred User @relation("Referred", fields: [referred_id], references: [id])
+
+  @@index([referrer_id])
+  @@map("referral_events")
+}
+
+model CreditTransaction {
+  id         String   @id @default(uuid())
+  user_id    String
+  amount     Float
+  reason     String // REFERRAL_EARNED, REFERRAL_BONUS, ORDER_DISCOUNT, ADJUSTMENT
+  ref_id     String?
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("credit_transactions")
+}
+
+// ============================================================
+// TOKENS DE PUSH (Expo / FCM / APNs / Web Push)
+// ============================================================
+
+enum PushPlatform {
+  EXPO
+  FCM
+  APNS
+  WEB
+}
+
+model PushToken {
+  id         String       @id @default(uuid())
+  user_id    String
+  token      String       @unique
+  platform   PushPlatform @default(EXPO)
+  device_id  String?
+  last_seen  DateTime     @default(now())
+  created_at DateTime     @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("push_tokens")
 }
 
 model RefreshToken {
@@ -138,57 +292,74 @@ model RefreshToken {
 // ============================================================
 
 model ServiceGroup {
-  id          String     @id @default(uuid())
-  name        String     @unique
-  slug        String     @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
   icon        String
   description String?
-  order       Int        @default(0)
-  is_active   Boolean    @default(true)
-  created_at  DateTime   @default(now())
+  order       Int      @default(0)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
 
-  categories  Category[]
+  categories Category[]
 
   @@map("service_groups")
 }
 
 model Category {
-  id               String   @id @default(uuid())
-  group_id         String
-  name             String
-  slug             String   @unique
-  icon             String
-  description      String?
-  base_price_min   Float    @default(50)
-  base_price_max   Float    @default(200)
-  requires_photos  Boolean  @default(true)
-  estimated_hours  Float?
-  is_active        Boolean  @default(true)
-  order            Int      @default(0)
-  created_at       DateTime @default(now())
+  id                String   @id @default(uuid())
+  group_id          String
+  name              String
+  slug              String   @unique
+  icon              String
+  description       String?
+  base_price_min    Float    @default(50)
+  base_price_max    Float    @default(200)
+  requires_photos   Boolean  @default(true)
+  estimated_hours   Float?
+  is_active         Boolean  @default(true)
+  order             Int      @default(0)
+  // ---- Precificação dinâmica (feature #15) ----
+  // Arquétipo do questionário (REPAIR, AREA_CLEANING, AREA_SERVICE,
+  // TRANSPORT, LESSON, EVENT, HEALTH_BEAUTY, CONSULTING, GENERIC)
+  archetype         String?
+  // Formula estruturada — ver utils/priceEstimator.ts
+  pricing_formula   Json?
+  // Unidade exibida (m², hora, ponto, evento, sessão, km)
+  pricing_unit      String?
+  // Multiplicador regional por UF/região ({ "SP": 1.4, "RJ": 1.3 })
+  region_multiplier Json?
+  created_at        DateTime @default(now())
 
   // Relações
-  group                ServiceGroup        @relation(fields: [group_id], references: [id])
+  group                ServiceGroup         @relation(fields: [group_id], references: [id])
   questionnaire_fields QuestionnaireField[]
   orders               Order[]
   provider_skills      ProviderSkill[]
+  service_packages     ServicePackage[]
+  availability_rules   AvailabilityRule[]
+  subscriptions        Subscription[]
 
   @@map("categories")
 }
 
 model QuestionnaireField {
-  id              String    @id @default(uuid())
-  category_id     String
-  question        String
-  field_type      FieldType
-  options         Json?     // Array de strings para SELECT/RADIO
-  placeholder     String?
-  is_required     Boolean   @default(true)
-  order           Int       @default(0)
-  affects_price   Boolean   @default(false)
-  price_modifier  Json?     // { "opcao": 1.5 } multiplicador por opção
-  help_text       String?   // Texto de ajuda abaixo do campo
-  created_at      DateTime  @default(now())
+  id             String    @id @default(uuid())
+  category_id    String
+  question       String
+  field_type     FieldType
+  options        Json? // Array de strings para SELECT/RADIO
+  placeholder    String?
+  is_required    Boolean   @default(true)
+  order          Int       @default(0)
+  affects_price  Boolean   @default(false)
+  price_modifier Json? // legado: { "opcao": 1.5 } multiplicador por opção
+  // Chave estável usada pelas fórmulas de precificação (ex: "area_m2", "estado_paredes")
+  key            String?
+  // Efeito da resposta no preço (ver utils/priceEstimator.ts)
+  pricing_effect Json?
+  help_text      String? // Texto de ajuda abaixo do campo
+  created_at     DateTime  @default(now())
 
   category Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
 
@@ -200,18 +371,18 @@ model QuestionnaireField {
 // ============================================================
 
 model ProviderSkill {
-  id                 String   @id @default(uuid())
-  provider_id        String
-  category_id        String
-  years_experience   Int      @default(0)
-  certification      String?
-  service_radius_km  Int      @default(20)
-  hourly_rate        Float?
-  is_active          Boolean  @default(true)
-  created_at         DateTime @default(now())
+  id                String   @id @default(uuid())
+  provider_id       String
+  category_id       String
+  years_experience  Int      @default(0)
+  certification     String?
+  service_radius_km Int      @default(20)
+  hourly_rate       Float?
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now())
 
-  provider  User     @relation(fields: [provider_id], references: [id], onDelete: Cascade)
-  category  Category @relation(fields: [category_id], references: [id])
+  provider User     @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [category_id], references: [id])
 
   @@unique([provider_id, category_id])
   @@map("provider_skills")
@@ -222,40 +393,61 @@ model ProviderSkill {
 // ============================================================
 
 model Order {
-  id                  String      @id @default(uuid())
-  client_id           String
-  category_id         String
-  title               String
-  description         String?
-  answers             Json        // { field_id: valor }
-  photos              String[]    @default([])
-  status              OrderStatus @default(OPEN)
-  desired_date        DateTime?
-  address             String?     // rua + número — oculto para prestadores antes da aceitação
-  neighborhood        String?     // bairro — visível para prestadores antes da aceitação
-  city                String
-  state               String      @default("SP")
-  latitude            Float?
-  longitude           Float?
-  estimated_price_min Float?
-  estimated_price_max Float?
-  final_price         Float?
-  platform_fee_pct    Float       @default(0.10)
-  platform_fee_value  Float?
-  provider_amount              Float?
-  client_fee_pct               Float       @default(0.10)
-  client_fee_value             Float?
-  client_total                 Float?
-  stripe_payment_intent_id     String?
-  created_at                   DateTime    @default(now())
-  updated_at          DateTime    @updatedAt
+  id                         String      @id @default(uuid())
+  client_id                  String
+  category_id                String
+  title                      String
+  description                String?
+  answers                    Json // { field_id: valor }
+  photos                     String[]    @default([])
+  status                     OrderStatus @default(OPEN)
+  desired_date               DateTime?
+  address                    String? // rua + número — oculto para prestadores antes da aceitação
+  neighborhood               String? // bairro — visível para prestadores antes da aceitação
+  city                       String
+  state                      String      @default("SP")
+  latitude                   Float?
+  longitude                  Float?
+  estimated_price_min        Float?
+  estimated_price_max        Float?
+  final_price                Float?
+  platform_fee_pct           Float       @default(0.10)
+  platform_fee_value         Float?
+  provider_amount            Float?
+  client_fee_pct             Float       @default(0.10)
+  client_fee_value           Float?
+  client_total               Float?
+  stripe_payment_intent_id   String?
+  // ---- Compartilhamento público (feature #13) ----
+  public_share_slug          String?     @unique
+  public_share_enabled       Boolean     @default(false)
+  public_view_count          Int         @default(0)
+  // ---- Indicação: crédito aplicado neste pedido ----
+  credit_applied             Float       @default(0)
+  // ---- Pacote de serviço (feature #2) ----
+  package_id                 String?
+  // ---- Recorrência (feature #1) ----
+  subscription_id            String?
+  subscription_occurrence_id String?     @unique
+  // ---- Modo Urgência (feature #5) ----
+  is_urgent                  Boolean     @default(false)
+  urgency_fee_pct            Float?
+  urgency_fee_value          Float?
+  urgency_deadline           DateTime?
+  urgency_radius_km          Int?
+  urgency_expanded_at        DateTime?
+  created_at                 DateTime    @default(now())
+  updated_at                 DateTime    @updatedAt
 
   // Relações
-  client    User       @relation("ClientOrders", fields: [client_id], references: [id])
-  category  Category   @relation(fields: [category_id], references: [id])
-  proposals Proposal[]
-  schedule  Schedule?
-  payment   Payment?
+  client                  User                    @relation("ClientOrders", fields: [client_id], references: [id])
+  category                Category                @relation(fields: [category_id], references: [id])
+  proposals               Proposal[]
+  schedule                Schedule?
+  payment                 Payment?
+  package                 ServicePackage?         @relation(fields: [package_id], references: [id])
+  subscription            Subscription?           @relation(fields: [subscription_id], references: [id])
+  subscription_occurrence SubscriptionOccurrence? @relation(fields: [subscription_occurrence_id], references: [id])
 
   @@map("orders")
 }
@@ -265,21 +457,42 @@ model Order {
 // ============================================================
 
 model Proposal {
-  id          String         @id @default(uuid())
-  order_id    String
-  provider_id String
-  value       Float
-  message     String?
-  status      ProposalStatus @default(PENDING)
-  created_at  DateTime       @default(now())
-  updated_at  DateTime       @updatedAt
+  id            String         @id @default(uuid())
+  order_id      String
+  provider_id   String
+  value         Float
+  message       String?
+  status        ProposalStatus @default(PENDING)
+  // ---- Boost de proposta (feature #6) ----
+  boost_level   Int            @default(0) // 0=normal, 1=destaque, 2=topo
+  boost_paid_at DateTime?
+  boost_value   Float?
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
 
-  order    Order    @relation(fields: [order_id], references: [id], onDelete: Cascade)
-  provider User     @relation(fields: [provider_id], references: [id])
-  schedule Schedule?
+  order           Order           @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  provider        User            @relation(fields: [provider_id], references: [id])
+  schedule        Schedule?
+  boost_purchases BoostPurchase[]
 
   @@unique([order_id, provider_id])
   @@map("proposals")
+}
+
+model BoostPurchase {
+  id          String   @id @default(uuid())
+  provider_id String
+  proposal_id String
+  level       Int
+  value       Float
+  payment_ref String? // referência ao Payment ou transação interna
+  created_at  DateTime @default(now())
+
+  provider User     @relation(fields: [provider_id], references: [id])
+  proposal Proposal @relation(fields: [proposal_id], references: [id], onDelete: Cascade)
+
+  @@index([provider_id])
+  @@map("boost_purchases")
 }
 
 // ============================================================
@@ -287,32 +500,32 @@ model Proposal {
 // ============================================================
 
 model Schedule {
-  id                   String         @id @default(uuid())
-  order_id             String         @unique
-  proposal_id          String         @unique
-  provider_id          String
-  client_id            String
-  scheduled_at         DateTime
-  checkin_at           DateTime?
-  checkin_photo_url    String?
-  checkin_lat          Float?
-  checkin_lng          Float?
-  checkin_address      String?
-  done_at              DateTime?
-  complete_photo_url   String?
-  complete_lat         Float?
-  complete_lng         Float?
-  complete_address     String?
-  duration_minutes     Int?
-  hourly_amount        Float?
-  status               ScheduleStatus @default(CONFIRMED)
-  created_at           DateTime       @default(now())
-  updated_at           DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  order_id           String         @unique
+  proposal_id        String         @unique
+  provider_id        String
+  client_id          String
+  scheduled_at       DateTime
+  checkin_at         DateTime?
+  checkin_photo_url  String?
+  checkin_lat        Float?
+  checkin_lng        Float?
+  checkin_address    String?
+  done_at            DateTime?
+  complete_photo_url String?
+  complete_lat       Float?
+  complete_lng       Float?
+  complete_address   String?
+  duration_minutes   Int?
+  hourly_amount      Float?
+  status             ScheduleStatus @default(CONFIRMED)
+  created_at         DateTime       @default(now())
+  updated_at         DateTime       @updatedAt
 
-  order    Order    @relation(fields: [order_id], references: [id])
-  proposal Proposal @relation(fields: [proposal_id], references: [id])
-  provider User     @relation("ProviderSchedules", fields: [provider_id], references: [id])
-  client   User     @relation("ClientSchedules", fields: [client_id], references: [id])
+  order    Order     @relation(fields: [order_id], references: [id])
+  proposal Proposal  @relation(fields: [proposal_id], references: [id])
+  provider User      @relation("ProviderSchedules", fields: [provider_id], references: [id])
+  client   User      @relation("ClientSchedules", fields: [client_id], references: [id])
   ratings  Rating[]
   messages Message[]
 
@@ -328,7 +541,7 @@ model Rating {
   schedule_id   String
   reviewer_id   String
   reviewed_id   String
-  score         Int          // 1 a 5
+  score         Int // 1 a 5
   comment       String?
   reviewer_role ReviewerRole
   created_at    DateTime     @default(now())
@@ -370,12 +583,12 @@ model Payment {
   client_id             String
   provider_id           String
   stripe_payment_intent String?       @unique
-  amount                Float         // total cobrado do cliente (inclui taxa de processamento)
-  provider_amount       Float         // valor líquido para o prestador
-  platform_fee          Float         // taxa da plataforma
+  amount                Float // total cobrado do cliente (inclui taxa de processamento)
+  provider_amount       Float // valor líquido para o prestador
+  platform_fee          Float // taxa da plataforma
   gateway_fee_pct       Float         @default(0)
   gateway_fee           Float         @default(0)
-  payment_method        String?       // 'card' | 'pix'
+  payment_method        String? // 'card' | 'pix'
   status                PaymentStatus @default(PENDING)
   paid_at               DateTime?
   released_at           DateTime?
@@ -439,4 +652,222 @@ model Notification {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+// ============================================================
+// AGENDA PÚBLICA (feature #3)
+// ============================================================
+
+model AvailabilityRule {
+  id          String   @id @default(uuid())
+  provider_id String
+  weekday     Int // 0=Domingo..6=Sábado
+  start_time  String // "08:00"
+  end_time    String // "17:00"
+  slot_min    Int      @default(60)
+  category_id String? // null = todas
+  created_at  DateTime @default(now())
+
+  provider User      @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [category_id], references: [id])
+
+  @@index([provider_id, weekday])
+  @@map("availability_rules")
+}
+
+model AvailabilityException {
+  id          String   @id @default(uuid())
+  provider_id String
+  date        DateTime // YYYY-MM-DD 00:00 UTC
+  blocked     Boolean  @default(true)
+  start_time  String?
+  end_time    String?
+  note        String?
+  created_at  DateTime @default(now())
+
+  provider User @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider_id, date])
+  @@map("availability_exceptions")
+}
+
+// ============================================================
+// RECORRÊNCIA / ASSINATURA (feature #1)
+// ============================================================
+
+enum SubFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum SubStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+model Subscription {
+  id              String       @id @default(uuid())
+  client_id       String
+  provider_id     String
+  category_id     String
+  frequency       SubFrequency
+  weekday         Int? // 0..6 quando WEEKLY/BIWEEKLY
+  day_of_month    Int? // 1..31 quando MONTHLY
+  time_slot       String       @default("08:00")
+  base_value      Float
+  discount_pct    Float        @default(0.10)
+  status          SubStatus    @default(ACTIVE)
+  next_occurrence DateTime
+  payment_method  String       @default("PIX")
+  auto_charge     Boolean      @default(true)
+  answers         Json
+  title           String
+  description     String?
+  address         String?
+  neighborhood    String?
+  city            String
+  state           String       @default("SP")
+  latitude        Float?
+  longitude       Float?
+  cancelled_at    DateTime?
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
+
+  client      User                     @relation("SubClient", fields: [client_id], references: [id])
+  provider    User                     @relation("SubProvider", fields: [provider_id], references: [id])
+  category    Category                 @relation(fields: [category_id], references: [id])
+  occurrences SubscriptionOccurrence[]
+  orders      Order[]
+
+  @@index([client_id])
+  @@index([provider_id])
+  @@index([status, next_occurrence])
+  @@map("subscriptions")
+}
+
+model SubscriptionOccurrence {
+  id              String   @id @default(uuid())
+  subscription_id String
+  scheduled_for   DateTime
+  status          String // PENDING, GENERATED, SKIPPED, FAILED
+  reason          String?
+  created_at      DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+  order        Order?
+
+  @@index([subscription_id, scheduled_for])
+  @@map("subscription_occurrences")
+}
+
+// ============================================================
+// SELO VERIFICADO PRO (feature #7)
+// ============================================================
+
+enum VerifiedProStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+model VerifiedProSubscription {
+  id                 String            @id @default(uuid())
+  user_id            String
+  stripe_sub_id      String?           @unique
+  status             VerifiedProStatus @default(ACTIVE)
+  current_period_end DateTime
+  monthly_value      Float             @default(29.90)
+  created_at         DateTime          @default(now())
+  cancelled_at       DateTime?
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, status])
+  @@map("verified_pro_subscriptions")
+}
+
+// ============================================================
+// AFINIDADES DE CATEGORIA (feature #8 — cross-sell)
+// ============================================================
+
+// ============================================================
+// SUPORTE / CONTATO COM DESENVOLVEDORES
+// ============================================================
+
+enum SupportCategory {
+  PROBLEM
+  IMPROVEMENT
+  QUESTION
+  PAYMENT
+  ACCOUNT
+  OTHER
+}
+
+enum SupportStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_USER
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id               String          @id @default(uuid())
+  user_id          String
+  assignee_id      String?
+  subject          String
+  category         SupportCategory @default(OTHER)
+  status           SupportStatus   @default(OPEN)
+  // contato alternativo informado no formulário (pode diferir do cadastro)
+  contact_email    String?
+  contact_phone    String?
+  // metadado: papel do usuário no momento da abertura (CLIENT/PROVIDER/BOTH/ADMIN)
+  reporter_role    String?
+  // marca o lado que ainda não leu a última mensagem
+  unread_for_admin Boolean         @default(true)
+  unread_for_user  Boolean         @default(false)
+  resolved_at      DateTime?
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @updatedAt
+
+  user     User                   @relation("UserTickets", fields: [user_id], references: [id], onDelete: Cascade)
+  assignee User?                  @relation("TicketAssignee", fields: [assignee_id], references: [id])
+  messages SupportTicketMessage[]
+
+  @@index([user_id])
+  @@index([status, created_at])
+  @@index([assignee_id])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id         String   @id @default(uuid())
+  ticket_id  String
+  sender_id  String
+  // distingue resposta da equipe (admin) de mensagem do solicitante
+  from_admin Boolean  @default(false)
+  content    String
+  created_at DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [sender_id], references: [id])
+
+  @@index([ticket_id, created_at])
+  @@map("support_ticket_messages")
+}
+
+model CategoryAffinity {
+  id              String   @id @default(uuid())
+  source_category String
+  target_category String
+  score           Float
+  label           String
+  delay_days      Int      @default(0)
+  created_at      DateTime @default(now())
+
+  @@unique([source_category, target_category])
+  @@index([source_category])
+  @@map("category_affinities")
 }
