@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -31,13 +31,14 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-export default function RegisterPage() {
+// Subcomponente criado para isolar o uso do useSearchParams dentro do escopo do Suspense
+function RegisterFormContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { setTokens, setUser } = useAuthStore()
   const [showPass, setShowPass] = useState(false)
+  
   const defaultRole: UserRole = searchParams.get('tipo') === 'prestador' ? 'PROVIDER' : 'CLIENT'
-
   const initialReferralCode = (searchParams.get('codigo') || searchParams.get('ref') || '').toUpperCase()
 
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -68,6 +69,80 @@ export default function RegisterPage() {
   ]
 
   return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* Tipo de conta */}
+      <div>
+        <p className="text-sm font-medium text-slate2-700 mb-2">Tipo de conta</p>
+        <div className="grid grid-cols-3 gap-2">
+          {roles.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => setValue('role', r.value as 'CLIENT' | 'PROVIDER' | 'BOTH')}
+              className={cn(
+                'flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all text-center',
+                selectedRole === r.value
+                  ? 'border-brand-700 bg-brand-50 text-brand-700'
+                  : 'border-slate2-200 text-slate2-600 hover:border-slate2-300',
+              )}
+            >
+              {r.icon}
+              <span className="text-xs font-semibold font-display">{r.label}</span>
+              <span className="text-[10px] text-slate2-500 hidden sm:block">{r.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Input label="Nome completo" placeholder="João da Silva" error={errors.name?.message} autoComplete="name" {...register('name')} />
+      <Input label="E-mail" type="email" placeholder="seu@email.com" error={errors.email?.message} autoComplete="email" {...register('email')} />
+      <Input label="Telefone" type="tel" placeholder="(11) 99999-9999" error={errors.phone?.message} autoComplete="tel" {...register('phone')} />
+
+      <Input
+        label="Senha"
+        type={showPass ? 'text' : 'password'}
+        placeholder="Mín. 8 caracteres"
+        autoComplete="new-password"
+        error={errors.password?.message}
+        required
+        rightSlot={
+          <button
+            type="button"
+            onClick={() => setShowPass(!showPass)}
+            className="text-slate2-400 hover:text-slate2-600 transition-colors"
+            aria-label={showPass ? 'Ocultar senha' : 'Mostrar senha'}
+          >
+            {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        }
+        {...register('password')}
+      />
+
+      <Input
+        label="Confirmar senha"
+        type="password"
+        placeholder="Repita a senha"
+        error={errors.confirmPassword?.message}
+        autoComplete="new-password"
+        {...register('confirmPassword')}
+      />
+
+      <Input
+        label="Código de indicação (opcional)"
+        placeholder="Ex: JOAOX42K"
+        helpText={initialReferralCode ? `Ganhe R$ 20 ao concluir seu 1º pedido!` : 'Tem um código de amigo? Ganhe R$ 20 no 1º pedido.'}
+        {...register('referral_code')}
+      />
+
+      <Button type="submit" fullWidth isLoading={isSubmitting} size="lg">
+        Criar conta
+      </Button>
+    </form>
+  )
+}
+
+export default function RegisterPage() {
+  return (
     <div className="min-h-screen bg-slate2-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
@@ -81,75 +156,11 @@ export default function RegisterPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-slate2-200 shadow-elv-1 p-8">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {/* Tipo de conta */}
-            <div>
-              <p className="text-sm font-medium text-slate2-700 mb-2">Tipo de conta</p>
-              <div className="grid grid-cols-3 gap-2">
-                {roles.map((r) => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => setValue('role', r.value as 'CLIENT' | 'PROVIDER' | 'BOTH')}
-                    className={cn(
-                      'flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all text-center',
-                      selectedRole === r.value
-                        ? 'border-brand-700 bg-brand-50 text-brand-700'
-                        : 'border-slate2-200 text-slate2-600 hover:border-slate2-300',
-                    )}
-                  >
-                    {r.icon}
-                    <span className="text-xs font-semibold font-display">{r.label}</span>
-                    <span className="text-[10px] text-slate2-500 hidden sm:block">{r.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Input label="Nome completo" placeholder="João da Silva" error={errors.name?.message} autoComplete="name" {...register('name')} />
-            <Input label="E-mail" type="email" placeholder="seu@email.com" error={errors.email?.message} autoComplete="email" {...register('email')} />
-            <Input label="Telefone" type="tel" placeholder="(11) 99999-9999" error={errors.phone?.message} autoComplete="tel" {...register('phone')} />
-
-            <Input
-              label="Senha"
-              type={showPass ? 'text' : 'password'}
-              placeholder="Mín. 8 caracteres"
-              autoComplete="new-password"
-              error={errors.password?.message}
-              required
-              rightSlot={
-                <button
-                  type="button"
-                  onClick={() => setShowPass(!showPass)}
-                  className="text-slate2-400 hover:text-slate2-600 transition-colors"
-                  aria-label={showPass ? 'Ocultar senha' : 'Mostrar senha'}
-                >
-                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              }
-              {...register('password')}
-            />
-
-            <Input
-              label="Confirmar senha"
-              type="password"
-              placeholder="Repita a senha"
-              error={errors.confirmPassword?.message}
-              autoComplete="new-password"
-              {...register('confirmPassword')}
-            />
-
-            <Input
-              label="Código de indicação (opcional)"
-              placeholder="Ex: JOAOX42K"
-              helpText={initialReferralCode ? `Ganhe R$ 20 ao concluir seu 1º pedido!` : 'Tem um código de amigo? Ganhe R$ 20 no 1º pedido.'}
-              {...register('referral_code')}
-            />
-
-            <Button type="submit" fullWidth isLoading={isSubmitting} size="lg">
-              Criar conta
-            </Button>
-          </form>
+          
+          {/* O bloco Suspense impede o erro de pré-renderização estática do Next.js */}
+          <Suspense fallback={<div className="text-center py-4 text-sm text-slate2-500">Carregando formulário...</div>}>
+            <RegisterFormContent />
+          </Suspense>
 
           <p className="mt-6 text-center text-sm text-slate2-500">
             Já tem conta?{' '}

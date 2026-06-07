@@ -30,6 +30,14 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -73,6 +81,12 @@
         "projectId": "36624410-d80d-489b-8074-3be118bd451a"
       }
     },
-    "owner": "almirseibert"
+    "owner": "almirseibert",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/36624410-d80d-489b-8074-3be118bd451a"
+    }
   }
 }
