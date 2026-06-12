@@ -3,13 +3,13 @@
 import { memo, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, MapPin, Calendar, Rss, ArrowRight, AlertCircle, ChevronDown } from 'lucide-react'
+import { Search, MapPin, Calendar, Rss, ArrowRight, AlertCircle, ChevronDown, Wallet, FileText } from 'lucide-react'
 import { api } from '@/lib/api'
 import { ServiceGroup, Order } from '@/types'
 import { useAuthStore } from '@/store/auth'
 import { PageSpinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
 
 export default function HomePage() {
@@ -78,22 +78,33 @@ function ClientHome() {
 
   return (
     <div className="space-y-7">
-      <div>
-        <h1 className="font-display text-2xl sm:text-[26px] font-extrabold text-slate2-900">
-          Olá, {user?.name.split(' ')[0]}! O que você precisa hoje?
-        </h1>
-        <p className="text-sm text-slate2-500 mt-1">Encontre profissionais verificados na sua região.</p>
-      </div>
-
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate2-400" />
-        <input
-          type="text"
-          placeholder="Buscar serviço (ex: limpeza, elétrica, cabelo...)"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-12 pr-4 py-3.5 rounded-xl border-[1.5px] border-slate2-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent shadow-elv-1"
+      {/* Hero de boas-vindas — faixa institucional com contraste */}
+      <div
+        className="relative overflow-hidden rounded-2xl px-6 py-7 sm:px-8 sm:py-8"
+        style={{ background: 'linear-gradient(120deg, #1E3A8A 0%, #1D4ED8 55%, #059669 100%)' }}
+      >
+        <div
+          aria-hidden
+          className="absolute -top-16 -right-10 w-56 h-56 rounded-full opacity-20 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #FFFFFF 0%, transparent 65%)' }}
         />
+        <h1 className="relative font-display text-2xl sm:text-[28px] font-extrabold text-white leading-tight">
+          Olá, {user?.name.split(' ')[0]}! 👋
+        </h1>
+        <p className="relative text-sm sm:text-[15px] text-white/80 mt-1.5">
+          O que você precisa resolver hoje? Encontre profissionais verificados na sua região.
+        </p>
+
+        <div className="relative mt-5">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate2-400" />
+          <input
+            type="text"
+            placeholder="Buscar serviço (ex: limpeza, elétrica, cabelo...)"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-12 pr-4 py-4 rounded-xl bg-white text-sm text-slate2-900 placeholder:text-slate2-400 focus:outline-none focus:ring-4 focus:ring-white/30 shadow-elv-3"
+          />
+        </div>
       </div>
 
       {!isSearching && recents.length > 0 && (
@@ -150,23 +161,31 @@ function ClientHome() {
           {filteredGroups.map((group) => {
             const isOpen = openGroups.has(group.id)
             return (
-              <section key={group.id} className="bg-white rounded-2xl border border-slate2-200 overflow-hidden">
+              <section key={group.id} className={cn(
+                'bg-white rounded-2xl border overflow-hidden transition-colors',
+                isOpen ? 'border-brand-200 shadow-elv-1' : 'border-slate2-200',
+              )}>
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={isOpen}
-                  className="w-full flex items-center gap-3 p-4 hover:bg-slate2-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3.5 p-4 hover:bg-slate2-50 transition-colors text-left"
                 >
-                  <span className="text-2xl">{group.icon}</span>
+                  <span className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center text-2xl flex-shrink-0">
+                    {group.icon}
+                  </span>
                   <div className="flex-1">
                     <h2 className="font-display text-[15px] font-bold text-slate2-900">{group.name}</h2>
-                    <p className="text-[11px] text-slate2-500 mt-0.5">
-                      {group.categories.length} serviço{group.categories.length === 1 ? '' : 's'}
+                    <p className="text-xs text-slate2-500 mt-0.5">
+                      {group.categories.length} serviço{group.categories.length === 1 ? '' : 's'} disponíve{group.categories.length === 1 ? 'l' : 'is'}
                     </p>
                   </div>
-                  <ChevronDown
-                    className={`w-5 h-5 text-slate2-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                  />
+                  <span className={cn(
+                    'w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0',
+                    isOpen ? 'bg-brand-100 text-brand-700' : 'bg-slate2-100 text-slate2-500',
+                  )}>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </span>
                 </button>
                 {isOpen && (
                   <div className="px-4 pb-4 pt-1 border-t border-slate2-100">
@@ -190,14 +209,16 @@ const CategoryTile = memo(function CategoryTile({ cat }: { cat: { id: string; sl
   return (
     <Link
       href={`/pedido/novo/${cat.slug}`}
-      className="group bg-white rounded-2xl border border-slate2-200 p-4 hover:border-brand-300 hover:shadow-brand-soft transition-all"
+      className="group bg-white rounded-2xl border border-slate2-200 p-4 hover:border-brand-300 hover:shadow-brand-soft hover:-translate-y-0.5 transition-all"
     >
-      <div className="text-3xl mb-2.5">{cat.icon}</div>
+      <div className="w-12 h-12 rounded-xl bg-slate2-50 group-hover:bg-brand-50 flex items-center justify-center text-2xl mb-3 transition-colors">
+        {cat.icon}
+      </div>
       <h3 className="font-display text-[13px] font-bold text-slate2-900 group-hover:text-brand-700 leading-tight mb-1">
         {cat.name}
       </h3>
       <p className="text-[11px] text-slate2-500">
-        A partir de {formatCurrency(cat.base_price_min)}
+        A partir de <span className="font-semibold text-slate2-700">{formatCurrency(cat.base_price_min)}</span>
       </p>
       {cat.estimated_hours && (
         <p className="text-[11px] text-slate2-400 mt-0.5">~{cat.estimated_hours}h</p>
@@ -258,22 +279,34 @@ function ProviderHome() {
 
       {/* 4 Stats — métricas como nas Telas Web */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Link href="/feed" className="bg-white border border-slate2-200 rounded-xl p-4 hover:border-brand-300 hover:shadow-brand-soft transition-all">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-400 mb-1.5">Pedidos abertos</p>
+        <Link href="/feed" className="group bg-white border border-slate2-200 rounded-2xl p-4 hover:border-brand-300 hover:shadow-brand-soft hover:-translate-y-0.5 transition-all">
+          <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center mb-2.5">
+            <Rss className="w-[18px] h-[18px]" />
+          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-500 mb-1">Pedidos abertos</p>
           <p className="font-display text-[28px] font-extrabold text-brand-700 leading-none">
             {orders.length}{orders.length === 8 ? '+' : ''}
           </p>
         </Link>
-        <Link href="/minhas-propostas" className="bg-white border border-slate2-200 rounded-xl p-4 hover:border-brand-300 hover:shadow-brand-soft transition-all">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-400 mb-1.5">Propostas enviadas</p>
+        <Link href="/minhas-propostas" className="group bg-white border border-slate2-200 rounded-2xl p-4 hover:border-brand-300 hover:shadow-brand-soft hover:-translate-y-0.5 transition-all">
+          <div className="w-9 h-9 rounded-lg bg-violet-50 text-violet-700 flex items-center justify-center mb-2.5">
+            <FileText className="w-[18px] h-[18px]" />
+          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-500 mb-1">Propostas enviadas</p>
           <p className="font-display text-[28px] font-extrabold text-slate2-900 leading-none">—</p>
         </Link>
-        <Link href="/agendamentos" className="bg-white border border-slate2-200 rounded-xl p-4 hover:border-brand-300 hover:shadow-brand-soft transition-all">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-400 mb-1.5">Agendamentos</p>
+        <Link href="/agendamentos" className="group bg-white border border-slate2-200 rounded-2xl p-4 hover:border-brand-300 hover:shadow-brand-soft hover:-translate-y-0.5 transition-all">
+          <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center mb-2.5">
+            <Calendar className="w-[18px] h-[18px]" />
+          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-500 mb-1">Agendamentos</p>
           <p className="font-display text-[28px] font-extrabold text-slate2-900 leading-none">—</p>
         </Link>
-        <Link href="/carteira" className="bg-white border border-slate2-200 rounded-xl p-4 hover:border-brand-300 hover:shadow-brand-soft transition-all">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-400 mb-1.5">Saldo disponível</p>
+        <Link href="/carteira" className="group bg-white border border-slate2-200 rounded-2xl p-4 hover:border-accent-300 hover:shadow-brand-soft hover:-translate-y-0.5 transition-all">
+          <div className="w-9 h-9 rounded-lg bg-accent-50 text-accent-600 flex items-center justify-center mb-2.5">
+            <Wallet className="w-[18px] h-[18px]" />
+          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate2-500 mb-1">Saldo disponível</p>
           <p className="font-display text-[28px] font-extrabold text-accent-600 leading-none">
             {formatCurrency(user?.provider_balance ?? 0)}
           </p>

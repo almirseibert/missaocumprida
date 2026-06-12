@@ -33,7 +33,7 @@ export default async function ConvitePage({ params }: PageProps) {
               {inviter.name.split(' ')[0]} convidou você
             </h1>
             <p className="text-slate2-600 mb-4">
-              Crie sua conta no <strong>Missão Cumprida</strong> usando o código <span className="font-mono font-bold text-brand-700">{code}</span> e ganhe <strong>R$ 20</strong> no seu primeiro serviço.
+              Crie sua conta no <strong>Missão Cumprida</strong> usando o código <span className="font-mono font-bold text-brand-700">{code}</span>. Conforme você contrata serviços, vocês dois ganham <strong>crédito</strong> na plataforma.
             </p>
           </>
         ) : (

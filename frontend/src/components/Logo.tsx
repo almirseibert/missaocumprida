@@ -6,8 +6,10 @@ interface LogoProps {
 }
 
 /**
- * Logo Missão Cumprida — ícone quadrado arredondado com degradê
- * azul→verde e checkmark bold em branco.
+ * Logo Missão Cumprida — "Selo da Missão": medalha branca com fitas e
+ * check vazado sobre degradê azul→verde. A medalha diz "confiança e
+ * reputação"; o check diz "missão cumprida". O check usa o próprio
+ * degradê (userSpaceOnUse) para simular recorte no selo.
  */
 export function Logo({ size = 32, className }: LogoProps) {
   // ID único do gradient por instância para evitar colisão quando
@@ -34,15 +36,22 @@ export function Logo({ size = 32, className }: LogoProps) {
           y2="48"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#1D4ED8" />
+          <stop offset="0%" stopColor="#1E3A8A" />
+          <stop offset="52%" stopColor="#1D4ED8" />
           <stop offset="100%" stopColor="#059669" />
         </linearGradient>
       </defs>
       <rect width="48" height="48" rx="13" fill={`url(#${gradId})`} />
       <path
-        d="M11 25L19 33L37 15"
-        stroke="white"
-        strokeWidth="5.5"
+        d="M17 26L17 41L24 36L31 41L31 26Z"
+        fill="white"
+        fillOpacity="0.9"
+      />
+      <circle cx="24" cy="19" r="11.5" fill="white" />
+      <path
+        d="M18.6 19.2L22.4 23L29.6 14.8"
+        stroke={`url(#${gradId})`}
+        strokeWidth="3.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

@@ -17,6 +17,7 @@ interface ReferralEvent {
   completed_at: string | null
   referrer_reward: number
   referred_reward: number
+  qualifying_volume: number
   referred: { id: string; name: string; avatar: string | null }
 }
 interface MyCodeData {
@@ -24,6 +25,7 @@ interface MyCodeData {
   share_url: string
   deep_link: string
   credit_balance: number
+  threshold: number
   stats: { pending: number; completed: number; total: number }
   events: ReferralEvent[]
 }
@@ -54,7 +56,7 @@ export default function IndicarPage() {
 
   async function shareNative() {
     if (!data) return
-    const text = `Use meu código ${data.code} e ganhe R$ 20 no Missão Cumprida! ${data.share_url}`
+    const text = `Use meu código ${data.code} no Missão Cumprida e a gente ganha crédito junto! ${data.share_url}`
     if (navigator.share) {
       try { await navigator.share({ title: 'Missão Cumprida', text, url: data.share_url }) } catch {}
     } else {
@@ -66,7 +68,9 @@ export default function IndicarPage() {
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-1">Indique e ganhe</h1>
       <p className="text-slate2-600 mb-6">
-        Compartilhe seu código. Para cada amigo que completar o 1º serviço, você ganha <strong>R$ 30</strong> e ele recebe <strong>R$ 20</strong> de desconto.
+        Compartilhe seu código. Quando seu amigo somar <strong>{formatCurrency(data.threshold)}</strong> em serviços
+        contratados, você ganha <strong>{formatCurrency(data.events[0]?.referrer_reward ?? 30)}</strong> e ele
+        <strong> {formatCurrency(data.events[0]?.referred_reward ?? 20)}</strong> de crédito — os dois de uma vez.
       </p>
 
       {/* Saldo + código */}
@@ -97,7 +101,7 @@ export default function IndicarPage() {
               </div>
             </div>
           </div>
-          <div className="text-xs text-slate2-500">Pendentes viram crédito quando o amigo completar o 1º serviço.</div>
+          <div className="text-xs text-slate2-500">Pendentes viram crédito quando o amigo soma {formatCurrency(data.threshold)} em serviços.</div>
         </Card>
       </div>
 
@@ -128,25 +132,41 @@ export default function IndicarPage() {
         {data.events.length === 0 && (
           <div className="p-6 text-center text-sm text-slate2-500">Você ainda não indicou ninguém.</div>
         )}
-        {data.events.map((e) => (
-          <div key={e.id} className="p-4 border-b border-slate2-100 last:border-0 flex items-center gap-3">
-            <Avatar avatar={e.referred.avatar ?? undefined} name={e.referred.name} size="md" />
-            <div className="flex-1">
-              <div className="font-medium">{e.referred.name}</div>
-              <div className="text-xs text-slate2-500">
-                Indicado em {formatDate(e.created_at)}
-                {e.completed_at && ` · concluído em ${formatDate(e.completed_at)}`}
+        {data.events.map((e) => {
+          const pct = Math.min(100, Math.round((e.qualifying_volume / data.threshold) * 100))
+          return (
+            <div key={e.id} className="p-4 border-b border-slate2-100 last:border-0">
+              <div className="flex items-center gap-3">
+                <Avatar avatar={e.referred.avatar ?? undefined} name={e.referred.name} size="md" />
+                <div className="flex-1">
+                  <div className="font-medium">{e.referred.name}</div>
+                  <div className="text-xs text-slate2-500">
+                    Indicado em {formatDate(e.created_at)}
+                    {e.completed_at && ` · concluído em ${formatDate(e.completed_at)}`}
+                  </div>
+                </div>
+                {e.status === 'COMPLETED' ? (
+                  <Badge variant="green">+ {formatCurrency(e.referrer_reward)}</Badge>
+                ) : e.status === 'PENDING' ? (
+                  <Badge variant="amber">Pendente</Badge>
+                ) : (
+                  <Badge variant="gray">Expirado</Badge>
+                )}
               </div>
+              {e.status === 'PENDING' && (
+                <div className="mt-3 pl-[52px]">
+                  <div className="flex items-center justify-between text-[11px] text-slate2-500 mb-1">
+                    <span>{formatCurrency(e.qualifying_volume)} de {formatCurrency(data.threshold)} em serviços</span>
+                    <span className="font-semibold text-brand-700">{pct}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate2-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-brand-600" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )}
             </div>
-            {e.status === 'COMPLETED' ? (
-              <Badge variant="green">+ {formatCurrency(e.referrer_reward)}</Badge>
-            ) : e.status === 'PENDING' ? (
-              <Badge variant="amber">Pendente</Badge>
-            ) : (
-              <Badge variant="gray">Expirado</Badge>
-            )}
-          </div>
-        ))}
+          )
+        })}
       </Card>
     </div>
   )

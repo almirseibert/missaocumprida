@@ -6,6 +6,8 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
   elevation?: 0 | 1 | 2 | 3 | 4
   /** Remove a borda padrão. */
   noBorder?: boolean
+  /** Adiciona realce de borda + sombra ao passar o mouse (cards clicáveis). */
+  hoverable?: boolean
 }
 
 // Tokens de elevação definidos no tailwind.config.js (boxShadow: elv-1..4).
@@ -19,16 +21,18 @@ const elevations: Record<NonNullable<CardProps['elevation']>, string> = {
 
 export function Card({
   className,
-  elevation = 0,
+  elevation = 1,
   noBorder = false,
+  hoverable = false,
   ...props
 }: CardProps) {
   return (
     <div
       className={cn(
-        'bg-white rounded-2xl',
+        'bg-white rounded-2xl transition-all',
         !noBorder && 'border border-slate2-200',
         elevations[elevation],
+        hoverable && 'hover:border-brand-300 hover:shadow-brand-soft hover:-translate-y-0.5',
         className,
       )}
       {...props}

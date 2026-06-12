@@ -17,13 +17,13 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const variants: Record<BadgeVariant, string> = {
-  blue:    'bg-brand-100 text-brand-700',
+  blue:    'bg-brand-100 text-brand-800',
   green:   'bg-accent-100 text-accent-700',
   amber:   'bg-amber-100 text-amber-800',
-  red:     'bg-red-50 text-red-600',
-  gray:    'bg-slate2-100 text-slate2-600',
-  purple:  'bg-violet-100 text-violet-700',
-  fuchsia: 'bg-fuchsia-50 text-fuchsia-700',
+  red:     'bg-red-100 text-red-700',
+  gray:    'bg-slate2-100 text-slate2-700',
+  purple:  'bg-violet-100 text-violet-800',
+  fuchsia: 'bg-fuchsia-100 text-fuchsia-800',
 }
 
 const sizes = {

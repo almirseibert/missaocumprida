@@ -56,29 +56,34 @@ export function Navbar() {
 
   return (
     <>
-      <header className="glass-navbar sticky top-0 z-20">
+      <header className="bg-white/90 backdrop-blur-md border-b border-slate2-200 sticky top-0 z-20 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
           {/* Logo */}
-          <Link href="/home" className="flex items-center gap-2.5 flex-shrink-0 text-white">
+          <Link href="/home" className="flex items-center gap-2.5 flex-shrink-0 text-slate2-900">
             <Logo size={32} />
             <span className="font-display font-extrabold hidden sm:block">Missão Cumprida</span>
           </Link>
 
           {/* Nav desktop */}
           <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
-            {visibleItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'glass-nav-link',
-                  pathname.startsWith(item.href) && 'active',
-                )}
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </Link>
-            ))}
+            {visibleItems.map((item) => {
+              const active = pathname.startsWith(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    'inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors',
+                    active
+                      ? 'bg-brand-50 text-brand-700'
+                      : 'text-slate2-600 hover:bg-slate2-100 hover:text-slate2-900',
+                  )}
+                >
+                  <item.icon className="w-4 h-4" />
+                  {item.label}
+                </Link>
+              )
+            })}
           </nav>
 
           {/* Right: notification bell + user menu */}
@@ -87,11 +92,11 @@ export function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setNotifOpen(!notifOpen)}
-                className="relative p-2 rounded-full hover:bg-white/30 transition-colors"
+                className="relative p-2 rounded-full text-slate2-600 hover:bg-slate2-100 transition-colors"
               >
-                <Bell className="w-5 h-5 text-white" />
+                <Bell className="w-5 h-5" />
                 {unread > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center ring-2 ring-white">
                     {unread > 9 ? '9+' : unread}
                   </span>
                 )}
@@ -144,13 +149,13 @@ export function Navbar() {
               <div className="relative">
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="flex items-center gap-2 p-1.5 rounded-full hover:bg-white/30 transition-colors"
+                  className="flex items-center gap-2 p-1.5 rounded-full hover:bg-slate2-100 transition-colors"
                 >
                   <Avatar name={user.name} avatar={user.avatar} size="sm" />
-                  <span className="hidden sm:block text-sm font-medium text-white max-w-[120px] truncate">
+                  <span className="hidden sm:block text-sm font-semibold text-slate2-700 max-w-[120px] truncate">
                     {user.name.split(' ')[0]}
                   </span>
-                  <ChevronDown className="w-4 h-4 text-white/80 hidden sm:block" />
+                  <ChevronDown className="w-4 h-4 text-slate2-400 hidden sm:block" />
                 </button>
 
                 {dropdownOpen && (
@@ -261,10 +266,10 @@ export function Navbar() {
 
             {/* Mobile menu button */}
             <button
-              className="md:hidden p-2 rounded-full hover:bg-white/30 transition-colors"
+              className="md:hidden p-2 rounded-full text-slate2-700 hover:bg-slate2-100 transition-colors"
               onClick={() => setMobileOpen(!mobileOpen)}
             >
-              {mobileOpen ? <X className="w-5 h-5 text-white" /> : <Menu className="w-5 h-5 text-white" />}
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
