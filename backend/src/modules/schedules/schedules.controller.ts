@@ -4,6 +4,7 @@ import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { sendToUser, PushChannel } from '../push/push.service'
+import { accrueReferralVolume } from '../referrals/referrals.service'
 
 const scheduleInclude = {
   order: {
@@ -196,6 +197,14 @@ export async function confirmByClient(req: Request, res: Response) {
   ]
 
   await prisma.$transaction(ops)
+
+  // Indicação: só conta o serviço para a meta do indicado quando o
+  // pagamento foi de fato liberado (receita real). Usa o valor contratado
+  // do serviço (sem a taxa de gateway). Best-effort: não bloqueia a resposta.
+  if (payment && payment.status === 'PAID') {
+    const serviceValue = schedule.order.final_price ?? schedule.order.client_total ?? 0
+    await accrueReferralVolume(schedule.client_id, schedule.order_id, serviceValue).catch(() => {})
+  }
 
   // Notify provider
   const paymentReleased = payment?.status === 'PAID'

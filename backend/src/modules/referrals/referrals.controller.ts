@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
-import { ensureReferralCode } from './referrals.service'
+import { ensureReferralCode, REFERRAL_THRESHOLD } from './referrals.service'
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
@@ -16,7 +16,7 @@ export async function getMyCode(req: Request, res: Response) {
       take: 20,
       select: {
         id: true, status: true, created_at: true, completed_at: true,
-        referrer_reward: true, referred_reward: true,
+        referrer_reward: true, referred_reward: true, qualifying_volume: true,
         referred: { select: { id: true, name: true, avatar: true } },
       },
     }),
@@ -39,6 +39,7 @@ export async function getMyCode(req: Request, res: Response) {
     share_url: `${FRONTEND_URL}/convite/${code}`,
     deep_link: `missaocumprida://convite/${code}`,
     credit_balance: user?.credit_balance ?? 0,
+    threshold: REFERRAL_THRESHOLD,
     stats: { pending, completed, total: pending + completed },
     events,
   })

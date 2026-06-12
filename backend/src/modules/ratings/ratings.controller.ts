@@ -2,7 +2,6 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
-import { maybeCompleteReferral } from '../referrals/referrals.service'
 import { notify } from '../push/push.service'
 
 const rateSchema = z.object({
@@ -60,8 +59,9 @@ export async function rateSchedule(req: Request, res: Response) {
   const ratingsCount = await prisma.rating.count({ where: { schedule_id: schedule.id } })
   if (ratingsCount >= 2) {
     await prisma.order.update({ where: { id: schedule.order_id }, data: { status: 'RATED' } })
-    // Completa indicação pendente do cliente (se houver)
-    await maybeCompleteReferral(schedule.client_id, schedule.order_id).catch(() => {})
+    // A indicação não é mais disparada na avaliação: o volume do indicado é
+    // contabilizado quando o pagamento é liberado (ver confirmByClient →
+    // accrueReferralVolume).
   }
 
   // Notifica o avaliado

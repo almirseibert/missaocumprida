@@ -224,6 +224,9 @@ model ReferralEvent {
   status             ReferralStatus @default(PENDING)
   referrer_reward    Float          @default(30)
   referred_reward    Float          @default(20)
+  // Volume acumulado de serviços do indicado (GMV liberado). Os bônus só
+  // são pagos quando este valor cruza a meta (REFERRAL_THRESHOLD).
+  qualifying_volume  Float          @default(0)
   triggered_order_id String?
   created_at         DateTime       @default(now())
   completed_at       DateTime?
