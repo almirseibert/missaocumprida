@@ -79,7 +79,7 @@ export async function providerOverview(req: Request, res: Response) {
   const paidPayments = await prisma.payment.findMany({
     where: {
       provider_id: req.userId,
-      status: { in: ['PAID', 'RELEASED'] },
+      status: { in: ['PAID', 'HELD', 'DISPUTED', 'RELEASED'] },
       paid_at: { gte: from },
     },
     select: { provider_amount: true },
@@ -133,7 +133,7 @@ export async function providerEarningsTimeseries(req: Request, res: Response) {
   const payments = await prisma.payment.findMany({
     where: {
       provider_id: req.userId,
-      status: { in: ['PAID', 'RELEASED'] },
+      status: { in: ['PAID', 'HELD', 'DISPUTED', 'RELEASED'] },
       paid_at: { gte: from },
     },
     select: { paid_at: true, provider_amount: true },
@@ -230,4 +230,92 @@ export async function providerRecent(req: Request, res: Response) {
     },
   })
   return R.ok(res, schedules)
+}
+
+// ============================================================
+// GET /api/analytics/admin/overview?period=30d  (ADMIN)
+// Visão geral da plataforma: financeiro, transações, usuários e pedidos.
+// ============================================================
+export async function adminOverview(req: Request, res: Response) {
+  const { from, key } = periodFromQuery(req)
+  const cacheKey = `admin:overview:${key}`
+  const cached = cacheGet(cacheKey)
+  if (cached) return R.ok(res, cached)
+
+  const [
+    collected, held, released, refunded, statusGroups,
+    providerBalance, withdrawalsPending, withdrawalsPaid,
+    usersTotal, usersNew, usersByRole, verified,
+    ordersTotal, ordersByStatus, disputesOpen,
+  ] = await Promise.all([
+    prisma.payment.aggregate({
+      // Status que representam dinheiro efetivamente coletado do cliente
+      where: { status: { in: ['PAID', 'HELD', 'DISPUTED', 'RELEASED'] }, paid_at: { gte: from } },
+      _sum: { amount: true, platform_fee: true, gateway_fee: true, provider_amount: true },
+      _count: true,
+    }),
+    prisma.payment.aggregate({
+      where: { status: { in: ['HELD', 'DISPUTED'] } },
+      _sum: { provider_amount: true }, _count: true,
+    }),
+    prisma.payment.aggregate({
+      where: { status: 'RELEASED', released_at: { gte: from } },
+      _sum: { provider_amount: true }, _count: true,
+    }),
+    prisma.payment.aggregate({
+      where: { status: 'REFUNDED', updated_at: { gte: from } },
+      _sum: { amount: true }, _count: true,
+    }),
+    prisma.payment.groupBy({ by: ['status'], _count: { _all: true }, _sum: { amount: true } }),
+    prisma.user.aggregate({ _sum: { provider_balance: true } }),
+    prisma.providerWithdrawal.aggregate({ where: { status: 'REQUESTED' }, _sum: { amount: true }, _count: true }),
+    prisma.providerWithdrawal.aggregate({ where: { status: 'PAID', processed_at: { gte: from } }, _sum: { amount: true }, _count: true }),
+    prisma.user.count(),
+    prisma.user.count({ where: { created_at: { gte: from } } }),
+    prisma.user.groupBy({ by: ['role'], _count: { _all: true } }),
+    prisma.user.count({ where: { OR: [{ document_verified: true }, { is_verified_pro: true }] } }),
+    prisma.order.count({ where: { created_at: { gte: from } } }),
+    prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
+    prisma.payment.count({ where: { status: 'DISPUTED' } }),
+  ])
+
+  const r2 = (n: number | null | undefined) => Math.round((n ?? 0) * 100) / 100
+
+  const result = {
+    period: key,
+    financeiro: {
+      gmv: r2(collected._sum?.amount),                       // volume bruto transacionado (período)
+      platform_revenue: r2(collected._sum?.platform_fee),    // receita da plataforma (taxas)
+      gateway_fees: r2(collected._sum?.gateway_fee),         // custo de gateway repassado
+      provider_volume: r2(collected._sum?.provider_amount),  // total destinado a prestadores
+      transactions: collected._count,
+      held_amount: r2(held._sum?.provider_amount),           // em garantia agora (Segurança de Transação)
+      held_count: held._count,
+      released_amount: r2(released._sum?.provider_amount),    // liberado a prestadores (período)
+      released_count: released._count,
+      refunded_amount: r2(refunded._sum?.amount),
+      refunded_count: refunded._count,
+      provider_available_balance: r2(providerBalance._sum?.provider_balance), // saldo sacável total
+      withdrawals_pending_amount: r2(withdrawalsPending._sum?.amount),
+      withdrawals_pending_count: withdrawalsPending._count,
+      withdrawals_paid_amount: r2(withdrawalsPaid._sum?.amount),
+      disputes_open: disputesOpen,
+    },
+    payments_by_status: statusGroups.map((s) => ({
+      status: s.status, count: s._count._all, amount: r2(s._sum.amount),
+    })),
+    usuarios: {
+      total: usersTotal,
+      novos: usersNew,
+      verificados: verified,
+      por_role: usersByRole.map((u) => ({ role: u.role, count: u._count._all })),
+    },
+    pedidos: {
+      total_periodo: ordersTotal,
+      por_status: ordersByStatus.map((o) => ({ status: o.status, count: o._count._all })),
+    },
+  }
+
+  cacheSet(cacheKey, result)
+  return R.ok(res, result)
 }

@@ -7,6 +7,7 @@ import { initRealtime } from './modules/realtime/realtime'
 import { generateUpcomingOccurrences } from './modules/subscriptions/subscriptions.service'
 import { runCrossSellPushSweep } from './modules/recommendations/crossSellPush.service'
 import { runUrgencySla } from './modules/urgency/urgency.service'
+import { releaseEligiblePayments } from './modules/payments/payments.service'
 import { withCronLock } from './utils/cronLock'
 
 async function start() {
@@ -40,6 +41,21 @@ async function start() {
         })
       } catch (err) {
         console.error('[cron][urgency] erro:', err)
+      }
+    })
+
+    // Cron diário às 03h: Segurança de Transação — libera pagamentos já
+    // aprovados pelo admin cuja janela de garantia (7 dias) terminou.
+    cron.schedule('0 3 * * *', async () => {
+      try {
+        await withCronLock('release-held-payments', async () => {
+          const result = await releaseEligiblePayments()
+          if (result.released > 0) {
+            console.log(`[cron][seguranca-transacao] liberados ${result.released} pagamento(s)`)
+          }
+        })
+      } catch (err) {
+        console.error('[cron][seguranca-transacao] erro:', err)
       }
     })
 

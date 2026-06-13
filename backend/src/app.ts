@@ -1,8 +1,8 @@
 import express from 'express'
-import cors from 'cors'
 import path from 'path'
 import { env } from './config/env'
 import { errorHandler } from './middlewares/errorHandler'
+import { corsMiddleware, helmetMiddleware, apiLimiter, authLimiter } from './middlewares/security'
 
 // Routers
 import authRoutes from './modules/auth/auth.routes'
@@ -40,7 +40,9 @@ app.set('trust proxy', true)
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), webhookRouter)
 
 // ---- Middlewares globais ----
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] }))
+app.use(helmetMiddleware)
+app.use(corsMiddleware)
+app.use(apiLimiter)
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
@@ -58,7 +60,7 @@ app.get('/health', (_req, res) => {
 })
 
 // ---- Rotas da API ----
-app.use('/api/auth', authRoutes)
+app.use('/api/auth', authLimiter, authRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/users', ratingsRoutes)                              // GET /api/users/:userId/ratings
 app.use('/api/categories', categoriesRoutes)

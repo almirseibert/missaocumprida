@@ -1,9 +1,10 @@
 import { Request, Response } from 'express'
 import { prisma } from '../../config/database'
+import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { sendToUser, PushChannel } from '../push/push.service'
-import { accrueReferralVolume } from '../referrals/referrals.service'
 import { persistUpload } from '../files/files.service'
+import { computeHoldUntil } from '../payments/payments.service'
 
 const scheduleInclude = {
   order: {
@@ -183,39 +184,45 @@ export async function confirmByClient(req: Request, res: Response) {
   if (schedule.status !== 'IN_PROGRESS') return R.badRequest(res, 'Confirmação não permitida neste estágio')
 
   const payment = schedule.order.payment
+
+  // Segurança de Transação: o valor pago NÃO é liberado na hora. Entra em
+  // garantia (HELD) por TRANSACTION_HOLD_DAYS dias e só vira saldo sacável do
+  // prestador após análise/aprovação de um admin. Isso preserva uma janela
+  // legal para reclamação e possível reembolso, mesmo com o aceite do cliente.
+  const now = new Date()
+  const holdUntil = computeHoldUntil(now)
+  const goesToHold = !!payment && payment.status === 'PAID'
+
   const ops = [
     prisma.schedule.update({ where: { id: schedule.id }, data: { status: 'DONE' } }),
     prisma.order.update({ where: { id: schedule.order_id }, data: { status: 'DONE' } }),
-    ...(payment && payment.status === 'PAID'
+    ...(goesToHold
       ? [
-          prisma.payment.update({ where: { id: payment.id }, data: { status: 'RELEASED', released_at: new Date() } }),
-          prisma.user.update({ where: { id: schedule.provider_id }, data: { provider_balance: { increment: payment.provider_amount } } }),
+          prisma.payment.update({
+            where: { id: payment!.id },
+            data: { status: 'HELD', confirmed_at: now, hold_until: holdUntil },
+          }),
         ]
       : []),
   ]
 
   await prisma.$transaction(ops)
 
-  // Indicação: só conta o serviço para a meta do indicado quando o
-  // pagamento foi de fato liberado (receita real). Usa o valor contratado
-  // do serviço (sem a taxa de gateway). Best-effort: não bloqueia a resposta.
-  if (payment && payment.status === 'PAID') {
-    const serviceValue = schedule.order.final_price ?? schedule.order.client_total ?? 0
-    await accrueReferralVolume(schedule.client_id, schedule.order_id, serviceValue).catch(() => {})
-  }
-
-  // Notify provider
-  const paymentReleased = payment?.status === 'PAID'
+  // Notify provider — valor em garantia (não liberado ainda)
   await notify(
     schedule.provider_id,
-    paymentReleased ? 'PAYMENT_RECEIVED' : 'SERVICE_CONFIRMED',
-    paymentReleased ? 'Pagamento liberado 💰' : 'Serviço confirmado pelo cliente',
-    paymentReleased
-      ? `R$ ${(payment?.provider_amount ?? 0).toFixed(2)} caíram no seu saldo. O cliente confirmou o serviço.`
+    'SERVICE_CONFIRMED',
+    'Serviço confirmado pelo cliente',
+    goesToHold
+      ? `R$ ${(payment?.provider_amount ?? 0).toFixed(2)} entraram em garantia (Segurança de Transação) e serão liberados após análise, em até ${env.TRANSACTION_HOLD_DAYS} dias.`
       : 'O cliente confirmou a conclusão do serviço.',
-    { schedule_id: schedule.id, payment_id: payment?.id },
-    paymentReleased ? 'payment' : 'schedule_update',
+    { schedule_id: schedule.id, payment_id: payment?.id, hold_until: goesToHold ? holdUntil.toISOString() : undefined },
+    'schedule_update',
   )
 
-  return R.ok(res, null, 'Serviço confirmado! O pagamento foi liberado ao prestador. Agora avalie o serviço.')
+  return R.ok(
+    res,
+    null,
+    `Serviço confirmado! O pagamento entrou em garantia (Segurança de Transação) e será liberado ao prestador após análise, em até ${env.TRANSACTION_HOLD_DAYS} dias. Agora avalie o serviço.`,
+  )
 }

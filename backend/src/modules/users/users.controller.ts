@@ -182,8 +182,8 @@ export async function submitVerification(req: Request, res: Response) {
     document_verification_status: 'PENDING',
     document_rejection_reason: null,
   }
-  data.document_photo_url = await persistUpload(req, docFile)
-  data.selfie_photo_url = await persistUpload(req, selfieFile)
+  data.document_photo_url = await persistUpload(req, docFile, { sensitive: true, ownerId: req.userId })
+  data.selfie_photo_url = await persistUpload(req, selfieFile, { sensitive: true, ownerId: req.userId })
 
   const user = await prisma.user.update({
     where: { id: req.userId },
@@ -423,4 +423,94 @@ export async function updateOnboarding(req: Request, res: Response) {
     select: { onboarding_state: true },
   })
   return R.ok(res, updated)
+}
+
+// ============================================================
+// ADMIN — gestão de usuários
+// ============================================================
+
+// GET /api/users/admin/list?search=&role=&status=active|suspended
+export async function adminListUsers(req: Request, res: Response) {
+  const search = req.query.search ? String(req.query.search).trim() : ''
+  const role = req.query.role ? String(req.query.role).toUpperCase() : ''
+  const status = req.query.status ? String(req.query.status) : ''
+
+  const where: Record<string, unknown> = {}
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } },
+      { cpf: { contains: search } },
+    ]
+  }
+  if (['CLIENT', 'PROVIDER', 'BOTH', 'ADMIN'].includes(role)) where.role = role
+  if (status === 'suspended') where.is_active = false
+  if (status === 'active') where.is_active = true
+
+  const users = await prisma.user.findMany({
+    where,
+    orderBy: { created_at: 'desc' },
+    take: 100,
+    select: {
+      id: true, name: true, email: true, phone: true, role: true, avatar: true,
+      is_active: true, suspended_until: true, no_show_count: true,
+      document_verification_status: true, document_verified: true, is_verified_pro: true,
+      provider_balance: true, rating_avg: true, rating_count: true,
+      address_city: true, address_state: true, created_at: true,
+    },
+  })
+  return R.ok(res, users)
+}
+
+// GET /api/users/admin/users/:id — detalhe + contadores
+export async function adminGetUser(req: Request, res: Response) {
+  const user = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true, name: true, email: true, phone: true, role: true, avatar: true, bio: true,
+      cpf: true, is_active: true, suspended_until: true, no_show_count: true,
+      document_verification_status: true, document_verified: true, document_rejection_reason: true,
+      is_verified_pro: true, provider_balance: true, credit_balance: true,
+      rating_avg: true, rating_count: true,
+      address_city: true, address_state: true, address_neighborhood: true,
+      created_at: true,
+      _count: {
+        select: {
+          orders_as_client: true, proposals: true,
+          schedules_provider: true, schedules_client: true,
+          payments_provider: true, withdrawals: true,
+        },
+      },
+    },
+  })
+  if (!user) return R.notFound(res, 'Usuário não encontrado')
+  return R.ok(res, user)
+}
+
+// PATCH /api/users/admin/users/:id/suspend  body: { until?, reason? }
+export async function adminSuspendUser(req: Request, res: Response) {
+  if (req.params.id === req.userId) return R.badRequest(res, 'Você não pode suspender a própria conta.')
+  const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, role: true } })
+  if (!target) return R.notFound(res, 'Usuário não encontrado')
+  if (target.role === 'ADMIN') return R.badRequest(res, 'Não é possível suspender outro administrador.')
+
+  const until = req.body?.until ? new Date(req.body.until) : null
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { is_active: false, suspended_until: until },
+    select: { id: true, is_active: true, suspended_until: true },
+  })
+  return R.ok(res, user, 'Usuário suspenso')
+}
+
+// PATCH /api/users/admin/users/:id/reactivate
+export async function adminReactivateUser(req: Request, res: Response) {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } })
+  if (!target) return R.notFound(res, 'Usuário não encontrado')
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { is_active: true, suspended_until: null },
+    select: { id: true, is_active: true, suspended_until: true },
+  })
+  return R.ok(res, user, 'Usuário reativado')
 }

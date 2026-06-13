@@ -376,3 +376,73 @@ export async function cancelOrder(req: Request, res: Response) {
   await prisma.order.update({ where: { id: req.params.id }, data: { status: 'CANCELLED' } })
   return R.ok(res, null, 'Pedido cancelado')
 }
+
+// ============================================================
+// ADMIN — acompanhamento e intervenção em pedidos
+// ============================================================
+
+// GET /api/orders/admin/list?status=&search=
+export async function adminListOrders(req: Request, res: Response) {
+  const status = req.query.status ? String(req.query.status).toUpperCase() : ''
+  const search = req.query.search ? String(req.query.search).trim() : ''
+
+  const where: Record<string, unknown> = {}
+  const STATUSES = ['OPEN', 'IN_PROPOSAL', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'DONE', 'RATED', 'CANCELLED', 'DISPUTED']
+  if (STATUSES.includes(status)) where.status = status
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { client: { name: { contains: search, mode: 'insensitive' } } },
+    ]
+  }
+
+  const orders = await prisma.order.findMany({
+    where,
+    orderBy: { created_at: 'desc' },
+    take: 100,
+    select: {
+      id: true, title: true, status: true, city: true, neighborhood: true,
+      final_price: true, client_total: true, is_urgent: true, created_at: true,
+      category: { select: { name: true, icon: true } },
+      client: { select: { id: true, name: true } },
+      schedule: {
+        select: {
+          id: true, status: true, scheduled_at: true,
+          provider: { select: { id: true, name: true } },
+        },
+      },
+      payment: { select: { status: true, amount: true, provider_amount: true } },
+      _count: { select: { proposals: true } },
+    },
+  })
+  return R.ok(res, orders)
+}
+
+// GET /api/orders/admin/orders/:id — detalhe completo
+export async function adminGetOrder(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: {
+      category: { select: { name: true, icon: true } },
+      client: { select: { id: true, name: true, email: true, phone: true } },
+      proposals: {
+        select: { id: true, value: true, status: true, message: true, provider: { select: { id: true, name: true } } },
+      },
+      schedule: { include: { provider: { select: { id: true, name: true, phone: true } } } },
+      payment: true,
+    },
+  })
+  if (!order) return R.notFound(res, 'Pedido não encontrado')
+  return R.ok(res, order)
+}
+
+// PATCH /api/orders/admin/orders/:id/cancel — intervenção do admin
+export async function adminCancelOrder(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } })
+  if (!order) return R.notFound(res, 'Pedido não encontrado')
+  if (['DONE', 'RATED', 'CANCELLED'].includes(order.status)) {
+    return R.badRequest(res, `Pedido já está ${order.status} e não pode ser cancelado.`)
+  }
+  await prisma.order.update({ where: { id: req.params.id }, data: { status: 'CANCELLED' } })
+  return R.ok(res, null, 'Pedido cancelado pelo admin')
+}

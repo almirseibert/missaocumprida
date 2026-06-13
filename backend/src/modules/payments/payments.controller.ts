@@ -7,6 +7,8 @@ import * as R from '../../utils/response'
 import { stripe } from './stripe'
 import { mpPayment } from './mercadopago'
 import { consumeCredit } from '../referrals/referrals.service'
+import { releasePayment } from './payments.service'
+import { notify } from '../push/push.service'
 
 async function pixToQrBase64(pixCode: string): Promise<string> {
   return QRCode.toDataURL(pixCode).then(url => url.replace('data:image/png;base64,', ''))
@@ -447,6 +449,21 @@ export async function getMyBalance(req: Request, res: Response) {
     _sum: { provider_amount: true },
   })
 
+  // Segurança de Transação: valores ainda em garantia (não sacáveis)
+  const held = await prisma.payment.aggregate({
+    where: { provider_id: req.userId, status: { in: ['HELD', 'DISPUTED'] } },
+    _sum: { provider_amount: true },
+  })
+  const heldPayments = await prisma.payment.findMany({
+    where: { provider_id: req.userId, status: { in: ['HELD', 'DISPUTED'] } },
+    select: {
+      id: true, provider_amount: true, status: true, confirmed_at: true,
+      hold_until: true, admin_approved_at: true,
+      order: { select: { id: true, title: true } },
+    },
+    orderBy: { hold_until: 'asc' },
+  })
+
   const withdrawals = await prisma.providerWithdrawal.findMany({
     where: { provider_id: req.userId },
     orderBy: { created_at: 'desc' },
@@ -455,6 +472,8 @@ export async function getMyBalance(req: Request, res: Response) {
 
   return R.ok(res, {
     available_balance: user.provider_balance,
+    held_balance: held._sum.provider_amount ?? 0,
+    held_transactions: heldPayments,
     pix_key: user.pix_key,
     pix_key_type: user.pix_key_type,
     total_released: pending._sum.provider_amount ?? 0,
@@ -566,4 +585,198 @@ export async function updatePixKey(req: Request, res: Response) {
     select: { id: true, pix_key: true, pix_key_type: true },
   })
   return R.ok(res, user, 'Chave PIX atualizada')
+}
+
+// ===========================================================================
+// SEGURANÇA DE TRANSAÇÃO — painel admin de revisão de pagamentos em garantia
+// ===========================================================================
+
+// Dados completos de uma transação para o admin analisar (fotos, GPS, valores).
+const adminTxInclude = {
+  order: {
+    select: {
+      id: true, title: true, description: true, photos: true,
+      city: true, neighborhood: true, address: true,
+      final_price: true, client_total: true,
+      category: { select: { name: true, icon: true } },
+      schedule: {
+        select: {
+          id: true, scheduled_at: true,
+          checkin_at: true, checkin_photo_url: true, checkin_address: true,
+          checkin_lat: true, checkin_lng: true,
+          done_at: true, complete_photo_url: true, complete_address: true,
+          complete_lat: true, complete_lng: true, duration_minutes: true,
+        },
+      },
+    },
+  },
+  client: { select: { id: true, name: true, email: true, phone: true } },
+  provider: { select: { id: true, name: true, email: true, phone: true, pix_key: true, pix_key_type: true } },
+} as const
+
+// ---------------------------------------------------------------------------
+// GET /api/payments/admin/transactions?status=HELD — lista para análise
+// ---------------------------------------------------------------------------
+export async function adminListTransactions(req: Request, res: Response) {
+  const status = String(req.query.status ?? 'HELD').toUpperCase()
+  const allowed = ['HELD', 'DISPUTED', 'RELEASED', 'REFUNDED', 'PAID']
+  if (!allowed.includes(status)) return R.badRequest(res, `status inválido. Use: ${allowed.join(', ')}`)
+
+  const payments = await prisma.payment.findMany({
+    where: { status: status as never },
+    include: adminTxInclude,
+    orderBy: { confirmed_at: 'asc' },
+  })
+
+  const now = Date.now()
+  const data = payments.map((p) => ({
+    ...p,
+    // Elegível para liberar = aprovado pelo admin E janela de garantia encerrada
+    release_eligible: !!p.admin_approved_at && !!p.hold_until && p.hold_until.getTime() <= now,
+    days_remaining: p.hold_until
+      ? Math.max(0, Math.ceil((p.hold_until.getTime() - now) / (24 * 60 * 60 * 1000)))
+      : null,
+  }))
+  return R.ok(res, data)
+}
+
+const reviewSchema = z.object({ notes: z.string().max(1000).optional() })
+
+// ---------------------------------------------------------------------------
+// POST /api/payments/admin/transactions/:id/approve — aprova a liberação
+// Libera na hora se a janela de 7 dias já passou; senão, agenda (o cron libera).
+// ---------------------------------------------------------------------------
+export async function adminApproveTransaction(req: Request, res: Response) {
+  const parsed = reviewSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+
+  const payment = await prisma.payment.findUnique({ where: { id: req.params.id } })
+  if (!payment) return R.notFound(res, 'Transação não encontrada')
+  if (!['HELD', 'DISPUTED'].includes(payment.status)) {
+    return R.badRequest(res, `Transação não está em garantia (status atual: ${payment.status})`)
+  }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      status: 'HELD', // sai de DISPUTED de volta para HELD ao aprovar
+      admin_approved_at: new Date(),
+      admin_reviewer_id: req.userId,
+      review_notes: parsed.data.notes ?? payment.review_notes,
+    },
+  })
+
+  const now = new Date()
+  // Se a janela já terminou (ou, por segurança, se hold_until estiver ausente),
+  // libera na hora. Caso contrário, o cron libera ao fim do prazo.
+  const windowPassed = !payment.hold_until || payment.hold_until.getTime() <= now.getTime()
+
+  if (windowPassed) {
+    await releasePayment({
+      id: payment.id,
+      order_id: payment.order_id,
+      provider_id: payment.provider_id,
+      client_id: payment.client_id,
+      provider_amount: payment.provider_amount,
+    })
+    return R.ok(res, { released: true }, 'Transação aprovada e pagamento liberado ao prestador.')
+  }
+
+  return R.ok(
+    res,
+    { released: false, hold_until: payment.hold_until },
+    'Transação aprovada. O pagamento será liberado automaticamente ao fim da janela de garantia.',
+  )
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/payments/admin/transactions/:id/dispute — segura por análise
+// ---------------------------------------------------------------------------
+export async function adminDisputeTransaction(req: Request, res: Response) {
+  const parsed = reviewSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+
+  const payment = await prisma.payment.findUnique({ where: { id: req.params.id } })
+  if (!payment) return R.notFound(res, 'Transação não encontrada')
+  if (!['HELD', 'DISPUTED'].includes(payment.status)) {
+    return R.badRequest(res, `Só é possível disputar transações em garantia (status atual: ${payment.status})`)
+  }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      status: 'DISPUTED',
+      admin_approved_at: null, // remove aprovação: não pode ser liberada pelo cron
+      admin_reviewer_id: req.userId,
+      review_notes: parsed.data.notes ?? payment.review_notes,
+    },
+  })
+
+  await notify(payment.provider_id, {
+    type: 'GENERAL',
+    title: 'Pagamento em análise',
+    body: 'Um pagamento do seu serviço está em análise pela equipe. Em breve daremos um retorno.',
+    data: { payment_id: payment.id, order_id: payment.order_id },
+    channel: 'schedule_update',
+  }).catch(() => {})
+
+  return R.ok(res, null, 'Transação marcada como em disputa/análise.')
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/payments/admin/transactions/:id/refund — marca reembolso
+// O estorno financeiro é feito manualmente no painel do Mercado Pago/Stripe;
+// aqui apenas registramos o status para o prestador não receber.
+// ---------------------------------------------------------------------------
+export async function adminRefundTransaction(req: Request, res: Response) {
+  const parsed = reviewSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+
+  const payment = await prisma.payment.findUnique({ where: { id: req.params.id } })
+  if (!payment) return R.notFound(res, 'Transação não encontrada')
+  if (payment.status === 'REFUNDED') return R.badRequest(res, 'Transação já reembolsada')
+  if (payment.status === 'RELEASED') {
+    return R.badRequest(res, 'Pagamento já liberado ao prestador; reembolso exige estorno de saldo manual.')
+  }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      status: 'REFUNDED',
+      admin_approved_at: null,
+      admin_reviewer_id: req.userId,
+      review_notes: parsed.data.notes ?? payment.review_notes,
+    },
+  })
+
+  await notify(payment.client_id, {
+    type: 'GENERAL',
+    title: 'Reembolso em processamento',
+    body: 'Seu reembolso foi aprovado e está sendo processado. O valor retornará pela mesma forma de pagamento.',
+    data: { payment_id: payment.id, order_id: payment.order_id },
+    channel: 'payment',
+  }).catch(() => {})
+
+  return R.ok(res, null, 'Transação marcada como reembolsada. Faça o estorno no painel do gateway (Mercado Pago/Stripe).')
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/payments/admin/withdrawals?status=REQUESTED — saques (todos)
+// ---------------------------------------------------------------------------
+export async function adminListWithdrawals(req: Request, res: Response) {
+  const status = req.query.status ? String(req.query.status).toUpperCase() : undefined
+  const allowed = ['REQUESTED', 'PROCESSING', 'PAID', 'REJECTED']
+  if (status && !allowed.includes(status)) {
+    return R.badRequest(res, `status inválido. Use: ${allowed.join(', ')}`)
+  }
+
+  const withdrawals = await prisma.providerWithdrawal.findMany({
+    where: status ? { status: status as never } : undefined,
+    include: {
+      provider: { select: { id: true, name: true, email: true, phone: true } },
+    },
+    orderBy: { created_at: 'desc' },
+    take: 200,
+  })
+  return R.ok(res, withdrawals)
 }

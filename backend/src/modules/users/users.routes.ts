@@ -6,6 +6,7 @@ import {
   addSkill, listSkills, removeSkill,
   submitVerification, getVerificationStatus, reviewVerification,
   adminListVerifications, updateOnboarding,
+  adminListUsers, adminGetUser, adminSuspendUser, adminReactivateUser,
 } from './users.controller'
 
 const router = Router()
@@ -29,6 +30,10 @@ router.post(
 router.get('/me/verification', authenticate, getVerificationStatus)
 router.put('/me/onboarding', authenticate, updateOnboarding)
 router.get('/admin/verifications', authenticate, requireRole('ADMIN'), adminListVerifications)
+router.get('/admin/list', authenticate, requireRole('ADMIN'), adminListUsers)
+router.get('/admin/users/:id', authenticate, requireRole('ADMIN'), adminGetUser)
+router.patch('/admin/users/:id/suspend', authenticate, requireRole('ADMIN'), adminSuspendUser)
+router.patch('/admin/users/:id/reactivate', authenticate, requireRole('ADMIN'), adminReactivateUser)
 router.put('/:id/verification/review', authenticate, requireRole('ADMIN'), reviewVerification)
 router.get('/:id', getPublicProfile)
 

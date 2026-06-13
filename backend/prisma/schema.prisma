@@ -63,9 +63,11 @@ enum ReviewerRole {
 enum PaymentStatus {
   PENDING
   PAID
+  HELD // Segurança de Transação: cliente confirmou, valor em garantia aguardando análise/liberação
   RELEASED
   REFUNDED
   FAILED
+  DISPUTED // admin segurou por reclamação/análise dentro da janela de garantia
 }
 
 enum WithdrawalStatus {
@@ -595,6 +597,12 @@ model Payment {
   status                PaymentStatus @default(PENDING)
   paid_at               DateTime?
   released_at           DateTime?
+  // ---- Segurança de Transação (retenção pós-confirmação do cliente) ----
+  confirmed_at          DateTime? // quando o cliente confirmou o serviço (início da janela de garantia)
+  hold_until            DateTime? // fim do prazo mínimo de retenção (confirmed_at + TRANSACTION_HOLD_DAYS)
+  admin_approved_at     DateTime? // quando um admin aprovou a liberação ao prestador
+  admin_reviewer_id     String? // id do admin que revisou (sem relação FK, apenas auditoria)
+  review_notes          String? // observações da análise (aprovação/disputa/reembolso)
   created_at            DateTime      @default(now())
   updated_at            DateTime      @updatedAt
 
@@ -874,6 +882,11 @@ model FileAsset {
   mime_type  String
   size       Int
   data       Bytes
+  // ---- Controle de acesso ----
+  // sensitive=true (documentos KYC, selfies): só o dono ou um ADMIN podem baixar.
+  // sensitive=false (avatar, fotos de pedido/serviço): público (carrega em <img>).
+  sensitive  Boolean  @default(false)
+  owner_id   String? // dono do arquivo, para autorização de itens sensíveis
   created_at DateTime @default(now())
 
   @@map("file_assets")

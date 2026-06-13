@@ -3,11 +3,17 @@ import { authenticate, requireRole } from '../../middlewares/auth'
 import {
   providerOverview, providerEarningsTimeseries,
   providerCategoriesPerformance, providerRecent,
+  adminOverview,
 } from './analytics.controller'
 
 const router = Router()
 
 router.use(authenticate)
+
+// Visão geral da plataforma — somente ADMIN
+router.get('/admin/overview', requireRole('ADMIN'), adminOverview)
+
+// Analytics do prestador
 router.use(requireRole('PROVIDER', 'BOTH', 'ADMIN'))
 
 router.get('/provider/overview', providerOverview)
