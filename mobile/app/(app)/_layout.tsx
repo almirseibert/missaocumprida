@@ -1,10 +1,9 @@
 import { Tabs, router } from 'expo-router'
 import { useEffect } from 'react'
 import { View } from 'react-native'
-import { Home, ListOrdered, Calendar, User, Briefcase } from 'lucide-react-native'
 import { useAuthStore } from '../../src/store/auth'
 import { TermsModal } from '../../src/components/TermsModal'
-import { GlassBottomNav } from '../../src/components/GlassBottomNav'
+import { TopNav } from '../../src/components/TopNav'
 import {
   configureNotifications,
   startNotificationPolling,
@@ -50,58 +49,47 @@ export default function AppLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-    <Tabs
-      tabBar={(props) => <GlassBottomNav {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Início',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="meus-pedidos"
-        options={{
-          title: 'Pedidos',
-          tabBarIcon: ({ color, size }) => <ListOrdered color={color} size={size} />,
-          href: isClient ? undefined : null,
-        }}
-      />
-      <Tabs.Screen
-        name="feed"
-        options={{
-          title: 'Feed',
-          tabBarIcon: ({ color, size }) => <Briefcase color={color} size={size} />,
-          href: isProvider ? undefined : null,
-        }}
-      />
-      <Tabs.Screen
-        name="agendamentos"
-        options={{
-          title: 'Agenda',
-          tabBarIcon: ({ color, size }) => <Calendar color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="perfil"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
-        }}
-      />
-      {/* Telas sem tab */}
-      <Tabs.Screen name="pedido/[id]" options={{ href: null }} />
-      <Tabs.Screen name="pedido/novo/[slug]" options={{ href: null }} />
-      <Tabs.Screen name="agendamento/[id]" options={{ href: null }} />
-      <Tabs.Screen name="carteira" options={{ href: null }} />
-      <Tabs.Screen name="verificacao" options={{ href: null }} />
-      <Tabs.Screen name="pagamento/[orderId]" options={{ href: null }} />
-      <Tabs.Screen name="suporte/index" options={{ href: null }} />
-      <Tabs.Screen name="suporte/[id]" options={{ href: null }} />
-    </Tabs>
-    <TermsModal />
+      {/* Menu no topo da tela — TopNav decide sozinho quando aparecer */}
+      <TopNav />
+      <Tabs
+        tabBar={() => null}
+        screenOptions={{ headerShown: false }}
+      >
+        {/* ── Abas visíveis (whitelist espelhada no TopNav) ── */}
+        <Tabs.Screen name="home" options={{ title: 'Início' }} />
+        <Tabs.Screen
+          name="meus-pedidos"
+          options={{ title: 'Pedidos', href: isClient ? undefined : null }}
+        />
+        <Tabs.Screen
+          name="feed"
+          options={{ title: 'Feed', href: isProvider ? undefined : null }}
+        />
+        <Tabs.Screen name="agendamentos" options={{ title: 'Agenda' }} />
+        <Tabs.Screen name="perfil" options={{ title: 'Perfil' }} />
+
+        {/* ── Telas sem aba — TODA tela nova em (app)/ deve entrar aqui ── */}
+        <Tabs.Screen name="pedido/[id]" options={{ href: null }} />
+        <Tabs.Screen name="pedido/novo/[slug]" options={{ href: null }} />
+        <Tabs.Screen name="agendamento/[id]" options={{ href: null }} />
+        <Tabs.Screen name="carteira" options={{ href: null }} />
+        <Tabs.Screen name="verificacao" options={{ href: null }} />
+        <Tabs.Screen name="pagamento/[orderId]" options={{ href: null }} />
+        <Tabs.Screen name="suporte/index" options={{ href: null }} />
+        <Tabs.Screen name="suporte/[id]" options={{ href: null }} />
+        <Tabs.Screen name="dashboard" options={{ href: null }} />
+        <Tabs.Screen name="minhas-propostas" options={{ href: null }} />
+        <Tabs.Screen name="assinaturas" options={{ href: null }} />
+        <Tabs.Screen name="assinatura-nova" options={{ href: null }} />
+        <Tabs.Screen name="agenda-config" options={{ href: null }} />
+        <Tabs.Screen name="notificacoes-config" options={{ href: null }} />
+        <Tabs.Screen name="indicar" options={{ href: null }} />
+        <Tabs.Screen name="pacotes/index" options={{ href: null }} />
+        <Tabs.Screen name="pacotes/[id]" options={{ href: null }} />
+        <Tabs.Screen name="perfil-pacotes" options={{ href: null }} />
+        <Tabs.Screen name="verificar-pro" options={{ href: null }} />
+      </Tabs>
+      <TermsModal />
     </View>
   )
 }

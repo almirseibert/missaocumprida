@@ -861,6 +861,24 @@ model SupportTicketMessage {
   @@map("support_ticket_messages")
 }
 
+// ============================================================
+// ARQUIVOS / IMAGENS (armazenados no banco — BYTEA)
+// ============================================================
+// Substitui o armazenamento em disco (./uploads). Cada imagem enviada
+// (avatar, documentos, fotos de pedido, check-in/conclusão) vira uma linha
+// aqui e é servida por GET /api/files/:id. Isso garante persistência entre
+// redeploys e elimina URLs apontando para localhost.
+
+model FileAsset {
+  id         String   @id @default(uuid())
+  mime_type  String
+  size       Int
+  data       Bytes
+  created_at DateTime @default(now())
+
+  @@map("file_assets")
+}
+
 model CategoryAffinity {
   id              String   @id @default(uuid())
   source_category String

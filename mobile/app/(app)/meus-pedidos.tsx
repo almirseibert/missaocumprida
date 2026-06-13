@@ -31,7 +31,7 @@ export default function MeusPedidosScreen() {
   if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-slate2-50" edges={['bottom']}>
       <View className="px-5 pt-6 pb-4">
         <Text className="font-display-extrabold text-2xl text-slate2-900">
           Meus Pedidos

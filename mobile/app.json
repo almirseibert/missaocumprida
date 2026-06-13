@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "missaocumprida",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1D4ED8"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.missaocumprida.app"
@@ -23,14 +18,6 @@
       },
       "package": "com.missaocumprida.app",
       "permissions": [
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE",
-        "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.CAMERA",
@@ -50,6 +37,14 @@
       "expo-router",
       "expo-font",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#1D4ED8"
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Missão Cumprida precisa da sua localização para encontrar prestadores próximos."
@@ -65,10 +60,7 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#1D4ED8",
-          "sounds": [
-            "./assets/notification.wav"
-          ]
+          "color": "#1D4ED8"
         }
       ]
     ],

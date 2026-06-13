@@ -28,8 +28,13 @@ import verificationRoutes from './modules/verification/verification.routes'
 import recommendationsRoutes from './modules/recommendations/recommendations.routes'
 import legalRoutes from './modules/legal/legal.routes'
 import supportRoutes from './modules/support/support.routes'
+import filesRoutes from './modules/files/files.routes'
 
 const app = express()
+
+// Atrás de proxy (EasyPanel/Traefik, Nginx...). Necessário para que
+// req.protocol/host reflitam o domínio público HTTPS real ao gerar URLs.
+app.set('trust proxy', true)
 
 // ---- Webhook Stripe — precisa de raw body ANTES do express.json() ----
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), webhookRouter)
@@ -39,7 +44,12 @@ app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] }
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-// ---- Arquivos estáticos (uploads) ----
+// ---- Imagens armazenadas no banco ----
+app.use('/api/files', filesRoutes)
+
+// ---- Arquivos estáticos legados (uploads em disco — compatibilidade) ----
+// Imagens novas vão para o banco (/api/files/:id). Mantido para servir
+// arquivos antigos que ainda existam em disco.
 app.use('/uploads', express.static(path.resolve(env.UPLOAD_DIR)))
 
 // ---- Health check ----

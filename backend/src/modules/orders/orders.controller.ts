@@ -3,9 +3,9 @@ import { z } from 'zod'
 import { prisma } from '../../config/database'
 import { estimatePriceDynamic } from '../../utils/priceEstimator'
 import { haversineDistance } from '../../utils/geo'
-import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { sendToUsers } from '../push/push.service'
+import { persistUpload } from '../files/files.service'
 
 const createOrderSchema = z.object({
   category_id: z.string().uuid(),
@@ -353,7 +353,8 @@ export async function uploadOrderPhotos(req: Request, res: Response) {
   if (order.client_id !== req.userId) return R.forbidden(res)
   if (!req.files || !Array.isArray(req.files)) return R.badRequest(res, 'Nenhuma foto enviada')
 
-  const urls = (req.files as Express.Multer.File[]).map(f => `${env.API_URL}/uploads/${f.filename}`)
+  const files = req.files as Express.Multer.File[]
+  const urls = await Promise.all(files.map((f) => persistUpload(req, f)))
   const updated = await prisma.order.update({
     where: { id: req.params.id },
     data: { photos: { push: urls } },

@@ -2,8 +2,8 @@ import { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
-import { env } from '../../config/env'
 import * as R from '../../utils/response'
+import { persistUpload } from '../files/files.service'
 
 export async function getMe(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
@@ -105,7 +105,7 @@ export async function updateMe(req: Request, res: Response) {
 
 export async function uploadAvatar(req: Request, res: Response) {
   if (!req.file) return R.badRequest(res, 'Nenhuma imagem enviada')
-  const url = `${env.API_URL}/uploads/${req.file.filename}`
+  const url = await persistUpload(req, req.file)
   await prisma.user.update({ where: { id: req.userId }, data: { avatar: url } })
   return R.ok(res, { avatar: url }, 'Foto de perfil atualizada')
 }
@@ -182,8 +182,8 @@ export async function submitVerification(req: Request, res: Response) {
     document_verification_status: 'PENDING',
     document_rejection_reason: null,
   }
-  if (docFile) data.document_photo_url = `${env.API_URL}/uploads/${docFile.filename}`
-  if (selfieFile) data.selfie_photo_url = `${env.API_URL}/uploads/${selfieFile.filename}`
+  data.document_photo_url = await persistUpload(req, docFile)
+  data.selfie_photo_url = await persistUpload(req, selfieFile)
 
   const user = await prisma.user.update({
     where: { id: req.userId },

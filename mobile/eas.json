@@ -20,7 +20,8 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://missaocumprida-back.oehpg2.easypanel.host"
+        "EXPO_PUBLIC_API_URL": "https://missaocumprida-back.oehpg2.easypanel.host",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     },
     "production": {

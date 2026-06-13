@@ -1,22 +1,11 @@
 import multer from 'multer'
-import path from 'path'
-import fs from 'fs'
 import { env } from '../config/env'
 
-const uploadDir = env.UPLOAD_DIR
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true })
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname)
-    const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
-    cb(null, name)
-  },
-})
+// Armazenamento em memória: o arquivo chega como Buffer (req.file.buffer)
+// e é persistido no banco (tabela file_assets) pelos controllers. Não usamos
+// mais disco — isso garante que as imagens sobrevivam a redeploys e que as
+// URLs nunca apontem para localhost.
+const storage = multer.memoryStorage()
 
 function fileFilter(_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
   const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']

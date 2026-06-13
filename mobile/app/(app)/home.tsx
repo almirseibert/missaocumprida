@@ -3,14 +3,12 @@ import {
   View, Text, FlatList, TouchableOpacity, ScrollView,
   TextInput, ActivityIndicator, RefreshControl,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
-import { Search, Bell, ChevronDown, ShieldCheck } from 'lucide-react-native'
+import { Search, ChevronDown, ShieldCheck } from 'lucide-react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../../src/lib/api'
 import { useAuthStore } from '../../src/store/auth'
 import { ServiceGroup, Category, Order, Schedule } from '../../src/types'
-import { Logo } from '../../src/components/Logo'
 import { formatCurrency, formatDate } from '../../src/lib/utils'
 import {
   CategoryCard, StatCell, OrderFeedCard,
@@ -36,7 +34,6 @@ function ClientHome() {
   const [groups, setGroups] = useState<ServiceGroup[]>([])
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null)
   const [recents, setRecents] = useState<RecentProvider[]>([])
-  const [unread, setUnread] = useState(0)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -58,10 +55,9 @@ function ClientHome() {
 
   async function load() {
     try {
-      const [groupsRes, schedRes, notifRes, recentsRes] = await Promise.all([
+      const [groupsRes, schedRes, recentsRes] = await Promise.all([
         api.get('/categories/groups'),
         api.get('/schedules').catch(() => ({ data: { data: [] } })),
-        api.get('/notifications').catch(() => ({ data: { data: { unread: 0 } } })),
         api.get('/recommendations/recent-providers').catch(() => ({ data: { data: [] } })),
       ])
       setGroups(groupsRes.data.data ?? [])
@@ -70,7 +66,6 @@ function ClientHome() {
         (s) => s.status === 'CONFIRMED' || s.status === 'IN_PROGRESS',
       )
       setActiveSchedule(upcoming ?? null)
-      setUnread(notifRes.data?.data?.unread ?? 0)
       setRecents(recentsRes.data?.data ?? [])
     } finally {
       setLoading(false)
@@ -87,25 +82,7 @@ function ClientHome() {
     : null
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['top']}>
-      {/* App header */}
-      <View className="bg-white px-4 py-3 flex-row items-center justify-between border-b border-slate2-100">
-        <View className="flex-row items-center gap-2">
-          <Logo size={28} />
-          <Text className="font-display-extrabold text-[15px] text-slate2-900">
-            Missão Cumprida
-          </Text>
-        </View>
-        <View className="w-9 h-9 rounded-[9px] bg-slate2-100 items-center justify-center relative">
-          <Bell size={18} color="#475569" />
-          {unread > 0 && (
-            <View className="absolute -top-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-red-600 border-2 border-white items-center justify-center">
-              <Text className="font-display-extrabold text-[8px] text-white">{unread > 9 ? '9+' : unread}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
+    <View className="flex-1 bg-slate2-50">
       <ScrollView
         contentContainerClassName="p-4 pb-8"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load() }} />}
@@ -266,7 +243,7 @@ function ClientHome() {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -323,25 +300,9 @@ function ProviderHome() {
   const rating = (user?.rating_avg ?? 0).toFixed(1)
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['top']}>
+    <View className="flex-1 bg-slate2-50">
       {/* Header brand-700 */}
-      <View className="bg-brand-700 px-4 pt-3.5 pb-4">
-        <View className="flex-row items-center justify-between mb-2.5">
-          <Logo size={26} />
-          <View className="flex-row items-center gap-1.5">
-            <View className="w-[26px] h-[26px] rounded-lg bg-white/15 items-center justify-center">
-              <Bell size={15} color="#fff" />
-            </View>
-            <View
-              className="w-[30px] h-[30px] rounded-full items-center justify-center"
-              style={{ backgroundColor: '#7C3AED' }}
-            >
-              <Text className="font-display-bold text-[11px] text-white">
-                {user?.name?.slice(0, 2).toUpperCase()}
-              </Text>
-            </View>
-          </View>
-        </View>
+      <View className="bg-brand-700 px-4 pt-4 pb-4">
         <Text className="font-display-extrabold text-[17px] text-white">
           Olá, {user?.name.split(' ')[0]}!
         </Text>
@@ -394,6 +355,6 @@ function ProviderHome() {
           </View>
         }
       />
-    </SafeAreaView>
+    </View>
   )
 }

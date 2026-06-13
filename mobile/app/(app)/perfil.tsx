@@ -134,7 +134,7 @@ export default function PerfilScreen() {
   const VerIcon = ver.Icon
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-slate2-50" edges={['bottom']}>
       <ScrollView
         contentContainerClassName="pb-10"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {

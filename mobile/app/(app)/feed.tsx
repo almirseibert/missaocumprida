@@ -62,7 +62,7 @@ export default function FeedScreen() {
   if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-slate2-50" edges={['bottom']}>
       <Modal visible={propostaVisible} transparent animationType="slide">
         <View className="flex-1 justify-end bg-black/40">
           <View className="bg-white rounded-t-2xl p-6 gap-4">

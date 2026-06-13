@@ -1,10 +1,9 @@
 import { Request, Response } from 'express'
-import path from 'path'
 import { prisma } from '../../config/database'
-import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { sendToUser, PushChannel } from '../push/push.service'
 import { accrueReferralVolume } from '../referrals/referrals.service'
+import { persistUpload } from '../files/files.service'
 
 const scheduleInclude = {
   order: {
@@ -34,11 +33,6 @@ async function notify(
     console.error('[notify] db error:', err)
   }
   await sendToUser(userId, { title, body, data: data as any, channel })
-}
-
-// Helper: build public URL for an uploaded file
-function fileUrl(filename: string) {
-  return `${env.API_URL}/uploads/${path.basename(filename)}`
 }
 
 // Statuses visible to the provider only after payment is confirmed
@@ -98,12 +92,14 @@ export async function checkin(req: Request, res: Response) {
   const lng = req.body.lng ? parseFloat(req.body.lng) : null
   const address = req.body.address ?? null
 
+  const photoUrl = await persistUpload(req, req.file)
+
   const updated = await prisma.schedule.update({
     where: { id: schedule.id },
     data: {
       status: 'IN_PROGRESS',
       checkin_at: new Date(),
-      checkin_photo_url: fileUrl(req.file.filename),
+      checkin_photo_url: photoUrl,
       checkin_lat: lat,
       checkin_lng: lng,
       checkin_address: address,
@@ -149,11 +145,13 @@ export async function completeByProvider(req: Request, res: Response) {
     }
   }
 
+  const photoUrl = await persistUpload(req, req.file)
+
   await prisma.schedule.update({
     where: { id: schedule.id },
     data: {
       done_at: new Date(),
-      complete_photo_url: fileUrl(req.file.filename),
+      complete_photo_url: photoUrl,
       complete_lat: lat,
       complete_lng: lng,
       complete_address: address,

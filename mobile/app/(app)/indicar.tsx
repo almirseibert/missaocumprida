@@ -23,6 +23,7 @@ interface MyCodeData {
   share_url: string
   deep_link: string
   credit_balance: number
+  threshold: number
   stats: { pending: number; completed: number; total: number }
   events: ReferralEvent[]
 }
@@ -43,7 +44,7 @@ export default function IndicarScreen() {
     if (!data) return
     try {
       await Share.share({
-        message: `Use meu código ${data.code} e ganhe R$ 20 no Missão Cumprida! ${data.share_url}`,
+        message: `Use meu código ${data.code} no Missão Cumprida e a gente ganha crédito junto! ${data.share_url}`,
         url: data.share_url,
       })
     } catch {}
@@ -82,7 +83,7 @@ export default function IndicarScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Text className="text-sm text-neutral-600 mb-4">
-          Compartilhe seu código. Para cada amigo que completar o 1º serviço, você ganha <Text className="font-bold">R$ 30</Text> e ele recebe <Text className="font-bold">R$ 20</Text> de desconto.
+          Compartilhe seu código. Quando seu amigo somar <Text className="font-bold">{formatCurrency(data.threshold)}</Text> em serviços contratados, você ganha <Text className="font-bold">{formatCurrency(data.events[0]?.referrer_reward ?? 30)}</Text> e ele <Text className="font-bold">{formatCurrency(data.events[0]?.referred_reward ?? 20)}</Text> de crédito.
         </Text>
 
         <View className="bg-emerald-50 rounded-2xl p-4 mb-3 flex-row items-center">
