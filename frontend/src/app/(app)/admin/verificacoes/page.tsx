@@ -8,6 +8,7 @@ import {
   RefreshCw, Eye, X as XIcon, MapPin, Phone, User as UserIcon, FileText, ArrowLeft,
 } from 'lucide-react'
 import { api, getApiErrorMessage } from '@/lib/api'
+import { authFileUrl } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -264,7 +265,7 @@ function UserRow({ user, onOpen }: { user: AdminUser; onOpen: () => void }) {
       <div className="w-12 h-12 rounded-full bg-slate2-100 overflow-hidden flex items-center justify-center flex-shrink-0">
         {user.selfie_photo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={user.selfie_photo_url} alt="" className="w-full h-full object-cover" />
+          <img src={authFileUrl(user.selfie_photo_url)} alt="" className="w-full h-full object-cover" />
         ) : (
           <UserIcon className="w-5 h-5 text-slate2-400" />
         )}
@@ -316,7 +317,7 @@ function UserDetails({
         <div className="w-14 h-14 rounded-full bg-slate2-100 overflow-hidden flex items-center justify-center flex-shrink-0">
           {user.selfie_photo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.selfie_photo_url} alt="" className="w-full h-full object-cover" />
+            <img src={authFileUrl(user.selfie_photo_url)} alt="" className="w-full h-full object-cover" />
           ) : (
             <UserIcon className="w-6 h-6 text-slate2-400" />
           )}
@@ -338,8 +339,8 @@ function UserDetails({
 
       {/* Documentos */}
       <div className="grid grid-cols-2 gap-3">
-        <PhotoTile label="Documento" url={user.document_photo_url} onClick={onView} />
-        <PhotoTile label="Selfie"     url={user.selfie_photo_url}   onClick={onView} />
+        <PhotoTile label="Documento" url={authFileUrl(user.document_photo_url)} onClick={onView} />
+        <PhotoTile label="Selfie"     url={authFileUrl(user.selfie_photo_url)}   onClick={onView} />
       </div>
 
       {/* Dados pessoais */}

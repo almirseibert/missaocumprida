@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Camera, FileCheck, Upload, ShieldCheck, AlertCircle, Loader2, Check, MapPinned, PhoneCall, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api, getApiErrorMessage } from '@/lib/api'
+import { authFileUrl } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -309,7 +310,7 @@ export default function VerificacaoPage() {
         >
           <UploadCard
             preview={docPreview}
-            existingUrl={!docPreview && (isPending || isRejected) ? status.document_photo_url : null}
+            existingUrl={!docPreview && (isPending || isRejected) ? (authFileUrl(status.document_photo_url) ?? null) : null}
             icon={<FileCheck className="w-8 h-8 text-slate2-400" />}
             label="Selecionar foto do documento"
             disabled={!step1Done}
@@ -331,7 +332,7 @@ export default function VerificacaoPage() {
         >
           <UploadCard
             preview={selfiePreview}
-            existingUrl={!selfiePreview && (isPending || isRejected) ? status.selfie_photo_url : null}
+            existingUrl={!selfiePreview && (isPending || isRejected) ? (authFileUrl(status.selfie_photo_url) ?? null) : null}
             icon={<Camera className="w-8 h-8 text-slate2-400" />}
             label="Tirar selfie"
             disabled={!step1Done || !step2Done}
