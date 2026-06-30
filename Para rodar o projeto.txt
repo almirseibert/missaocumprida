@@ -1,0 +1,15 @@
+Para rodar o projeto
+
+cd backend
+npm install
+cp .env.example .env
+# Editar .env com seu PostgreSQL
+npx prisma migrate dev --name init
+npm run db:seed
+npm run dev
+O PROJETO.md está atualizado com todos os 11 passos concluídos e os próximos passos (chat, frontend Next.js, pagamentos Stripe, app mobile).
+
+Usuários criados:
+  Admin:     admin@missaocumprida.com.br / Admin@123
+  Cliente:   cliente@teste.com / Teste@123
+  Prestador: prestador@teste.com / Teste@123
