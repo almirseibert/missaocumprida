@@ -16,21 +16,39 @@ export const env = {
   UPLOAD_DIR: process.env.UPLOAD_DIR || './uploads',
   MAX_FILE_SIZE_MB: parseInt(process.env.MAX_FILE_SIZE_MB || '10', 10),
 
-  // Segurança de Transação: dias de retenção do pagamento após a confirmação
-  // do cliente antes de poder ser liberado ao prestador (janela de reclamação).
+  // DEPRECATED (Remap 2.0): usado apenas pelo escrow legado até zerar HELD.
   TRANSACTION_HOLD_DAYS: parseInt(process.env.TRANSACTION_HOLD_DAYS || '7', 10),
+
+  // ---- Taxa de Conexão (Remap 2.0) ----
+  // Defaults de primeira carga. Os valores VIGENTES moram em PlatformSetting
+  // (tabela platform_settings) e são editáveis pelo admin em runtime.
+  CONNECTION_FEE_CLIENT_PCT: parseFloat(process.env.CONNECTION_FEE_CLIENT_PCT || '0.05'),
+  CONNECTION_FEE_PROVIDER_PCT: parseFloat(process.env.CONNECTION_FEE_PROVIDER_PCT || '0.05'),
+  CONNECTION_FEE_REGULAR_PCT: parseFloat(process.env.CONNECTION_FEE_REGULAR_PCT || '0.10'),
+  CONNECTION_FEE_MIN: parseFloat(process.env.CONNECTION_FEE_MIN || '4.90'),
+  PROVIDER_FEE_TIMEOUT_HOURS: parseFloat(process.env.PROVIDER_FEE_TIMEOUT_HOURS || '24'),
+  PROPOSAL_MIN_RATIO: parseFloat(process.env.PROPOSAL_MIN_RATIO || '0.40'),
+
+  // Gate do fluxo de Taxa de Conexão: ligado quando o Mercado Pago está
+  // configurado (ou forçado com FEES_ENABLED=true para testar sem gateway).
+  FEES_ENABLED: !!process.env.MP_ACCESS_TOKEN || process.env.FEES_ENABLED === 'true',
 
   API_URL: process.env.API_URL || 'http://localhost:3333',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
-
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
-  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
 
   MP_ACCESS_TOKEN: process.env.MP_ACCESS_TOKEN || '',
   MP_PUBLIC_KEY: process.env.MP_PUBLIC_KEY || '',
   MP_WEBHOOK_SECRET: process.env.MP_WEBHOOK_SECRET || '',
   MP_CLIENT_ID: process.env.MP_CLIENT_ID || '',
   MP_CLIENT_SECRET: process.env.MP_CLIENT_SECRET || '',
+
+  // Senha do usuário admin criado pelo seed. NUNCA hardcode em produção.
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@missaocumprida.com.br',
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
+
+  // RevenueCat (Google Play Billing). Segredo compartilhado exigido no header
+  // Authorization do webhook da RevenueCat → autentica os eventos de assinatura.
+  REVENUECAT_WEBHOOK_AUTH: process.env.REVENUECAT_WEBHOOK_AUTH || '',
 }
 
 // ---- Guard de produção: recusa segredos fracos/conhecidos ----

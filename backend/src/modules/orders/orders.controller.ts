@@ -6,6 +6,7 @@ import { haversineDistance } from '../../utils/geo'
 import * as R from '../../utils/response'
 import { sendToUsers } from '../push/push.service'
 import { persistUpload } from '../files/files.service'
+import { contactsUnlocked } from '../../utils/orderVisibility'
 
 const createOrderSchema = z.object({
   category_id: z.string().uuid(),
@@ -304,6 +305,12 @@ export async function getProviderFeed(req: Request, res: Response) {
   })
 }
 
+// Remove o telefone do cliente da resposta (Taxa de Conexão: contato só
+// depois que as duas taxas foram pagas)
+function stripClientPhone<T extends { client: { phone?: string | null } }>(order: T): T {
+  return { ...order, client: { ...order.client, phone: null } }
+}
+
 export async function getOrder(req: Request, res: Response) {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
@@ -329,22 +336,25 @@ export async function getOrder(req: Request, res: Response) {
     order.schedule?.provider_id === req.userId ||
     order.proposals.some(p => p.provider_id === req.userId && p.status === 'ACCEPTED')
   const isProposalProvider = order.proposals.some(p => p.provider_id === req.userId)
+  const unlocked = contactsUnlocked(order.status)
 
-  if (!isClient && !isProposalProvider) {
-    // Unknown visitor — return minimal public view with masked location
-    const { proposals: _, ...publicOrder } = order
-    return R.ok(res, PRE_ACCEPTANCE_STATUSES.includes(order.status)
-      ? maskLocationForProvider(publicOrder)
-      : publicOrder)
+  if (isClient) return R.ok(res, order)
+
+  if (!isProposalProvider) {
+    // Unknown visitor — minimal public view, always masked (location + phone)
+    const { proposals: _, ...publicOrder } = stripClientPhone(order)
+    return R.ok(res, maskLocationForProvider(publicOrder))
   }
 
-  if (!isClient && !isAcceptedProvider && PRE_ACCEPTANCE_STATUSES.includes(order.status)) {
-    // Provider sent a proposal but it hasn't been accepted yet — mask location
-    const { proposals, ...rest } = order
-    return R.ok(res, { ...maskLocationForProvider(rest), proposals })
+  if (isAcceptedProvider && unlocked) {
+    // Both connection fees paid — full contact for the accepted provider
+    return R.ok(res, order)
   }
 
-  return R.ok(res, order)
+  // Provider with proposal (accepted or not) BEFORE the fees are paid:
+  // keeps proposals visible but masks address/coords and client phone.
+  const { proposals, ...rest } = stripClientPhone(order)
+  return R.ok(res, { ...maskLocationForProvider(rest), proposals })
 }
 
 export async function uploadOrderPhotos(req: Request, res: Response) {

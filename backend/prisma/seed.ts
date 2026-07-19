@@ -1,7 +1,25 @@
 import { PrismaClient, FieldType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+import { seedRemap2 } from './seed-remap2'
 
 const prisma = new PrismaClient()
+
+const IS_PROD = process.env.NODE_ENV === 'production'
+
+// Resolve a senha de um usuário de seed sem NUNCA embutir senha conhecida no
+// repositório (que é público). Em produção, se a env não for definida, gera uma
+// senha aleatória forte e a imprime UMA vez para o operador capturar e trocar.
+function seedPassword(envVar: string, devDefault: string): string {
+  const fromEnv = process.env[envVar]
+  if (fromEnv) return fromEnv
+  if (IS_PROD) {
+    const random = crypto.randomBytes(24).toString('base64url')
+    console.warn(`⚠️  ${envVar} não definida — senha ALEATÓRIA gerada: ${random}  (troque após o primeiro login)`)
+    return random
+  }
+  return devDefault
+}
 
 async function main() {
   console.log('🌱 Iniciando seed...')
@@ -1478,22 +1496,36 @@ async function main() {
   console.log('✅ Categorias "Serviços Gerais" e adicionais criadas')
 
   // ============================================================
+  // REMAP 2.0 — taxonomia de 17 grupos + catálogo expandido
+  // (roda por último para poder mover categorias já criadas acima)
+  // ============================================================
+  await seedRemap2(prisma)
+
+  // ============================================================
   // USUÁRIO ADMIN E DE TESTE
   // ============================================================
-  const adminPassword = await bcrypt.hash('Admin@123', 10)
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@missaocumprida.com.br'
+  const adminPassword = await bcrypt.hash(seedPassword('ADMIN_PASSWORD', 'Admin@123'), 10)
   await prisma.user.upsert({
-    where: { email: 'admin@missaocumprida.com.br' },
+    where: { email: adminEmail },
     update: {},
     create: {
       name: 'Administrador',
-      email: 'admin@missaocumprida.com.br',
+      email: adminEmail,
       password: adminPassword,
       role: 'ADMIN',
       document_verified: true,
     },
   })
 
-  const clientePassword = await bcrypt.hash('Teste@123', 10)
+  // Usuários de teste NÃO são criados em produção.
+  if (IS_PROD) {
+    console.log('✅ Admin garantido. Usuários de teste ignorados (produção).')
+    console.log('🌱 Seed concluído.')
+    return
+  }
+
+  const clientePassword = await bcrypt.hash(seedPassword('SEED_TEST_PASSWORD', 'Teste@123'), 10)
   await prisma.user.upsert({
     where: { email: 'cliente@teste.com' },
     update: {},
@@ -1537,10 +1569,10 @@ async function main() {
   console.log('')
   console.log('🎉 Seed concluído com sucesso!')
   console.log('')
-  console.log('Usuários criados:')
-  console.log('  Admin:     admin@missaocumprida.com.br / Admin@123')
-  console.log('  Cliente:   cliente@teste.com / Teste@123')
-  console.log('  Prestador: prestador@teste.com / Teste@123')
+  console.log('Usuários criados (DEV — senhas via env ou defaults de desenvolvimento):')
+  console.log(`  Admin:     ${adminEmail} / (ADMIN_PASSWORD ou Admin@123)`)
+  console.log('  Cliente:   cliente@teste.com / (SEED_TEST_PASSWORD ou Teste@123)')
+  console.log('  Prestador: prestador@teste.com / (SEED_TEST_PASSWORD ou Teste@123)')
 }
 
 // Funções auxiliares

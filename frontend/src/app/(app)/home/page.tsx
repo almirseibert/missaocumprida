@@ -81,7 +81,7 @@ function ClientHome() {
       {/* Hero de boas-vindas — faixa institucional com contraste */}
       <div
         className="relative overflow-hidden rounded-2xl px-6 py-7 sm:px-8 sm:py-8"
-        style={{ background: 'linear-gradient(120deg, #1E3A8A 0%, #1D4ED8 55%, #059669 100%)' }}
+        style={{ background: 'linear-gradient(120deg, #064E3B 0%, #047857 55%, #059669 100%)' }}
       >
         <div
           aria-hidden

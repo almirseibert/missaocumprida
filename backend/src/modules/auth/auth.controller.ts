@@ -12,7 +12,12 @@ const registerSchema = z.object({
   password: z.string().min(6, 'Senha deve ter ao menos 6 caracteres'),
   phone: z.string().optional(),
   role: z.enum(['CLIENT', 'PROVIDER', 'BOTH']).default('CLIENT'),
-  referral_code: z.string().trim().min(3).max(20).optional(),
+  // Trata string vazia como ausente — clientes enviavam "" e a validação
+  // (min. 3) fazia o cadastro sem código de amigo falhar com "Dados inválidos".
+  referral_code: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().trim().min(3).max(20).optional(),
+  ),
 })
 
 const loginSchema = z.object({
@@ -69,10 +74,19 @@ export async function login(req: Request, res: Response) {
   const { email, password } = parsed.data
 
   const user = await prisma.user.findUnique({ where: { email } })
-  if (!user || !user.is_active) return R.unauthorized(res, 'E-mail ou senha incorretos')
+  if (!user) return R.unauthorized(res, 'E-mail ou senha incorretos')
 
   const valid = await bcrypt.compare(password, user.password)
   if (!valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
+
+  if (!user.is_active) {
+    return R.forbidden(
+      res,
+      user.banned_at
+        ? 'Conta banida por violação dos Termos de Uso. Entre em contato com o suporte.'
+        : 'Conta suspensa. Entre em contato com o suporte.',
+    )
+  }
 
   const accessToken = generateAccessToken({ userId: user.id, role: user.role })
   const refreshToken = generateRefreshToken({ userId: user.id, role: user.role })

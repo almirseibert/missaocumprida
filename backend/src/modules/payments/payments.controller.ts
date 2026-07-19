@@ -1,23 +1,24 @@
 import { Request, Response } from 'express'
+import crypto from 'crypto'
 import { z } from 'zod'
 import QRCode from 'qrcode'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
-import { stripe } from './stripe'
 import { mpPayment } from './mercadopago'
 import { consumeCredit } from '../referrals/referrals.service'
 import { releasePayment } from './payments.service'
+import { onFeePaidByExternalRef } from './connectionFees.service'
 import { notify } from '../push/push.service'
 
 async function pixToQrBase64(pixCode: string): Promise<string> {
   return QRCode.toDataURL(pixCode).then(url => url.replace('data:image/png;base64,', ''))
 }
 
-// Taxa de processamento por método de pagamento
+// Taxa de processamento por método de pagamento (repasse do gateway)
 const GATEWAY_FEE: Record<string, number> = {
-  card: 0.04, // 4% — cobre a taxa Stripe para cartão de crédito
-  pix:  0.01, // 1% — cobre a taxa Stripe para PIX
+  card: 0.04, // 4% — cartão de crédito
+  pix:  0.01, // 1% — PIX
 }
 
 const MIN_AMOUNT = 10 // R$ 10,00 mínimo
@@ -29,11 +30,12 @@ const MIN_AMOUNT = 10 // R$ 10,00 mínimo
 export async function createCheckout(req: Request, res: Response) {
   const { order_id, method, use_credit } = req.body as { order_id?: string; method?: string; use_credit?: boolean }
   if (!order_id || !method) return R.badRequest(res, 'order_id e method são obrigatórios')
-  if (!['card', 'pix'].includes(method)) return R.badRequest(res, 'method deve ser "card" ou "pix"')
+  // Stripe foi aposentado (Remap 2.0): o trilho legado aceita apenas PIX (MP)
+  if (method !== 'pix') return R.badRequest(res, 'Pagamento com cartão foi descontinuado — use PIX')
 
   const order = await prisma.order.findUnique({
     where: { id: order_id },
-    include: { client: { select: { id: true, name: true, email: true, cpf: true, stripe_customer_id: true } }, schedule: { include: { provider: true } } },
+    include: { client: { select: { id: true, name: true, email: true, cpf: true } }, schedule: { include: { provider: true } } },
   })
   if (!order) return R.notFound(res, 'Pedido não encontrado')
   if (order.client_id !== req.userId) return R.forbidden(res)
@@ -43,32 +45,19 @@ export async function createCheckout(req: Request, res: Response) {
   }
   if (!order.schedule) return R.badRequest(res, 'Agendamento não encontrado para este pedido')
 
+  // Pedidos novos usam Taxa de Conexão — este checkout é só do escrow legado
+  const hasConnectionFees = await prisma.connectionFee.count({ where: { order_id } })
+  if (hasConnectionFees > 0) {
+    return R.badRequest(res, 'Este pedido usa a Taxa de Conexão — utilize /api/payments/fees/checkout')
+  }
+
   // Se já existe pagamento PAGO ou LIBERADO, devolve status
   const existing = await prisma.payment.findUnique({ where: { order_id } })
   if (existing) {
     if (['PAID', 'RELEASED'].includes(existing.status)) {
       return R.ok(res, { already_paid: true, status: existing.status })
     }
-    // Mesmo método e PaymentIntent ativo: reusa
-    if (existing.payment_method === method && existing.stripe_payment_intent) {
-      try {
-        const intent = await stripe.paymentIntents.retrieve(existing.stripe_payment_intent)
-        if (['requires_payment_method', 'requires_confirmation', 'requires_action'].includes(intent.status)) {
-          return R.ok(res, {
-            client_secret: intent.client_secret,
-            amount: existing.amount,
-            base_amount: existing.amount - existing.gateway_fee,
-            gateway_fee_pct: existing.gateway_fee_pct,
-            gateway_fee: existing.gateway_fee,
-            payment_method: method,
-          })
-        }
-      } catch {}
-    }
-    // Cancela PaymentIntent antigo e deleta o registro para recriar
-    if (existing.stripe_payment_intent) {
-      try { await stripe.paymentIntents.cancel(existing.stripe_payment_intent) } catch {}
-    }
+    // Deleta o registro pendente para recriar um novo PIX
     await prisma.payment.delete({ where: { order_id } })
   }
 
@@ -93,22 +82,9 @@ export async function createCheckout(req: Request, res: Response) {
   if (totalAmount < MIN_AMOUNT) {
     return R.badRequest(res, `Valor mínimo para pagamento é R$ ${MIN_AMOUNT.toFixed(2)}`)
   }
-  const amountCents = Math.round(totalAmount * 100)
-
-  // Cria ou recupera customer no Stripe (usado apenas para cartão)
-  let stripeCustomerId = order.client.stripe_customer_id
-  if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      email: order.client.email,
-      name: order.client.name,
-      metadata: { user_id: order.client.id },
-    })
-    stripeCustomerId = customer.id
-    await prisma.user.update({ where: { id: req.userId }, data: { stripe_customer_id: customer.id } })
-  }
 
   // Fluxo PIX: Mercado Pago
-  if (method === 'pix') {
+  {
     // CPF obrigatório para PIX no Brasil
     if (!order.client.cpf) {
       return R.badRequest(res, 'CPF obrigatório para pagamento via PIX. Atualize seu perfil antes de continuar.')
@@ -225,49 +201,6 @@ export async function createCheckout(req: Request, res: Response) {
       return R.badRequest(res, msg)
     }
   }
-
-  // Cria PaymentIntent no Stripe (cartão)
-  const intent = await stripe.paymentIntents.create({
-    amount: amountCents,
-    currency: 'brl',
-    customer: stripeCustomerId,
-    payment_method_types: [method],
-    metadata: {
-      order_id: order.id,
-      client_id: req.userId,
-      provider_id: order.schedule.provider_id,
-    },
-    description: `Missão Cumprida — ${order.title.slice(0, 50)}`,
-  })
-
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { stripe_payment_intent_id: intent.id },
-  })
-
-  await prisma.payment.create({
-    data: {
-      order_id: order.id,
-      client_id: req.userId,
-      provider_id: order.schedule.provider_id,
-      stripe_payment_intent: intent.id,
-      amount: totalAmount,
-      provider_amount: order.provider_amount ?? 0,
-      platform_fee: (order.platform_fee_value ?? 0) + (order.client_fee_value ?? 0),
-      gateway_fee_pct: feePct,
-      gateway_fee: gatewayFee,
-      payment_method: method,
-    },
-  })
-
-  return R.ok(res, {
-    client_secret: intent.client_secret,
-    amount: totalAmount,
-    base_amount: baseAmount,
-    gateway_fee_pct: feePct,
-    gateway_fee: gatewayFee,
-    payment_method: method,
-  })
 }
 
 // ---------------------------------------------------------------------------
@@ -289,11 +222,58 @@ export async function getOrderPayment(req: Request, res: Response) {
   return R.ok(res, payment)
 }
 
+// Valida a assinatura HMAC do webhook do Mercado Pago (header x-signature).
+// Template assinado: `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`
+// Em produção o segredo é obrigatório: sem ele o webhook é recusado (fail-closed),
+// pois um webhook aceito sem assinatura permitiria confirmar taxas sem pagar.
+function verifyMpSignature(req: Request): boolean {
+  const secret = env.MP_WEBHOOK_SECRET
+  if (!secret) {
+    if (env.NODE_ENV === 'production') {
+      console.error('[MP Webhook] MP_WEBHOOK_SECRET não configurado — webhook RECUSADO (fail-closed)')
+      return false
+    }
+    return true // apenas em dev: sem segredo configurado, aceita para facilitar testes
+  }
+
+  const xSignature = req.headers['x-signature']
+  const xRequestId = req.headers['x-request-id']
+  if (typeof xSignature !== 'string') return false
+
+  // x-signature = "ts=1699...,v1=abcdef..."
+  const parts = Object.fromEntries(
+    xSignature.split(',').map((kv) => kv.split('=').map((s) => s.trim()) as [string, string]),
+  )
+  const ts = parts['ts']
+  const v1 = parts['v1']
+  if (!ts || !v1) return false
+
+  // id vem do query param data.id (MP recomenda lowercase se alfanumérico)
+  const rawId =
+    (typeof req.query['data.id'] === 'string' && (req.query['data.id'] as string)) ||
+    (req.body?.data?.id != null ? String(req.body.data.id) : '')
+  const dataId = rawId.toLowerCase()
+
+  const manifest = `id:${dataId};request-id:${xRequestId ?? ''};ts:${ts};`
+  const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))
+  } catch {
+    return false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/payments/mp-webhook — Mercado Pago webhook (PIX)
 // ---------------------------------------------------------------------------
 export async function handleMpWebhook(req: Request, res: Response) {
   try {
+    if (!verifyMpSignature(req)) {
+      console.warn('[MP Webhook] Assinatura inválida — ignorado')
+      return res.sendStatus(401)
+    }
+
     const { type, data } = req.body as { type?: string; data?: { id?: string } }
 
     // MP envia type 'payment' quando o status muda
@@ -304,16 +284,20 @@ export async function handleMpWebhook(req: Request, res: Response) {
       const mpPay = await mpPayment.get({ id: mpId })
 
       if (mpPay.status === 'approved') {
-        const orderId = mpPay.external_reference as string | undefined
+        const ref = mpPay.external_reference as string | undefined
 
-        if (orderId) {
+        if (ref?.startsWith('fee_')) {
+          // Taxa de Conexão (Remap 2.0)
+          await onFeePaidByExternalRef(ref, `mp_${mpId}`)
+        } else if (ref) {
+          // Fluxo legado de escrow (deprecated)
           await prisma.$transaction([
             prisma.payment.update({
               where: { stripe_payment_intent: `mp_${mpId}` },
               data: { status: 'PAID', paid_at: new Date() },
             }),
             prisma.order.update({
-              where: { id: orderId },
+              where: { id: ref },
               data: { status: 'SCHEDULED' },
             }),
           ])
@@ -326,84 +310,6 @@ export async function handleMpWebhook(req: Request, res: Response) {
 
   // MP exige resposta 200 imediata
   return res.sendStatus(200)
-}
-
-// ---------------------------------------------------------------------------
-// POST /api/payments/webhook — Stripe webhook
-// ---------------------------------------------------------------------------
-export async function handleWebhook(req: Request, res: Response) {
-  const sig = req.headers['stripe-signature'] as string
-
-  let event
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, env.STRIPE_WEBHOOK_SECRET)
-  } catch {
-    return res.status(400).json({ error: 'Webhook signature inválida' })
-  }
-
-  if (event.type === 'payment_intent.succeeded') {
-    const intent = event.data.object as { id: string; metadata: { order_id?: string } }
-    const orderId = intent.metadata.order_id
-    if (orderId) {
-      await prisma.$transaction([
-        prisma.payment.update({
-          where: { stripe_payment_intent: intent.id },
-          data: { status: 'PAID', paid_at: new Date() },
-        }),
-        prisma.order.update({
-          where: { id: orderId },
-          data: { status: 'SCHEDULED' },
-        }),
-      ])
-    }
-  }
-
-  if (event.type === 'payment_intent.payment_failed') {
-    const intent = event.data.object as { id: string }
-    await prisma.payment.updateMany({
-      where: { stripe_payment_intent: intent.id },
-      data: { status: 'FAILED' },
-    })
-  }
-
-  return res.json({ received: true })
-}
-
-// ---------------------------------------------------------------------------
-// POST /api/payments/confirm-intent — confirma pagamento via PaymentIntent (fallback do webhook)
-// Chamado pelo frontend após redirect_status=succeeded
-// ---------------------------------------------------------------------------
-export async function confirmIntent(req: Request, res: Response) {
-  const { payment_intent_id } = req.body
-  if (!payment_intent_id) return R.badRequest(res, 'payment_intent_id obrigatório')
-
-  const payment = await prisma.payment.findUnique({
-    where: { stripe_payment_intent: payment_intent_id },
-  })
-  if (!payment) return R.notFound(res, 'Pagamento não encontrado')
-  if (payment.client_id !== req.userId) return R.forbidden(res)
-
-  if (payment.status === 'PAID' || payment.status === 'RELEASED') {
-    return R.ok(res, { status: payment.status }, 'Pagamento já confirmado')
-  }
-
-  const intent = await stripe.paymentIntents.retrieve(payment_intent_id)
-  if (intent.status !== 'succeeded') {
-    return R.badRequest(res, `Pagamento ainda não confirmado pelo Stripe (status: ${intent.status})`)
-  }
-
-  await prisma.$transaction([
-    prisma.payment.update({
-      where: { stripe_payment_intent: payment_intent_id },
-      data: { status: 'PAID', paid_at: new Date() },
-    }),
-    prisma.order.update({
-      where: { id: payment.order_id },
-      data: { status: 'SCHEDULED' },
-    }),
-  ])
-
-  return R.ok(res, { status: 'PAID' }, 'Pagamento confirmado com sucesso')
 }
 
 // ---------------------------------------------------------------------------

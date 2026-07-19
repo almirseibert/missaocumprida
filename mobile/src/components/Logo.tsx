@@ -29,9 +29,9 @@ export function Logo({ size = 32 }: LogoProps) {
           y2="48"
           gradientUnits="userSpaceOnUse"
         >
-          <Stop offset="0%" stopColor="#1E3A8A" />
-          <Stop offset="52%" stopColor="#1D4ED8" />
-          <Stop offset="100%" stopColor="#059669" />
+          <Stop offset="0%" stopColor="#065F46" />
+          <Stop offset="52%" stopColor="#059669" />
+          <Stop offset="100%" stopColor="#2563EB" />
         </LinearGradient>
       </Defs>
       <Rect width={48} height={48} rx={13} fill={`url(#${gradId})`} />

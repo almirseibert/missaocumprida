@@ -11,7 +11,7 @@ import {
   Check, UserCheck, MapPin, PhoneCall,
 } from 'lucide-react-native'
 import { api, getApiError } from '../../src/lib/api'
-import { formatDate } from '../../src/lib/utils'
+import { formatDate, maskDateBR, parseDateBR, isoToDateBR } from '../../src/lib/utils'
 import { useAuthStore } from '../../src/store/auth'
 
 interface VerificationData {
@@ -61,7 +61,7 @@ export default function VerificacaoScreen() {
     setProfile({
       cpf: user.cpf ?? '',
       rg: user.rg ?? '',
-      birth_date: user.birth_date ? user.birth_date.slice(0, 10) : '',
+      birth_date: isoToDateBR(user.birth_date),
       mother_name: user.mother_name ?? '',
       address_zip: user.address_zip ?? '',
       address_street: user.address_street ?? '',
@@ -102,12 +102,17 @@ export default function VerificacaoScreen() {
   }
 
   async function saveProfile() {
+    const birthIso = profile.birth_date ? parseDateBR(profile.birth_date) : null
+    if (profile.birth_date && !birthIso) {
+      Alert.alert('Data inválida', 'Informe o nascimento no formato DD/MM/AAAA.')
+      return
+    }
     setProfileSaving(true)
     try {
       const payload: Record<string, unknown> = {
         cpf: profile.cpf ? onlyDigits(profile.cpf) : undefined,
         rg: profile.rg || undefined,
-        birth_date: profile.birth_date ? new Date(profile.birth_date + 'T00:00:00Z').toISOString() : undefined,
+        birth_date: birthIso ? new Date(birthIso + 'T00:00:00Z').toISOString() : undefined,
         mother_name: profile.mother_name || undefined,
         address_zip: profile.address_zip ? onlyDigits(profile.address_zip) : undefined,
         address_street: profile.address_street || undefined,
@@ -153,8 +158,8 @@ export default function VerificacaoScreen() {
       : await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) { Alert.alert('Permissão necessária'); return }
     const res = choice === 'camera'
-      ? await ImagePicker.launchCameraAsync({ quality: 0.85, mediaTypes: ImagePicker.MediaTypeOptions.Images })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.85, mediaTypes: ImagePicker.MediaTypeOptions.Images })
+      ? await ImagePicker.launchCameraAsync({ quality: 0.85, mediaTypes: ['images'] })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.85, mediaTypes: ['images'] })
     if (res.canceled || !res.assets?.[0]) return
     setDoc(toAsset(res.assets[0]))
   }
@@ -165,7 +170,7 @@ export default function VerificacaoScreen() {
     const res = await ImagePicker.launchCameraAsync({
       quality: 0.85,
       cameraType: ImagePicker.CameraType.front,
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
     })
     if (res.canceled || !res.assets?.[0]) return
     setSelfie(toAsset(res.assets[0]))
@@ -201,7 +206,7 @@ export default function VerificacaoScreen() {
   }
 
   if (loading || !status) {
-    return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
+    return <ActivityIndicator className="flex-1 mt-20" color="#059669" />
   }
 
   const isApproved = status.document_verification_status === 'APPROVED'
@@ -214,9 +219,9 @@ export default function VerificacaoScreen() {
   const canSubmit = step1Done && step2Done && step3Done && !isApproved && !isPending
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3">
           <ArrowLeft size={22} color="#334155" />
         </TouchableOpacity>
         <View className="flex-row items-center gap-2 flex-1">
@@ -281,7 +286,7 @@ export default function VerificacaoScreen() {
                 <Field label="CPF *" value={profile.cpf} onChange={(v) => up('cpf', v)} keyboardType="number-pad" />
                 <View className="flex-row gap-3">
                   <View className="flex-1"><Field label="RG *" value={profile.rg} onChange={(v) => up('rg', v)} /></View>
-                  <View className="flex-1"><Field label="Nascimento (AAAA-MM-DD) *" value={profile.birth_date} onChange={(v) => up('birth_date', v)} placeholder="2000-01-31" /></View>
+                  <View className="flex-1"><Field label="Nascimento *" value={profile.birth_date} onChange={(v) => up('birth_date', maskDateBR(v))} placeholder="31/01/2000" keyboardType="number-pad" /></View>
                 </View>
                 <Field label="Nome da mãe *" value={profile.mother_name} onChange={(v) => up('mother_name', v)} />
 
@@ -368,11 +373,11 @@ export default function VerificacaoScreen() {
         )}
 
         {!isApproved && !isPending && (
-          <View className="bg-brand-50 border border-brand-100 rounded-2xl p-4">
-            <Text className="font-display-semibold text-brand-700 text-sm mb-1">
+          <View className="bg-trust-50 border border-trust-100 rounded-2xl p-4">
+            <Text className="font-display-semibold text-trust-700 text-sm mb-1">
               Tratamento de dados (LGPD)
             </Text>
-            <Text className="font-sans text-xs text-brand-700 leading-relaxed">
+            <Text className="font-sans text-xs text-trust-700 leading-relaxed">
               Os dados, documento e selfie serão usados apenas para confirmar identidade
               e prevenir fraudes. Não são compartilhados com outros usuários.
             </Text>
@@ -483,7 +488,7 @@ function UploadTile({ uri, icon, label, disabled, onPress }: {
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      className={`aspect-[3/2] rounded-xl border-2 border-dashed overflow-hidden items-center justify-center bg-slate2-50 ${
+      className={`aspect-[3/2] rounded-xl border-2 border-dashed overflow-hidden items-center justify-center bg-paper ${
         disabled ? 'border-slate2-200' : 'border-slate2-300'
       }`}
     >

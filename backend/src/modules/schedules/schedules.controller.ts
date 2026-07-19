@@ -5,6 +5,13 @@ import * as R from '../../utils/response'
 import { sendToUser, PushChannel } from '../push/push.service'
 import { persistUpload } from '../files/files.service'
 import { computeHoldUntil } from '../payments/payments.service'
+import { CONTACT_UNLOCKED_ORDER_STATUSES, contactsUnlocked } from '../../utils/orderVisibility'
+import {
+  creditFee,
+  cancelPendingFeesForProposal,
+  reopenOrderFromBrokenMatch,
+} from '../payments/connectionFees.service'
+import { banUser, suspendUserForReview } from '../users/moderation.service'
 
 const scheduleInclude = {
   order: {
@@ -36,15 +43,33 @@ async function notify(
   await sendToUser(userId, { title, body, data: data as any, channel })
 }
 
-// Statuses visible to the provider only after payment is confirmed
-const PROVIDER_VISIBLE_ORDER_STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'DONE', 'RATED', 'CANCELLED', 'DISPUTED']
+// Statuses visible to the provider only after both connection fees are paid
+const PROVIDER_VISIBLE_ORDER_STATUSES = CONTACT_UNLOCKED_ORDER_STATUSES
+
+// Taxa de Conexão: telefone das partes só aparece depois que as duas taxas
+// foram pagas (pedido SCHEDULED+). Antes disso, o cliente veria o telefone do
+// prestador logo no aceite — este helper anula os campos na resposta.
+function maskScheduleContacts<
+  T extends {
+    order?: { status?: string } | null
+    provider?: { phone?: string | null } | null
+    client?: { phone?: string | null } | null
+  },
+>(schedule: T): T {
+  if (contactsUnlocked(schedule.order?.status)) return schedule
+  return {
+    ...schedule,
+    provider: schedule.provider ? { ...schedule.provider, phone: null } : schedule.provider,
+    client: schedule.client ? { ...schedule.client, phone: null } : schedule.client,
+  }
+}
 
 export async function listMySchedules(req: Request, res: Response) {
   const { status } = req.query
   const where: Record<string, unknown> = {
     OR: [
       { client_id: req.userId },
-      // Provider only sees schedules once the order is paid (SCHEDULED or beyond)
+      // Provider only sees schedules once both fees are paid (SCHEDULED or beyond)
       {
         provider_id: req.userId,
         order: { status: { in: PROVIDER_VISIBLE_ORDER_STATUSES } },
@@ -58,7 +83,7 @@ export async function listMySchedules(req: Request, res: Response) {
     orderBy: { scheduled_at: 'asc' },
     include: scheduleInclude,
   })
-  return R.ok(res, schedules)
+  return R.ok(res, schedules.map(maskScheduleContacts))
 }
 
 export async function getSchedule(req: Request, res: Response) {
@@ -70,7 +95,7 @@ export async function getSchedule(req: Request, res: Response) {
   if (schedule.client_id !== req.userId && schedule.provider_id !== req.userId) {
     return R.forbidden(res)
   }
-  // Provider can only access the schedule after payment is confirmed
+  // Provider can only access the schedule after both fees are paid
   if (
     schedule.provider_id === req.userId &&
     schedule.client_id !== req.userId &&
@@ -78,7 +103,7 @@ export async function getSchedule(req: Request, res: Response) {
   ) {
     return R.notFound(res, 'Agendamento não encontrado')
   }
-  return R.ok(res, schedule)
+  return R.ok(res, maskScheduleContacts(schedule))
 }
 
 export async function checkin(req: Request, res: Response) {
@@ -171,6 +196,129 @@ export async function completeByProvider(req: Request, res: Response) {
   )
 
   return R.ok(res, { duration_minutes: durationMinutes, hourly_amount: hourlyAmount }, 'Serviço marcado como concluído. Aguardando confirmação do cliente.')
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/schedules/:id/cancel — cancelamento com as regras da Taxa de Conexão
+// Pré-liberação: sem punição (taxas pagas voltam como crédito).
+// Pós-liberação (contatos revelados): quem cancela é BANIDO (Termos de Uso) e
+// a taxa da outra parte volta como crédito.
+// ---------------------------------------------------------------------------
+export async function cancelSchedule(req: Request, res: Response) {
+  const schedule = await prisma.schedule.findUnique({
+    where: { id: req.params.id },
+    include: { order: { include: { connection_fees: true } } },
+  })
+  if (!schedule) return R.notFound(res, 'Agendamento não encontrado')
+
+  const isClient = schedule.client_id === req.userId
+  const isProvider = schedule.provider_id === req.userId
+  if (!isClient && !isProvider) return R.forbidden(res)
+  if (schedule.status !== 'CONFIRMED') {
+    return R.badRequest(res, 'Este agendamento não pode mais ser cancelado (o serviço já iniciou ou foi concluído)')
+  }
+
+  const order = schedule.order
+  const clientFee = order.connection_fees.find((f) => f.side === 'CLIENT')
+  const providerFee = order.connection_fees.find((f) => f.side === 'PROVIDER')
+  const unlocked = contactsUnlocked(order.status)
+
+  // ---- Pré-liberação (janela ACCEPTED): sem punição ----
+  if (!unlocked) {
+    if (isClient) {
+      await prisma.$transaction(async (tx) => {
+        await tx.message.deleteMany({ where: { schedule_id: schedule.id } })
+        await tx.rating.deleteMany({ where: { schedule_id: schedule.id } })
+        await tx.schedule.delete({ where: { id: schedule.id } })
+        await tx.proposal.update({ where: { id: schedule.proposal_id }, data: { status: 'CANCELLED' } })
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: 'CANCELLED', client_fee_paid_at: null, provider_fee_due_at: null },
+        })
+      })
+      await cancelPendingFeesForProposal(schedule.proposal_id)
+      if (clientFee) await creditFee(clientFee, 'PRE_CONNECTION_CANCEL')
+      await notify(schedule.provider_id, 'GENERAL', 'Pedido cancelado',
+        'O cliente cancelou o pedido antes da conexão ser concluída.', { order_id: order.id })
+      return R.ok(res, null, 'Pedido cancelado. Se você já tinha pago a taxa, ela voltou como crédito.')
+    }
+
+    // Prestador desiste antes da conexão: cliente recreditado, pedido reabre
+    await cancelPendingFeesForProposal(schedule.proposal_id)
+    await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id)
+    if (clientFee) await creditFee(clientFee, 'PROVIDER_CANCELLED')
+    await prisma.user.update({
+      where: { id: schedule.provider_id },
+      data: { no_show_count: { increment: 1 } },
+    })
+    await notify(schedule.client_id, 'GENERAL', 'O profissional desistiu 😕',
+      'O prestador cancelou antes da conexão. Sua taxa voltou como crédito — escolha outra proposta.', { order_id: order.id })
+    return R.ok(res, null, 'Proposta cancelada. O pedido voltou para a fila do cliente.')
+  }
+
+  // ---- Pós-liberação: cancelou depois de receber os dados = banimento ----
+  if (isClient) {
+    if (providerFee) await creditFee(providerFee, 'CLIENT_CANCELLED')
+    await prisma.$transaction([
+      prisma.schedule.update({ where: { id: schedule.id }, data: { status: 'CANCELLED' } }),
+      prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } }),
+    ])
+    await notify(schedule.provider_id, 'GENERAL', 'Serviço cancelado pelo cliente',
+      'O cliente cancelou após a conexão. Sua taxa voltou como crédito e a conta dele foi banida conforme os Termos.', { order_id: order.id })
+    await banUser(schedule.client_id, 'Cancelamento após receber os dados do prestador (Termos de Uso)')
+    return R.ok(res, null, 'Serviço cancelado. Conforme os Termos de Uso, contas que cancelam após receber os dados do profissional são banidas.')
+  }
+
+  if (clientFee) await creditFee(clientFee, 'PROVIDER_CANCELLED')
+  await prisma.user.update({
+    where: { id: schedule.provider_id },
+    data: { no_show_count: { increment: 1 } },
+  })
+  await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id)
+  await notify(schedule.client_id, 'GENERAL', 'O profissional cancelou 😕',
+    'O prestador cancelou após a conexão e foi banido conforme os Termos. Sua taxa voltou como crédito — escolha outra proposta.', { order_id: order.id })
+  await banUser(schedule.provider_id, 'Cancelamento após receber os dados do cliente (Termos de Uso)')
+  return R.ok(res, null, 'Serviço cancelado. Conforme os Termos de Uso, profissionais que cancelam após receber os dados do cliente são banidos.')
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/schedules/:id/report-no-show — cliente reporta que o prestador
+// não compareceu. Recredita o cliente, reabre o pedido e SUSPENDE o prestador
+// para análise do admin (que confirma o ban ou reverte).
+// ---------------------------------------------------------------------------
+export async function reportNoShow(req: Request, res: Response) {
+  const schedule = await prisma.schedule.findUnique({
+    where: { id: req.params.id },
+    include: { order: { include: { connection_fees: true } } },
+  })
+  if (!schedule) return R.notFound(res, 'Agendamento não encontrado')
+  if (schedule.client_id !== req.userId) return R.forbidden(res)
+
+  const order = schedule.order
+  if (!contactsUnlocked(order.status)) {
+    return R.badRequest(res, 'A conexão ainda não foi concluída — cancele o agendamento se necessário')
+  }
+  if (schedule.status !== 'CONFIRMED') {
+    return R.badRequest(res, 'O serviço já foi iniciado ou concluído — abra um chamado no suporte')
+  }
+  if (schedule.scheduled_at.getTime() > Date.now()) {
+    return R.badRequest(res, 'Só é possível reportar não comparecimento após o horário agendado')
+  }
+
+  const clientFee = order.connection_fees.find((f) => f.side === 'CLIENT')
+  if (clientFee) await creditFee(clientFee, 'PROVIDER_NOSHOW')
+  await prisma.user.update({
+    where: { id: schedule.provider_id },
+    data: { no_show_count: { increment: 1 } },
+  })
+  await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id)
+  await suspendUserForReview(
+    schedule.provider_id,
+    `No-show reportado pelo cliente no pedido ${order.id} — em análise para banimento (Termos de Uso)`,
+  )
+
+  return R.ok(res, null,
+    'Não comparecimento registrado. Sua taxa voltou como crédito, o pedido reabriu e o profissional foi suspenso para análise.')
 }
 
 export async function confirmByClient(req: Request, res: Response) {

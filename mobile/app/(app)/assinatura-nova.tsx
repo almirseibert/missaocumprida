@@ -33,9 +33,9 @@ export default function AssinaturaNovaScreen() {
   }, [])
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-paper" edges={['top']}>
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100 gap-2">
-        <TouchableOpacity onPress={() => router.back()} className="p-1">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="p-1">
           <ArrowLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <Repeat size={20} color="#7C3AED" />

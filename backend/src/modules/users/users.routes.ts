@@ -2,17 +2,23 @@ import { Router } from 'express'
 import { authenticate, requireRole } from '../../middlewares/auth'
 import { upload } from '../../middlewares/upload'
 import {
-  getMe, getPublicProfile, updateMe, uploadAvatar, changePassword,
+  getMe, getPublicProfile, updateMe, uploadAvatar, changePassword, deleteMe,
   addSkill, listSkills, removeSkill,
   submitVerification, getVerificationStatus, reviewVerification,
   adminListVerifications, updateOnboarding,
-  adminListUsers, adminGetUser, adminSuspendUser, adminReactivateUser,
+  adminListUsers, adminGetUser, adminSuspendUser, adminReactivateUser, adminBanUser,
+  requestCancellationAndDeletion, undoDeletionRequest,
 } from './users.controller'
 
 const router = Router()
 
+// Público — página web de cancelamento de assinatura + exclusão (LGPD/CDC)
+router.post('/cancel-subscription-and-delete', requestCancellationAndDeletion)
+router.post('/undo-deletion', undoDeletionRequest)
+
 router.get('/me', authenticate, getMe)
 router.put('/me', authenticate, updateMe)
+router.delete('/me', authenticate, deleteMe)
 router.post('/me/avatar', authenticate, upload.single('avatar'), uploadAvatar)
 router.put('/me/password', authenticate, changePassword)
 router.post('/me/skills', authenticate, addSkill)
@@ -34,6 +40,7 @@ router.get('/admin/list', authenticate, requireRole('ADMIN'), adminListUsers)
 router.get('/admin/users/:id', authenticate, requireRole('ADMIN'), adminGetUser)
 router.patch('/admin/users/:id/suspend', authenticate, requireRole('ADMIN'), adminSuspendUser)
 router.patch('/admin/users/:id/reactivate', authenticate, requireRole('ADMIN'), adminReactivateUser)
+router.post('/admin/users/:id/ban', authenticate, requireRole('ADMIN'), adminBanUser)
 router.put('/:id/verification/review', authenticate, requireRole('ADMIN'), reviewVerification)
 router.get('/:id', getPublicProfile)
 

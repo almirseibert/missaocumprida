@@ -17,9 +17,12 @@ import { PageSpinner } from '@/components/ui/Spinner'
 import { formatRelative } from '@/lib/utils'
 
 export default function PerfilPage() {
-  const { user, fetchMe } = useAuthStore()
+  const { user, fetchMe, logout } = useAuthStore()
   const router = useRouter()
 
+  const [deleteModal, setDeleteModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const [skills, setSkills] = useState<ProviderSkill[]>([])
   const [ratings, setRatings] = useState<Rating[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -46,6 +49,21 @@ export default function PerfilPage() {
       api.get('/categories').then((r) => setCategories(r.data.data)).catch(() => {})
     }
   }, [user, canManageSkills])
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) { toast.error('Informe sua senha para confirmar'); return }
+    setDeleting(true)
+    try {
+      await api.delete('/users/me', { data: { password: deletePassword } })
+      toast.success('Conta excluída. Seus dados foram anonimizados.')
+      await logout()
+      router.replace('/login')
+    } catch (err) {
+      toast.error(getApiErrorMessage(err))
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const addSkill = async () => {
     if (!selectedCatId) { toast.error('Selecione uma categoria'); return }
@@ -209,6 +227,47 @@ export default function PerfilPage() {
           </div>
         </div>
       )}
+
+      {/* Legal + conta */}
+      <div className="bg-white rounded-2xl border border-slate2-200 p-6 space-y-4">
+        <h2 className="font-semibold text-slate2-900">Conta e privacidade</h2>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <Link href="/termos" className="text-brand-600 hover:underline">Termos de Uso</Link>
+          <Link href="/privacidade" className="text-brand-600 hover:underline">Política de Privacidade</Link>
+        </div>
+        <div className="pt-4 border-t border-slate2-100">
+          <p className="text-sm text-slate2-600 mb-2">
+            Excluir a conta anonimiza seus dados pessoais permanentemente. Registros financeiros podem ser retidos, de forma anonimizada, por obrigação legal.
+          </p>
+          <Button variant="outline" onClick={() => setDeleteModal(true)} className="!text-red-600 !border-red-300 hover:!bg-red-50">
+            <Trash2 className="w-4 h-4" /> Excluir minha conta
+          </Button>
+        </div>
+      </div>
+
+      {/* Excluir conta modal */}
+      <Modal isOpen={deleteModal} onClose={() => { setDeleteModal(false); setDeletePassword('') }} title="Excluir conta">
+        <div className="space-y-4">
+          <p className="text-sm text-slate2-600">
+            Esta ação é irreversível. Digite sua senha para confirmar a exclusão. Você não pode ter saldo a sacar nem serviços/pagamentos em andamento.
+          </p>
+          <input
+            type="password"
+            placeholder="Sua senha"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+          />
+          <div className="flex gap-3">
+            <Button fullWidth onClick={handleDeleteAccount} isLoading={deleting} className="!bg-red-600 hover:!bg-red-700">
+              Excluir permanentemente
+            </Button>
+            <Button variant="outline" onClick={() => { setDeleteModal(false); setDeletePassword('') }}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Add skill modal */}
       <Modal isOpen={skillModal} onClose={() => setSkillModal(false)} title="Adicionar habilidade">

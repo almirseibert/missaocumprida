@@ -4,6 +4,9 @@ import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { notify } from '../push/push.service'
+import { getSettings } from '../settings/settings.service'
+import { computeFeeBase, createFeesOnAccept } from '../payments/connectionFees.service'
+import { sanitizeContactInfo } from '../../utils/contactSanitizer'
 
 const createSchema = z.object({
   value: z.number().positive('Valor deve ser positivo'),
@@ -37,8 +40,22 @@ export async function createProposal(req: Request, res: Response) {
   })
   if (existing) return R.conflict(res, 'Você já enviou uma proposta para este pedido')
 
-  if (parsed.data.value < 10) {
-    return R.badRequest(res, 'O valor mínimo para uma proposta é R$ 10,00')
+  // Piso antifraude (Remap 2.0): impede proposta artificialmente baixa no app
+  // com o preço real combinado por fora (a taxa de conexão é % da proposta).
+  const s = await getSettings()
+  const category = await prisma.category.findUnique({
+    where: { id: order.category_id },
+    select: { base_price_min: true },
+  })
+  const minValue = Math.max(10, Math.round((category?.base_price_min ?? 0) * s.proposal_min_ratio * 100) / 100)
+  if (parsed.data.value < minValue) {
+    return R.badRequest(res, `O valor mínimo de proposta para esta categoria é R$ ${minValue.toFixed(2)}`)
+  }
+
+  // Antibypass: remove telefone/e-mail/@ da mensagem — o contato só é
+  // liberado depois que as taxas de conexão forem pagas.
+  if (parsed.data.message) {
+    parsed.data.message = sanitizeContactInfo(parsed.data.message)
   }
 
   // Verified Pro: boost gratuito de nível 1 em toda proposta
@@ -173,75 +190,97 @@ export async function acceptProposal(req: Request, res: Response) {
   if (proposal.order.client_id !== req.userId) return R.forbidden(res)
   if (proposal.status !== 'PENDING') return R.badRequest(res, 'Esta proposta não pode mais ser aceita')
 
-  const PROVIDER_FEE_PCT = 0.10
-  const CLIENT_FEE_PCT = 0.10
-  const URGENCY_FEE_PCT = 0.25 // taxa total sobre proposta urgente
+  // Taxa de Conexão (Remap 2.0): percentuais vigentes vêm das configurações
+  // da plataforma (editáveis pelo admin). O valor fica congelado na fee.
+  const s = await getSettings()
+  const feesEnabled = env.FEES_ENABLED
+  const clientFeeValue = computeFeeBase(proposal.value, s.fee_client_pct, s.fee_min)
+  const providerFeeValue = computeFeeBase(proposal.value, s.fee_provider_pct, s.fee_min)
+  const round2 = (n: number) => Math.round(n * 100) / 100
 
-  const providerFeeValue = Math.round(proposal.value * PROVIDER_FEE_PCT * 100) / 100
-  const clientFeeValue = Math.round(proposal.value * CLIENT_FEE_PCT * 100) / 100
+  // Aceita a proposta escolhida, rejeita as demais, cria agendamento e taxas.
+  // Guard de corrida: o update do pedido é condicionado ao status atual — dois
+  // aceites simultâneos fazem o segundo falhar de forma limpa.
+  try {
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.order.updateMany({
+        where: { id: proposal.order_id, status: { in: ['OPEN', 'IN_PROPOSAL'] } },
+        data: {
+          status: feesEnabled ? 'ACCEPTED' : 'SCHEDULED',
+          final_price: proposal.value,
+          // Campos informativos (telas exibem o breakdown a partir das fees)
+          platform_fee_pct: s.fee_provider_pct,
+          platform_fee_value: providerFeeValue,
+          provider_amount: round2(proposal.value - providerFeeValue),
+          client_fee_pct: s.fee_client_pct,
+          client_fee_value: clientFeeValue,
+          client_total: round2(proposal.value + clientFeeValue),
+        },
+      })
+      if (updated.count === 0) throw new Error('ORDER_NOT_ACCEPTING')
 
-  // Pedido urgente: 25% de taxa extra sobre proposta, dividida 50/50 prestador/plataforma
-  const isUrgent = !!proposal.order.is_urgent
-  const urgencyTotal = isUrgent ? Math.round(proposal.value * URGENCY_FEE_PCT * 100) / 100 : 0
-  const urgencyProviderBonus = isUrgent ? Math.round(urgencyTotal * 0.5 * 100) / 100 : 0
-  const urgencyPlatformShare = isUrgent ? Math.round((urgencyTotal - urgencyProviderBonus) * 100) / 100 : 0
+      await tx.proposal.update({ where: { id: proposal.id }, data: { status: 'ACCEPTED' } })
+      await tx.proposal.updateMany({
+        where: { order_id: proposal.order_id, id: { not: proposal.id }, status: 'PENDING' },
+        data: { status: 'REJECTED' },
+      })
+      await tx.schedule.create({
+        data: {
+          order_id: proposal.order_id,
+          proposal_id: proposal.id,
+          provider_id: proposal.provider_id,
+          client_id: req.userId!,
+          scheduled_at: proposal.order.desired_date ?? new Date(),
+        },
+      })
+      if (feesEnabled) {
+        await createFeesOnAccept(tx, s, {
+          order_id: proposal.order_id,
+          proposal_id: proposal.id,
+          client_id: req.userId!,
+          provider_id: proposal.provider_id,
+          value: proposal.value,
+        })
+      }
+    })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'ORDER_NOT_ACCEPTING') {
+      return R.conflict(res, 'Este pedido já teve uma proposta aceita')
+    }
+    throw err
+  }
 
-  const providerAmount = Math.round((proposal.value - providerFeeValue + urgencyProviderBonus) * 100) / 100
-  const platformFeeValue = Math.round((providerFeeValue + urgencyPlatformShare) * 100) / 100
-  const clientTotal = Math.round((proposal.value + clientFeeValue + urgencyTotal) * 100) / 100
-
-  // Aceita a proposta escolhida, rejeita as demais e cria o agendamento
-  await prisma.$transaction([
-    prisma.proposal.update({ where: { id: proposal.id }, data: { status: 'ACCEPTED' } }),
-    prisma.proposal.updateMany({
-      where: { order_id: proposal.order_id, id: { not: proposal.id } },
-      data: { status: 'REJECTED' },
-    }),
-    prisma.order.update({
-      where: { id: proposal.order_id },
-      data: {
-        // Se Stripe está configurado o pedido fica ACCEPTED aguardando pagamento; sem Stripe vai direto para SCHEDULED
-        status: env.STRIPE_SECRET_KEY ? 'ACCEPTED' : 'SCHEDULED',
-        final_price: proposal.value,
-        platform_fee_pct: PROVIDER_FEE_PCT,
-        platform_fee_value: platformFeeValue,
-        provider_amount: providerAmount,
-        client_fee_pct: CLIENT_FEE_PCT,
-        client_fee_value: clientFeeValue,
-        client_total: clientTotal,
-        urgency_fee_value: isUrgent ? urgencyTotal : null,
-      },
-    }),
-    prisma.schedule.create({
-      data: {
-        order_id: proposal.order_id,
-        proposal_id: proposal.id,
-        provider_id: proposal.provider_id,
-        client_id: req.userId,
-        scheduled_at: proposal.order.desired_date ?? new Date(),
-      },
-    }),
-  ])
-
-  // Notify provider that their proposal was accepted
+  // Notifica o prestador do aceite (a taxa dele só é cobrada após o cliente pagar)
   await notify(proposal.provider_id, {
     type: 'PROPOSAL_ACCEPTED',
     title: 'Sua proposta foi aceita!',
-    body: `O cliente aceitou sua proposta para "${proposal.order.title}". ${env.STRIPE_SECRET_KEY ? 'Aguardando confirmação do pagamento.' : 'O agendamento foi confirmado.'}`,
+    body: feesEnabled
+      ? `O cliente aceitou sua proposta para "${proposal.order.title}". Assim que ele pagar a taxa de conexão, você paga a sua e o contato é liberado.`
+      : `O cliente aceitou sua proposta para "${proposal.order.title}". O agendamento foi confirmado.`,
     data: { order_id: proposal.order_id },
     channel: 'proposal_update',
   })
 
+  const promoActive = s.fee_promo_active && s.fee_regular_pct > s.fee_client_pct
   return R.ok(res, {
     final_price: proposal.value,
-    provider_fee_pct: PROVIDER_FEE_PCT,
-    provider_fee_value: providerFeeValue,
-    provider_amount: providerAmount,
-    client_fee_pct: CLIENT_FEE_PCT,
-    client_fee_value: clientFeeValue,
-    client_total: clientTotal,
-    payment_required: !!env.STRIPE_SECRET_KEY,
-  }, 'Proposta aceita! Realize o pagamento para confirmar o agendamento.')
+    payment_required: feesEnabled,
+    connection_fee: {
+      promo_active: promoActive,
+      regular_pct: s.fee_regular_pct,
+      client: {
+        pct: s.fee_client_pct,
+        amount: clientFeeValue,
+        regular_amount: computeFeeBase(proposal.value, s.fee_regular_pct, s.fee_min),
+      },
+      provider: {
+        pct: s.fee_provider_pct,
+        amount: providerFeeValue,
+      },
+    },
+  }, feesEnabled
+    ? 'Proposta aceita! Pague a taxa de conexão para liberar o contato do profissional.'
+    : 'Proposta aceita! O agendamento foi confirmado.')
 }
 
 export async function rejectProposal(req: Request, res: Response) {

@@ -92,7 +92,7 @@ export function TermsModal() {
           </ScrollView>
 
           {/* Footer */}
-          <View className="border-t border-slate2-200 bg-slate2-50 px-5 py-4 gap-3">
+          <View className="border-t border-slate2-200 bg-paper px-5 py-4 gap-3">
             {!reachedEnd && (
               <Text className="font-sans text-xs text-slate2-500 text-center">
                 Role até o final do texto para habilitar a aceitação.

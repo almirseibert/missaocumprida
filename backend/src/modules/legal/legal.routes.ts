@@ -3,6 +3,7 @@ import { authenticate } from '../../middlewares/auth'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
 import { TERMS_BODY_MARKDOWN, TERMS_EFFECTIVE_DATE, TERMS_TITLE, TERMS_VERSION } from './terms.text'
+import { PRIVACY_BODY_MARKDOWN, PRIVACY_EFFECTIVE_DATE, PRIVACY_TITLE, PRIVACY_VERSION } from './privacy.text'
 
 const router = Router()
 
@@ -13,6 +14,16 @@ router.get('/terms', (_req: Request, res: Response) => {
     title: TERMS_TITLE,
     effective_date: TERMS_EFFECTIVE_DATE,
     body: TERMS_BODY_MARKDOWN,
+  })
+})
+
+// Texto da política de privacidade — público
+router.get('/privacy', (_req: Request, res: Response) => {
+  return R.ok(res, {
+    version: PRIVACY_VERSION,
+    title: PRIVACY_TITLE,
+    effective_date: PRIVACY_EFFECTIVE_DATE,
+    body: PRIVACY_BODY_MARKDOWN,
   })
 })
 

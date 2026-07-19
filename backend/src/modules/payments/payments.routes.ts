@@ -3,10 +3,8 @@ import { authenticate, requireRole } from '../../middlewares/auth'
 import {
   createCheckout,
   getOrderPayment,
-  handleWebhook,
   handleMpWebhook,
   simulatePayment,
-  confirmIntent,
   getMyBalance,
   requestWithdrawal,
   listWithdrawals,
@@ -19,20 +17,33 @@ import {
   adminRefundTransaction,
   adminListWithdrawals,
 } from './payments.controller'
+import {
+  checkoutFee,
+  payFeeWithBalance,
+  getOrderFees,
+  simulateFeePayment,
+  adminListFees,
+  adminCreditFee,
+  adminRefundFee,
+} from './connectionFees.controller'
 
 const router = Router()
-
-// Webhook do Stripe — raw body (montado separadamente no app.ts)
-export const webhookRouter = Router()
-webhookRouter.post('/', handleWebhook)
 
 // Webhook do Mercado Pago — sem autenticação, sem raw body
 router.post('/mp-webhook', handleMpWebhook)
 
-// Rotas autenticadas
+// ---- Taxa de Conexão (Remap 2.0) ----
+router.post('/fees/checkout', authenticate, checkoutFee)
+router.post('/fees/pay-with-balance', authenticate, requireRole('PROVIDER', 'BOTH'), payFeeWithBalance)
+router.get('/fees/order/:orderId', authenticate, getOrderFees)
+router.post('/fees/simulate', authenticate, simulateFeePayment)
+router.get('/admin/fees', authenticate, requireRole('ADMIN'), adminListFees)
+router.post('/admin/fees/:id/credit', authenticate, requireRole('ADMIN'), adminCreditFee)
+router.post('/admin/fees/:id/refund', authenticate, requireRole('ADMIN'), adminRefundFee)
+
+// Rotas autenticadas — fluxo LEGADO de escrow (deprecated; ver connectionFees)
 router.post('/create-checkout', authenticate, createCheckout)
 router.get('/order/:orderId', authenticate, getOrderPayment)
-router.post('/confirm-intent', authenticate, confirmIntent)
 router.post('/simulate', authenticate, simulatePayment)
 
 // Carteira do prestador

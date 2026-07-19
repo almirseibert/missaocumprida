@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../lib/api'
+import { getAccessToken, getRefreshToken, setTokens as secureSetTokens, clearTokens } from '../lib/secureStore'
+import { configurePurchases, loginPurchases, logoutPurchases } from '../lib/purchases'
 import { resetNotificationCache, unregisterPushToken } from '../lib/notifications'
 import { User } from '../types'
 
@@ -25,18 +26,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user) => set({ user }),
 
   setTokens: async (access, refresh) => {
-    await AsyncStorage.setItem('accessToken', access)
-    await AsyncStorage.setItem('refreshToken', refresh)
+    await secureSetTokens(access, refresh)
     set({ accessToken: access })
   },
 
   logout: async () => {
     try {
-      const refreshToken = await AsyncStorage.getItem('refreshToken')
+      const refreshToken = await getRefreshToken()
       if (refreshToken) await api.post('/auth/logout', { refreshToken }).catch(() => {})
     } catch {}
     await unregisterPushToken()
-    await AsyncStorage.multiRemove(['accessToken', 'refreshToken'])
+    await logoutPurchases()
+    await clearTokens()
     await resetNotificationCache()
     set({ user: null, accessToken: null })
   },
@@ -46,10 +47,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { data } = await api.get('/users/me')
       set({ user: data.data })
+      // Associa as compras (RevenueCat) ao id do usuário do backend.
+      if (data.data?.id) loginPurchases(data.data.id).catch(() => {})
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status
       if (status === 401) {
-        await AsyncStorage.multiRemove(['accessToken', 'refreshToken'])
+        await clearTokens()
         set({ user: null, accessToken: null })
       }
     } finally {
@@ -58,7 +61,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   hydrate: async () => {
-    const token = await AsyncStorage.getItem('accessToken')
+    configurePurchases()
+    const token = await getAccessToken()
     if (token) {
       set({ accessToken: token })
       await get().fetchMe()

@@ -59,7 +59,7 @@ export function PriceEstimator({
     <View className="bg-brand-50 border border-brand-200 rounded-2xl p-4">
       <View className="flex-row items-center justify-between mb-1">
         <Text className="text-sm font-semibold text-brand-900">Estimativa de preço</Text>
-        {loading && <ActivityIndicator size="small" color="#1D4ED8" />}
+        {loading && <ActivityIndicator size="small" color="#059669" />}
       </View>
       <Text className="text-2xl font-extrabold text-brand-700">
         {formatCurrency(result.min)} <Text className="text-base font-normal text-brand-500">–</Text> {formatCurrency(result.max)}

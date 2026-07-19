@@ -1,13 +1,14 @@
 import { useCallback, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  Alert, TextInput, ActivityIndicator, RefreshControl,
+  Alert, ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { ArrowLeft } from 'lucide-react-native'
 import { api, getApiError } from '../../src/lib/api'
 import { formatCurrency, formatDateShort } from '../../src/lib/utils'
+import { Input } from '../../src/components/ui/Input'
 
 const WITHDRAWAL_STATUS: Record<string, string> = {
   REQUESTED: 'Solicitado',
@@ -26,6 +27,7 @@ const WITHDRAWAL_COLOR: Record<string, string> = {
 
 export default function CarteiraScreen() {
   const [balance, setBalance] = useState(0)
+  const [creditBalance, setCreditBalance] = useState(0)
   const [pixKey, setPixKey] = useState('')
   const [pixKeyType, setPixKeyType] = useState('')
   const [withdrawals, setWithdrawals] = useState<any[]>([])
@@ -34,7 +36,6 @@ export default function CarteiraScreen() {
   const [saqueValor, setSaqueValor] = useState('')
   const [saqueChave, setSaqueChave] = useState('')
   const [sacando, setSacando] = useState(false)
-  const [focused, setFocused] = useState<string | null>(null)
 
   async function load() {
     try {
@@ -44,6 +45,11 @@ export default function CarteiraScreen() {
       setPixKey(d.pix_key ?? '')
       setPixKeyType(d.pix_key_type ?? '')
       setWithdrawals(d.recent_withdrawals ?? [])
+      // Créditos da plataforma (taxa devolvida, indicação) vêm do perfil
+      try {
+        const me = await api.get('/users/me')
+        setCreditBalance(me.data.data?.credit_balance ?? 0)
+      } catch {}
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -77,12 +83,12 @@ export default function CarteiraScreen() {
     }
   }
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#059669" />
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3">
           <ArrowLeft size={22} color="#334155" />
         </TouchableOpacity>
         <Text className="font-display-bold text-lg text-slate2-900">Carteira</Text>
@@ -98,7 +104,25 @@ export default function CarteiraScreen() {
           <Text className="font-display-extrabold text-white text-4xl mt-1">
             {formatCurrency(balance)}
           </Text>
+          <Text className="font-sans text-brand-100 text-[11px] mt-2 text-center">
+            Usado para taxas de conexão e boosts · sacável via PIX
+          </Text>
         </View>
+
+        {/* Créditos da plataforma (taxas devolvidas / indicações) */}
+        {creditBalance > 0 && (
+          <View className="bg-accent-50 border border-accent-100 rounded-2xl p-4 flex-row items-center justify-between">
+            <View className="flex-1 pr-3">
+              <Text className="font-display-semibold text-accent-700">Créditos da plataforma</Text>
+              <Text className="font-sans text-xs text-accent-700/80 mt-0.5">
+                Abatidos automaticamente na sua próxima taxa de conexão
+              </Text>
+            </View>
+            <Text className="font-display-extrabold text-accent-700 text-xl">
+              {formatCurrency(creditBalance)}
+            </Text>
+          </View>
+        )}
 
         {/* Solicitar saque */}
         <View className="bg-white rounded-2xl p-4 border border-slate2-200">
@@ -113,32 +137,24 @@ export default function CarteiraScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <TextInput
-            className={`bg-white border rounded-xl px-3 py-2.5 text-slate2-900 font-sans mb-3 ${
-              focused === 'valor' ? 'border-brand-500' : 'border-slate2-200'
-            }`}
-            placeholder="0,00"
-            placeholderTextColor="#94A3B8"
-            keyboardType="decimal-pad"
-            value={saqueValor}
-            onChangeText={setSaqueValor}
-            onFocus={() => setFocused('valor')}
-            onBlur={() => setFocused(null)}
-          />
+          <View className="mb-3">
+            <Input
+              placeholder="0,00"
+              keyboardType="decimal-pad"
+              value={saqueValor}
+              onChangeText={setSaqueValor}
+            />
+          </View>
           <Text className="font-sans text-xs text-slate2-500 mb-1">
             Chave PIX {pixKey ? `(salva: ${pixKey})` : '(nenhuma cadastrada)'}
           </Text>
-          <TextInput
-            className={`bg-white border rounded-xl px-3 py-2.5 text-slate2-900 font-sans mb-3 ${
-              focused === 'chave' ? 'border-brand-500' : 'border-slate2-200'
-            }`}
-            placeholder={pixKey || 'CPF, e-mail, telefone ou chave aleatória'}
-            placeholderTextColor="#94A3B8"
-            value={saqueChave}
-            onChangeText={setSaqueChave}
-            onFocus={() => setFocused('chave')}
-            onBlur={() => setFocused(null)}
-          />
+          <View className="mb-3">
+            <Input
+              placeholder={pixKey || 'CPF, e-mail, telefone ou chave aleatória'}
+              value={saqueChave}
+              onChangeText={setSaqueChave}
+            />
+          </View>
           <TouchableOpacity
             onPress={solicitarSaque}
             disabled={sacando || balance < 10}

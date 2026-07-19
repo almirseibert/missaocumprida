@@ -61,8 +61,8 @@ export default function SuporteDetailScreen() {
 
   if (loading || !ticket) {
     return (
-      <SafeAreaView className="flex-1 bg-slate2-50 items-center justify-center">
-        <ActivityIndicator color="#1D4ED8" />
+      <SafeAreaView className="flex-1 bg-paper items-center justify-center">
+        <ActivityIndicator color="#059669" />
       </SafeAreaView>
     )
   }
@@ -70,9 +70,9 @@ export default function SuporteDetailScreen() {
   const closed = ticket.status === 'CLOSED'
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="flex-row items-center gap-3 px-4 py-3 bg-white border-b border-slate2-200">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()}>
           <ArrowLeft size={20} color="#475569" />
         </TouchableOpacity>
         <View className="flex-1">
@@ -84,12 +84,12 @@ export default function SuporteDetailScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }}>
         {ticket.messages.map((m) => (
           <View key={m.id} className={`flex-row gap-2 ${m.from_admin ? '' : 'flex-row-reverse'}`}>
-            <View className="w-8 h-8 rounded-full bg-brand-100 items-center justify-center">
+            <View className="w-8 h-8 rounded-full bg-trust-100 items-center justify-center">
               {m.from_admin
                 ? <ShieldCheck size={14} color="#1D4ED8" />
-                : <Text className="text-xs font-bold text-brand-700">{(m.sender?.name ?? 'V')[0]}</Text>}
+                : <Text className="text-xs font-bold text-trust-700">{(m.sender?.name ?? 'V')[0]}</Text>}
             </View>
-            <View className={`max-w-[80%] rounded-2xl px-3 py-2 ${m.from_admin ? 'bg-brand-50 border border-brand-100' : 'bg-white border border-slate2-200'}`}>
+            <View className={`max-w-[80%] rounded-2xl px-3 py-2 ${m.from_admin ? 'bg-trust-50 border border-trust-100' : 'bg-white border border-slate2-200'}`}>
               <Text className="text-[11px] text-slate2-500 mb-0.5">
                 {m.from_admin ? 'Equipe Missão Cumprida' : (m.sender?.name ?? 'Você')} · {formatRelative(m.created_at)}
               </Text>
@@ -100,7 +100,7 @@ export default function SuporteDetailScreen() {
       </ScrollView>
 
       {closed ? (
-        <View className="p-4 bg-slate2-50 border-t border-slate2-200">
+        <View className="p-4 bg-paper border-t border-slate2-200">
           <Text className="text-sm text-slate2-500 text-center">Este ticket foi fechado.</Text>
         </View>
       ) : (

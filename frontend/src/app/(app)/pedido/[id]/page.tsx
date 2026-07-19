@@ -428,13 +428,13 @@ export default function OrderDetailPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
           <CreditCard className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="font-semibold text-amber-800">Pagamento pendente</p>
+            <p className="font-semibold text-amber-800">Taxa de Conexão pendente</p>
             <p className="text-sm text-amber-700 mt-0.5">
-              Realize o pagamento para confirmar o agendamento do serviço.
+              Pague a taxa para liberar o contato do profissional. O serviço é pago direto a ele.
             </p>
           </div>
           <Button size="sm" onClick={() => router.push(`/pagamento/${id}`)}>
-            Pagar agora
+            Pagar taxa
           </Button>
         </div>
       )}

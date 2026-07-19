@@ -59,11 +59,11 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-slate2-50"
+      className="flex-1 bg-paper"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerClassName="px-6 py-12">
-        <TouchableOpacity onPress={() => router.back()} className="mb-6">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mb-6">
           <Text className="font-sans-semibold text-brand-700">← Voltar</Text>
         </TouchableOpacity>
         <Text className="font-display-extrabold text-2xl text-slate2-900 mb-1">

@@ -1,13 +1,17 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
+import { env } from '../../config/env'
+import { notify } from '../push/push.service'
 import * as R from '../../utils/response'
 
 const MONTHLY_VALUE = 29.90
 
+// Fotos de documento/selfie NÃO entram por aqui: o fluxo oficial é o upload
+// multipart de /api/users/me/verification, que persiste como FileAsset
+// sensível. Aceitar URLs arbitrárias aqui permitiria apontar para hosts
+// externos (SSRF/phishing na revisão do admin).
 const startSchema = z.object({
-  document_photo_url: z.string().url().optional(),
-  selfie_photo_url: z.string().url().optional(),
   full_name: z.string().min(3).max(200),
   document_number: z.string().min(5).max(30),
   background_check_consent: z.boolean(),
@@ -26,8 +30,6 @@ export async function startVerification(req: Request, res: Response) {
       verification_data: {
         full_name: parsed.data.full_name,
         document_number: parsed.data.document_number,
-        document_photo_url: parsed.data.document_photo_url ?? null,
-        selfie_photo_url: parsed.data.selfie_photo_url ?? null,
         submitted_at: new Date().toISOString(),
       } as any,
     },
@@ -36,54 +38,99 @@ export async function startVerification(req: Request, res: Response) {
   return R.ok(res, updated, 'Dados de verificação recebidos. Aguarde análise.')
 }
 
-// POST /api/verification/subscribe — ativa assinatura mensal
-// Em produção, integrar com Stripe Subscription; aqui registramos o intent
-const subscribeSchema = z.object({
-  stripe_sub_id: z.string().optional(),
-  payment_method: z.enum(['PIX', 'CARD']).default('PIX'),
-})
-
+// POST /api/verification/subscribe — DEPRECIADO.
+// A ativação paga do Selo Pro é feita pela loja (Google Play Billing via
+// RevenueCat) e concedida pelo webhook `/api/verification/rc-webhook`, OU por
+// aprovação manual do admin. Este endpoint NÃO concede mais o selo — antes ele
+// concedia de graça (sem cobrar), o que era um bug de receita e de política.
 export async function subscribe(req: Request, res: Response) {
-  const parsed = subscribeSchema.safeParse(req.body)
-  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
-
-  // Bloqueia se ainda não enviou dados de verificação
   const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { verification_data: true } })
   if (!user?.verification_data) {
     return R.badRequest(res, 'Envie seus dados de verificação primeiro (POST /api/verification/start)')
   }
+  return R.badRequest(
+    res,
+    'A assinatura Verificado Pro é ativada pela loja do aplicativo (Google Play). Conclua a compra no app.',
+  )
+}
 
-  // Evita duplicar assinatura ativa
-  const existing = await prisma.verifiedProSubscription.findFirst({
-    where: { user_id: req.userId!, status: 'ACTIVE' },
-  })
-  if (existing) return R.badRequest(res, 'Você já tem uma assinatura Verificado Pro ativa')
+// POST /api/verification/rc-webhook — webhook da RevenueCat (Google Play Billing).
+// Fonte de verdade da assinatura: concede/revoga o selo conforme os eventos.
+// Autenticado por segredo compartilhado no header Authorization (config na RC).
+const GRANT_EVENTS = new Set([
+  'INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE', 'NON_RENEWING_PURCHASE',
+])
+const REVOKE_EVENTS = new Set(['EXPIRATION'])
 
-  const periodEnd = new Date()
-  periodEnd.setMonth(periodEnd.getMonth() + 1)
+export async function handleRevenueCatWebhook(req: Request, res: Response) {
+  // Autenticação do webhook
+  const auth = req.headers['authorization']
+  if (!env.REVENUECAT_WEBHOOK_AUTH || auth !== env.REVENUECAT_WEBHOOK_AUTH) {
+    return res.sendStatus(401)
+  }
 
-  const sub = await prisma.$transaction(async (tx) => {
-    const created = await tx.verifiedProSubscription.create({
-      data: {
-        user_id: req.userId!,
-        stripe_sub_id: parsed.data.stripe_sub_id ?? null,
-        status: 'ACTIVE',
-        current_period_end: periodEnd,
-        monthly_value: MONTHLY_VALUE,
-      },
-    })
-    // Pré-ativa o selo — APROVAÇÃO MANUAL pelo admin é o gate final em produção
-    await tx.user.update({
-      where: { id: req.userId! },
-      data: {
-        is_verified_pro: true,
-        verified_pro_since: new Date(),
-        verified_pro_expires: periodEnd,
-      },
-    })
-    return created
-  })
-  return R.created(res, sub, 'Assinatura Verificado Pro ativada')
+  try {
+    const event = (req.body?.event ?? {}) as {
+      type?: string
+      app_user_id?: string
+      expiration_at_ms?: number
+    }
+    const userId = event.app_user_id
+    const type = event.type ?? ''
+    if (!userId) return res.sendStatus(200) // nada a fazer
+
+    // Ignora usuários anônimos da RC (ex.: "$RCAnonymousID:...")
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!user) return res.sendStatus(200)
+
+    if (GRANT_EVENTS.has(type)) {
+      const periodEnd = event.expiration_at_ms
+        ? new Date(event.expiration_at_ms)
+        : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d })()
+
+      await prisma.$transaction(async (tx) => {
+        const existing = await tx.verifiedProSubscription.findFirst({
+          where: { user_id: userId, status: 'ACTIVE' },
+        })
+        if (existing) {
+          await tx.verifiedProSubscription.update({
+            where: { id: existing.id },
+            data: { current_period_end: periodEnd },
+          })
+        } else {
+          await tx.verifiedProSubscription.create({
+            data: { user_id: userId, status: 'ACTIVE', current_period_end: periodEnd, monthly_value: MONTHLY_VALUE },
+          })
+        }
+        await tx.user.update({
+          where: { id: userId },
+          data: { is_verified_pro: true, verified_pro_since: new Date(), verified_pro_expires: periodEnd },
+        })
+      })
+      await notify(userId, {
+        type: 'VERIFIED_PRO',
+        title: 'Selo Verificado Pro ativo ✓',
+        body: 'Sua assinatura foi confirmada. Aproveite os benefícios!',
+        data: {},
+        channel: 'general',
+      }).catch(() => {})
+    } else if (REVOKE_EVENTS.has(type)) {
+      await prisma.$transaction([
+        prisma.verifiedProSubscription.updateMany({
+          where: { user_id: userId, status: 'ACTIVE' },
+          data: { status: 'CANCELLED', cancelled_at: new Date() },
+        }),
+        prisma.user.update({
+          where: { id: userId },
+          data: { is_verified_pro: false, verified_pro_expires: new Date() },
+        }),
+      ])
+    }
+    // CANCELLATION (auto-renovação desligada) mantém o selo até EXPIRATION.
+  } catch (err) {
+    console.error('[RevenueCat Webhook] erro:', err)
+  }
+  return res.sendStatus(200)
 }
 
 // POST /api/verification/cancel — cancela assinatura

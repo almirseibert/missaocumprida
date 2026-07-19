@@ -13,7 +13,7 @@ import proposalsRoutes, { proposalActionsRouter } from './modules/proposals/prop
 import schedulesRoutes from './modules/schedules/schedules.routes'
 import ratingsRoutes, { rateRouter } from './modules/ratings/ratings.routes'
 import messagesRoutes from './modules/messages/messages.routes'
-import paymentsRoutes, { webhookRouter } from './modules/payments/payments.routes'
+import paymentsRoutes from './modules/payments/payments.routes'
 import notificationsRoutes from './modules/notifications/notifications.routes'
 import pushRoutes from './modules/push/push.routes'
 import referralsRoutes from './modules/referrals/referrals.routes'
@@ -24,20 +24,19 @@ import {
   myAvailabilityRouter, providerAvailabilityRouter, directBookRouter,
 } from './modules/availability/availability.routes'
 import subscriptionsRoutes from './modules/subscriptions/subscriptions.routes'
-import verificationRoutes from './modules/verification/verification.routes'
+import verificationRoutes, { rcWebhookRouter } from './modules/verification/verification.routes'
 import recommendationsRoutes from './modules/recommendations/recommendations.routes'
 import legalRoutes from './modules/legal/legal.routes'
 import supportRoutes from './modules/support/support.routes'
 import filesRoutes from './modules/files/files.routes'
+import settingsRoutes from './modules/settings/settings.routes'
+import announcementsRoutes from './modules/announcements/announcements.routes'
 
 const app = express()
 
 // Atrás de proxy (EasyPanel/Traefik, Nginx...). Necessário para que
 // req.protocol/host reflitam o domínio público HTTPS real ao gerar URLs.
 app.set('trust proxy', true)
-
-// ---- Webhook Stripe — precisa de raw body ANTES do express.json() ----
-app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), webhookRouter)
 
 // ---- Middlewares globais ----
 app.use(helmetMiddleware)
@@ -87,10 +86,13 @@ app.use('/api/users/me/availability', myAvailabilityRouter)
 app.use('/api/users', providerAvailabilityRouter)   // GET /api/users/:providerId/availability
 app.use('/api/orders', directBookRouter)            // POST /api/orders/direct-book
 app.use('/api/subscriptions', subscriptionsRoutes)
+app.use('/api/verification/rc-webhook', rcWebhookRouter) // webhook RevenueCat (sem JWT)
 app.use('/api/verification', verificationRoutes)
 app.use('/api/recommendations', recommendationsRoutes)
 app.use('/api/legal', legalRoutes)
 app.use('/api/support', supportRoutes)
+app.use('/api/config', settingsRoutes) // GET /public (apps) + GET/PUT (admin)
+app.use('/api/announcements', announcementsRoutes) // avisos do admin (pop-up/banner + push)
 
 // ---- 404 ----
 app.use((_req, res) => {

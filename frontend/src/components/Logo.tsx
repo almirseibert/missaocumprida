@@ -7,7 +7,7 @@ interface LogoProps {
 
 /**
  * Logo Missão Cumprida — "Selo da Missão": medalha branca com fitas e
- * check vazado sobre degradê azul→verde. A medalha diz "confiança e
+ * check vazado sobre degradê verde→azul (Verde Missão). A medalha diz "confiança e
  * reputação"; o check diz "missão cumprida". O check usa o próprio
  * degradê (userSpaceOnUse) para simular recorte no selo.
  */
@@ -36,9 +36,9 @@ export function Logo({ size = 32, className }: LogoProps) {
           y2="48"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0%" stopColor="#1E3A8A" />
-          <stop offset="52%" stopColor="#1D4ED8" />
-          <stop offset="100%" stopColor="#059669" />
+          <stop offset="0%" stopColor="#065F46" />
+          <stop offset="52%" stopColor="#059669" />
+          <stop offset="100%" stopColor="#2563EB" />
         </linearGradient>
       </defs>
       <rect width="48" height="48" rx="13" fill={`url(#${gradId})`} />

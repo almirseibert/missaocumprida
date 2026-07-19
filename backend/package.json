@@ -12,6 +12,7 @@
     "db:seed": "ts-node prisma/seed.ts",
     "db:seed:expansion": "ts-node prisma/seed-expansion.ts",
     "db:seed:affinities": "ts-node prisma/seed-affinities.ts",
+    "db:set-admin": "ts-node prisma/set-admin-password.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset"
   },
@@ -34,7 +35,6 @@
     "prisma": "^5.10.0",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
-    "stripe": "^14.21.0",
     "typescript": "^5.4.2",
     "uuid": "^9.0.1",
     "web-push": "^3.6.7",

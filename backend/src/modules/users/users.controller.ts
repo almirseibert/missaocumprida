@@ -1,9 +1,13 @@
 import { Request, Response } from 'express'
+import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
 import { persistUpload } from '../files/files.service'
+import { banUser } from './moderation.service'
+import { anonymizeUser, DELETION_GRACE_DAYS } from './deletion.service'
 
 export async function getMe(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
@@ -32,6 +36,114 @@ export async function getMe(req: Request, res: Response) {
   })
   if (!user) return R.notFound(res, 'Usuário não encontrado')
   return R.ok(res, user)
+}
+
+// DELETE /api/users/me — exclusão de conta (LGPD + exigência Google Play).
+// Reautentica por senha, bloqueia se houver dinheiro/serviço em andamento e,
+// então, anonimiza os dados pessoais + apaga documentos KYC. Preserva os
+// registros financeiros/pedidos (anonimizados) por obrigação legal/fiscal.
+const deleteMeSchema = z.object({
+  password: z.string().min(1, 'Informe sua senha para confirmar a exclusão'),
+})
+
+export async function deleteMe(req: Request, res: Response) {
+  const parsed = deleteMeSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.userId },
+    select: { id: true, password: true, provider_balance: true, is_active: true },
+  })
+  if (!user) return R.notFound(res, 'Usuário não encontrado')
+  if (!user.is_active) return R.badRequest(res, 'Conta já está inativa')
+
+  const valid = await bcrypt.compare(parsed.data.password, user.password)
+  if (!valid) return R.unauthorized(res, 'Senha incorreta')
+
+  // Bloqueios: não excluir com dinheiro a receber ou transações/serviços em curso.
+  if ((user.provider_balance ?? 0) > 0) {
+    return R.conflict(res, 'Você tem saldo a sacar. Faça o saque antes de excluir a conta.')
+  }
+  const pendingPayments = await prisma.payment.count({
+    where: {
+      status: { in: ['PAID', 'HELD', 'DISPUTED'] },
+      OR: [{ client_id: user.id }, { provider_id: user.id }],
+    },
+  })
+  if (pendingPayments > 0) {
+    return R.conflict(res, 'Há pagamentos em andamento (em garantia ou em análise). Conclua-os antes de excluir a conta.')
+  }
+  const activeSchedules = await prisma.schedule.count({
+    where: {
+      status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+      OR: [{ client_id: user.id }, { provider_id: user.id }],
+    },
+  })
+  if (activeSchedules > 0) {
+    return R.conflict(res, 'Há serviços agendados/em andamento. Conclua ou cancele antes de excluir a conta.')
+  }
+
+  await anonymizeUser(user.id)
+
+  return R.ok(res, null, 'Conta excluída. Seus dados pessoais foram anonimizados.')
+}
+
+// ---------------------------------------------------------------------------
+// Cancelamento de assinatura + exclusão com prazo de arrependimento (público)
+// Usado pela página web /cancelar-assinatura: cancela o Selo Pro e agenda a
+// exclusão dos dados. O usuário tem DELETION_GRACE_DAYS para desfazer.
+// ---------------------------------------------------------------------------
+const publicCredentialsSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+  password: z.string().min(1, 'Informe sua senha'),
+})
+
+export async function requestCancellationAndDeletion(req: Request, res: Response) {
+  const parsed = publicCredentialsSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+
+  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
+  if (!user || !user.is_active) return R.unauthorized(res, 'E-mail ou senha incorretos')
+  const valid = await bcrypt.compare(parsed.data.password, user.password)
+  if (!valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
+
+  const deletionDate = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000)
+
+  await prisma.$transaction([
+    // Cancela o Selo Pro local (o Play Billing deve ser cancelado na Google
+    // Play; a RevenueCat sincroniza pelo webhook e não renova mais)
+    prisma.verifiedProSubscription.updateMany({
+      where: { user_id: user.id, status: 'ACTIVE' },
+      data: { status: 'CANCELLED', cancelled_at: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: user.id },
+      data: { is_verified_pro: false, deletion_requested_at: new Date() },
+    }),
+  ])
+
+  return R.ok(res, { deletion_scheduled_for: deletionDate.toISOString(), grace_days: DELETION_GRACE_DAYS },
+    `Assinatura cancelada e exclusão agendada. Você tem ${DELETION_GRACE_DAYS} dias para se arrepender — basta voltar a esta página e desfazer. Se assinou pelo Google Play, cancele também a renovação na Play Store.`)
+}
+
+export async function undoDeletionRequest(req: Request, res: Response) {
+  const parsed = publicCredentialsSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+
+  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
+  if (!user || !user.is_active) return R.unauthorized(res, 'E-mail ou senha incorretos')
+  const valid = await bcrypt.compare(parsed.data.password, user.password)
+  if (!valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
+
+  if (!user.deletion_requested_at) {
+    return R.badRequest(res, 'Não há exclusão agendada para esta conta')
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { deletion_requested_at: null },
+  })
+  return R.ok(res, null, 'Exclusão cancelada — sua conta continua ativa. A assinatura, se desejar, precisa ser reativada no app.')
 }
 
 export async function getPublicProfile(req: Request, res: Response) {
@@ -503,14 +615,29 @@ export async function adminSuspendUser(req: Request, res: Response) {
   return R.ok(res, user, 'Usuário suspenso')
 }
 
-// PATCH /api/users/admin/users/:id/reactivate
+// PATCH /api/users/admin/users/:id/reactivate — reverte suspensão OU banimento
 export async function adminReactivateUser(req: Request, res: Response) {
   const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } })
   if (!target) return R.notFound(res, 'Usuário não encontrado')
   const user = await prisma.user.update({
     where: { id: req.params.id },
-    data: { is_active: true, suspended_until: null },
+    data: { is_active: true, suspended_until: null, banned_at: null, ban_reason: null },
     select: { id: true, is_active: true, suspended_until: true },
   })
   return R.ok(res, user, 'Usuário reativado')
+}
+
+// POST /api/users/admin/users/:id/ban  body: { reason } — banimento definitivo
+// (má-fé, no-show confirmado, cancelamento pós-liberação — Termos de Uso)
+export async function adminBanUser(req: Request, res: Response) {
+  if (req.params.id === req.userId) return R.badRequest(res, 'Você não pode banir a própria conta.')
+  const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, role: true } })
+  if (!target) return R.notFound(res, 'Usuário não encontrado')
+  if (target.role === 'ADMIN') return R.badRequest(res, 'Não é possível banir outro administrador.')
+
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
+  if (!reason) return R.badRequest(res, 'Informe o motivo do banimento')
+
+  await banUser(req.params.id, reason)
+  return R.ok(res, { id: req.params.id, banned: true }, 'Usuário banido')
 }

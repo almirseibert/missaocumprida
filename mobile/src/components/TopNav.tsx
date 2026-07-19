@@ -85,7 +85,15 @@ export function TopNav() {
             Missão Cumprida
           </Text>
         </View>
-        <View className="w-9 h-9 rounded-full bg-white/15 items-center justify-center">
+        <TouchableOpacity
+          onPress={() => router.push('/(app)/notificacoes' as any)}
+          accessibilityRole="button"
+          accessibilityLabel={
+            unread > 0 ? `Notificações, ${unread} não lidas` : 'Notificações'
+          }
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          className="w-9 h-9 rounded-full bg-white/15 items-center justify-center"
+        >
           <Bell size={17} color="#fff" />
           {unread > 0 && (
             <View className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-red-500 border-2 border-brand-700 items-center justify-center">
@@ -94,7 +102,7 @@ export function TopNav() {
               </Text>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Abas */}
@@ -108,7 +116,7 @@ export function TopNav() {
               activeOpacity={0.8}
               className={`flex-1 flex-row items-center justify-center gap-1 py-2 rounded-xl ${active ? 'bg-white' : ''}`}
             >
-              <Icon size={15} color={active ? '#1D4ED8' : '#BFDBFE'} />
+              <Icon size={15} color={active ? '#047857' : '#A7F3D0'} />
               <Text
                 numberOfLines={1}
                 className={`text-[11px] ${active ? 'font-display-bold text-brand-700' : 'font-display-semibold text-brand-200'}`}

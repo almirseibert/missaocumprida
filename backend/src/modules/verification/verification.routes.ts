@@ -2,8 +2,13 @@ import { Router } from 'express'
 import { authenticate, requireRole } from '../../middlewares/auth'
 import {
   startVerification, subscribe, cancelSubscription, getMyStatus,
-  adminApprove, adminReject,
+  adminApprove, adminReject, handleRevenueCatWebhook,
 } from './verification.controller'
+
+// Webhook da RevenueCat — SEM autenticação por JWT (autentica por segredo no
+// header Authorization dentro do handler). Montado à parte no app.ts.
+export const rcWebhookRouter = Router()
+rcWebhookRouter.post('/', handleRevenueCatWebhook)
 
 const router = Router()
 router.use(authenticate)

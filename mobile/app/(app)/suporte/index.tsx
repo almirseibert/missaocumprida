@@ -74,9 +74,9 @@ export default function SuporteListScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="flex-row items-center gap-3 px-4 py-3 bg-white border-b border-slate2-200">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()}>
           <ArrowLeft size={20} color="#475569" />
         </TouchableOpacity>
         <View className="flex-row items-center gap-2 flex-1">
@@ -172,7 +172,7 @@ export default function SuporteListScreen() {
         <Text className="font-display-semibold text-slate2-900 mt-2">Minhas solicitações</Text>
 
         {loading ? (
-          <ActivityIndicator color="#1D4ED8" />
+          <ActivityIndicator color="#059669" />
         ) : tickets.length === 0 ? (
           <View className="bg-white border border-slate2-200 rounded-2xl p-6">
             <Text className="text-sm text-slate2-500 text-center">Você ainda não enviou nenhuma solicitação.</Text>

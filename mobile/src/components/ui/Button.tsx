@@ -4,7 +4,7 @@ import {
 } from 'react-native'
 
 export type ButtonVariant =
-  | 'primary'    // Azul Confiança — ação principal
+  | 'primary'    // Verde Missão — ação principal (CTA único por tela)
   | 'success'    // Verde Missão — confirmar conclusão / aceitar proposta
   | 'secondary'  // Cinza suave — cancelar / ação secundária
   | 'outline'    // contorno brand
@@ -24,10 +24,10 @@ interface ButtonProps extends TouchableOpacityProps {
 }
 
 const VARIANTS: Record<ButtonVariant, { bg: string; text: string; border?: string }> = {
-  primary:   { bg: '#1D4ED8', text: '#fff' },                                  // brand-700
+  primary:   { bg: '#059669', text: '#fff' },                                  // brand-600 (Verde Missão)
   success:   { bg: '#059669', text: '#fff' },                                  // accent-600
   secondary: { bg: '#F1F5F9', text: '#1E293B' },                               // slate2-100 / slate2-800
-  outline:   { bg: 'transparent', text: '#1D4ED8', border: '#1D4ED8' },
+  outline:   { bg: 'transparent', text: '#047857', border: '#059669' },        // brand-700/600
   ghost:     { bg: 'transparent', text: '#475569' },                           // slate2-600
   danger:    { bg: '#DC2626', text: '#fff' },
 }

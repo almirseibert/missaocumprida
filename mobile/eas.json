@@ -30,7 +30,9 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://missaocumprida-back.oehpg2.easypanel.host"
+        "EXPO_PUBLIC_API_URL": "https://missaocumprida-back.oehpg2.easypanel.host",
+        "EXPO_PUBLIC_WEB_URL": "https://missaocumprida-front.oehpg2.easypanel.host",
+        "EXPO_PUBLIC_REVENUECAT_ENTITLEMENT": "pro"
       },
       "channel": "production"
     }

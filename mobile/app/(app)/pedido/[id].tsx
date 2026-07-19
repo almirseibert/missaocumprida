@@ -17,6 +17,7 @@ export default function PedidoDetailScreen() {
   const { user } = useAuthStore()
   const [order, setOrder] = useState<Order | null>(null)
   const [proposals, setProposals] = useState<Proposal[]>([])
+  const [fees, setFees] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { load() }, [id])
@@ -27,41 +28,52 @@ export default function PedidoDetailScreen() {
         api.get(`/orders/${id}`),
         api.get(`/orders/${id}/proposals`).catch(() => ({ data: { data: [] } })),
       ])
-      setOrder(oRes.data.data)
+      const o = oRes.data.data
+      setOrder(o)
       setProposals(pRes.data.data || [])
+      // Taxa de Conexão: estado das taxas na janela de pagamento
+      if (o?.status === 'ACCEPTED') {
+        api.get(`/payments/fees/order/${id}`)
+          .then(r => setFees(r.data.data))
+          .catch(() => {})
+      }
     } finally {
       setLoading(false)
     }
   }
 
   async function acceptProposal(proposalId: string) {
-    Alert.alert('Aceitar proposta', 'Deseja aceitar esta proposta e ir para o pagamento?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Aceitar',
-        onPress: async () => {
-          try {
-            await api.post(`/proposals/${proposalId}/accept`)
-            Alert.alert('Proposta aceita!', 'Agora realize o pagamento para confirmar o serviço.', [
-              { text: 'Pagar', onPress: () => router.push(`/(app)/pagamento/${id}`) },
-            ])
-          } catch (err) {
-            Alert.alert('Erro', getApiError(err))
-          }
+    Alert.alert(
+      'Aceitar proposta',
+      'Ao aceitar, você paga apenas a taxa de conexão para liberar o contato do profissional. O serviço é pago diretamente a ele.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Aceitar',
+          onPress: async () => {
+            try {
+              await api.post(`/proposals/${proposalId}/accept`)
+              Alert.alert('Proposta aceita!', 'Agora pague a taxa de conexão para liberar o contato.', [
+                { text: 'Pagar taxa', onPress: () => router.push(`/(app)/pagamento/${id}`) },
+              ])
+            } catch (err) {
+              Alert.alert('Erro', getApiError(err))
+            }
+          },
         },
-      },
-    ])
+      ],
+    )
   }
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#059669" />
   if (!order) return null
 
   const isClient = user?.id === order.client_id
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3">
           <ArrowLeft size={22} color="#334155" />
         </TouchableOpacity>
         <Text className="font-display-bold text-lg text-slate2-900 flex-1" numberOfLines={1}>
@@ -83,7 +95,7 @@ export default function PedidoDetailScreen() {
             }}
             className="mr-2 p-2 rounded-lg"
           >
-            <Share2 size={20} color="#1D4ED8" />
+            <Share2 size={20} color="#059669" />
           </TouchableOpacity>
         )}
         {(() => {
@@ -118,17 +130,58 @@ export default function PedidoDetailScreen() {
           )}
         </View>
 
-        {/* Banner pagamento pendente — usa âmbar warning do design system */}
-        {order.status === 'ACCEPTED' && isClient && (
+        {/* Banners da Taxa de Conexão (janela ACCEPTED) */}
+        {order.status === 'ACCEPTED' && isClient && (() => {
+          const clientPaid = fees?.client_fee && ['PAID', 'COVERED'].includes(fees.client_fee.status)
+          if (clientPaid) {
+            return (
+              <TouchableOpacity
+                onPress={() => router.push(`/(app)/pagamento/${id}`)}
+                className="rounded-2xl p-4 flex-row items-center justify-between bg-brand-700"
+              >
+                <View className="flex-1">
+                  <Text className="font-display-bold text-white">Aguardando o profissional</Text>
+                  <Text className="font-sans text-white/90 text-sm mt-0.5">
+                    Sua taxa foi paga. Se ele não confirmar no prazo, ela volta como crédito.
+                  </Text>
+                </View>
+                <Text className="text-white text-2xl">→</Text>
+              </TouchableOpacity>
+            )
+          }
+          return (
+            <TouchableOpacity
+              onPress={() => router.push(`/(app)/pagamento/${id}`)}
+              className="rounded-2xl p-4 flex-row items-center justify-between"
+              style={{ backgroundColor: '#D97706' }}
+            >
+              <View className="flex-1">
+                <Text className="font-display-bold text-white">Taxa de conexão pendente</Text>
+                <Text className="font-sans text-white/90 text-sm mt-0.5">
+                  {fees?.client_fee?.promo_active
+                    ? `Promoção: ${Math.round(fees.client_fee.pct_applied * 100)}% em vez de ${Math.round(fees.client_fee.regular_pct * 100)}% — toque para pagar`
+                    : 'Toque para pagar e liberar o contato do profissional'}
+                </Text>
+              </View>
+              <Text className="text-white text-2xl">→</Text>
+            </TouchableOpacity>
+          )
+        })()}
+
+        {/* Prestador aceito: CTA para pagar a taxa dele */}
+        {order.status === 'ACCEPTED' && !isClient && fees?.viewer_side === 'PROVIDER' && (
           <TouchableOpacity
-            onPress={() => router.push(`/(app)/pagamento/${id}`)}
-            className="rounded-2xl p-4 flex-row items-center justify-between"
-            style={{ backgroundColor: '#D97706' }}
+            onPress={() => router.push(`/(app)/taxa-conexao/${id}` as any)}
+            className="rounded-2xl p-4 flex-row items-center justify-between bg-accent-600"
           >
             <View className="flex-1">
-              <Text className="font-display-bold text-white">Pagamento pendente</Text>
+              <Text className="font-display-bold text-white">
+                {fees?.client_fee && ['PAID', 'COVERED'].includes(fees.client_fee.status)
+                  ? 'Pague sua taxa para liberar o contato'
+                  : 'Proposta aceita — aguardando o cliente'}
+              </Text>
               <Text className="font-sans text-white/90 text-sm mt-0.5">
-                Toque para pagar e confirmar o serviço
+                Toque para ver os detalhes da taxa de conexão
               </Text>
             </View>
             <Text className="text-white text-2xl">→</Text>
@@ -172,7 +225,7 @@ export default function PedidoDetailScreen() {
                       {p.message}
                     </Text>
                   )}
-                  {p.status === 'PENDING' && order.status === 'OPEN' && (
+                  {p.status === 'PENDING' && ['OPEN', 'IN_PROPOSAL'].includes(order.status) && (
                     <View className="mt-3">
                       <Button variant="success" size="md" fullWidth onPress={() => acceptProposal(p.id)}>
                         ✓ Aceitar proposta
@@ -186,8 +239,8 @@ export default function PedidoDetailScreen() {
         )}
 
         {proposals.length === 0 && order.status === 'OPEN' && isClient && (
-          <View className="bg-brand-50 rounded-2xl p-4 items-center border border-brand-100">
-            <Text className="font-sans text-brand-700 text-center">
+          <View className="bg-trust-50 rounded-2xl p-4 items-center border border-trust-100">
+            <Text className="font-sans text-trust-700 text-center">
               Aguardando propostas dos prestadores…
             </Text>
           </View>

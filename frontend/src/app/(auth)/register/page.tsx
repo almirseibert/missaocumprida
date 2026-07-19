@@ -50,7 +50,11 @@ function RegisterFormContent() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      const { confirmPassword, ...payload } = data
+      const { confirmPassword, referral_code, ...rest } = data
+      // Envia o código só se preenchido — string vazia era rejeitada pelo backend
+      // (validação min. 3 chars), fazendo o cadastro falhar sem código de amigo.
+      const code = referral_code?.trim()
+      const payload = { ...rest, referral_code: code ? code.toUpperCase() : undefined }
       const res = await api.post('/auth/register', payload)
       const { user, accessToken, refreshToken } = res.data.data
       setTokens(accessToken, refreshToken)
@@ -130,7 +134,7 @@ function RegisterFormContent() {
       <Input
         label="Código de indicação (opcional)"
         placeholder="Ex: JOAOX42K"
-        helpText={initialReferralCode ? `Ganhe R$ 20 ao concluir seu 1º pedido!` : 'Tem um código de amigo? Ganhe R$ 20 no 1º pedido.'}
+        helpText={initialReferralCode ? `Código aplicado! Adicione para ganhar bônus.` : 'Tem um código de amigo? Adicione para ganhar bônus!'}
         {...register('referral_code')}
       />
 

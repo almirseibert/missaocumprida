@@ -63,7 +63,7 @@ export default function NotificacoesConfigScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center px-4 py-3 border-b border-neutral-200">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3">
           <ArrowLeft size={24} color="#111" />
         </TouchableOpacity>
         <Text className="text-lg font-bold flex-1">Notificações</Text>
@@ -71,9 +71,9 @@ export default function NotificacoesConfigScreen() {
       </View>
 
       <ScrollView className="flex-1">
-        <View className="p-4 bg-brand-50 mb-2 flex-row items-start">
+        <View className="p-4 bg-trust-50 mb-2 flex-row items-start">
           <BellRing size={20} color="#1D4ED8" />
-          <Text className="ml-3 flex-1 text-sm text-brand-900">
+          <Text className="ml-3 flex-1 text-sm text-trust-900">
             Escolha quais tipos de aviso você quer receber. Você pode mudar a qualquer momento.
           </Text>
         </View>

@@ -123,10 +123,10 @@ export default function MeusPacotesScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-paper" edges={['top']}>
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-slate2-100">
         <View className="flex-row items-center gap-2">
-          <TouchableOpacity onPress={() => router.back()} className="p-1">
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="p-1">
             <ArrowLeft size={22} color="#0F172A" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-slate2-900">Meus Pacotes</Text>

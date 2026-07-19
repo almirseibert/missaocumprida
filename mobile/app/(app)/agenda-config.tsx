@@ -85,9 +85,9 @@ export default function AgendaConfigScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-paper" edges={['top']}>
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100 gap-2">
-        <TouchableOpacity onPress={() => router.back()} className="p-1">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="p-1">
           <ArrowLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <CalendarDays size={20} color="#7C3AED" />
@@ -111,7 +111,7 @@ export default function AgendaConfigScreen() {
             {rules.length === 0 ? (
               <Text className="text-slate2-500 italic text-center py-4">Nenhuma regra cadastrada.</Text>
             ) : rules.map((r, idx) => (
-              <View key={idx} className="bg-slate2-50 rounded-xl p-3 mb-2">
+              <View key={idx} className="bg-paper rounded-xl p-3 mb-2">
                 <View className="flex-row mb-2 flex-wrap">
                   {WEEKDAYS.map((d, i) => (
                     <TouchableOpacity

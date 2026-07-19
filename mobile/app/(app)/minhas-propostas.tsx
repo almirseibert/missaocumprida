@@ -62,9 +62,9 @@ export default function MinhasPropostasScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-paper" edges={['top']}>
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100 gap-2">
-        <TouchableOpacity onPress={() => router.back()} className="p-1">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="p-1">
           <ArrowLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-slate2-900">Minhas propostas</Text>
@@ -103,6 +103,20 @@ export default function MinhasPropostasScreen() {
                   </Text>
                   <Text className="font-bold text-brand-700">{formatCurrency(p.value)}</Text>
                 </View>
+                {/* Taxa de Conexão: proposta aceita e pedido aguardando taxas */}
+                {p.status === 'ACCEPTED' && (p as any).order?.status === 'ACCEPTED' && (
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation?.()
+                      router.push(`/(app)/taxa-conexao/${p.order_id}` as any)
+                    }}
+                    className="bg-accent-600 rounded-xl px-3 py-2.5 mb-2"
+                  >
+                    <Text className="font-display-bold text-white text-center text-sm">
+                      💳 Pague sua taxa de conexão para liberar o contato
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 <View className="flex-row items-center gap-2">
                   <Text className={`text-[10px] px-2 py-0.5 rounded-full ${STATUS_COLOR[p.status]}`}>
                     {STATUS_LABEL[p.status]}

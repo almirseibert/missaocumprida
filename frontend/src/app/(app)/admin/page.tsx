@@ -80,7 +80,9 @@ export default function AdminHomePage() {
 
   const f = data?.financeiro
   const navCards = [
-    { href: '/admin/transacoes', title: 'Financeiro & Transações', desc: 'Segurança de Transação, saques e movimentações', icon: Wallet },
+    { href: '/admin/taxas', title: 'Taxas de Conexão', desc: 'Fila de exceção: créditos e estornos das taxas', icon: Landmark },
+    { href: '/admin/configuracoes', title: 'Configurações', desc: 'Percentuais das taxas, promoção e prazos em runtime', icon: Lock },
+    { href: '/admin/transacoes', title: 'Financeiro & Transações', desc: 'Escrow legado, saques e movimentações', icon: Wallet },
     { href: '/admin/categorias', title: 'Categorias & Questionários', desc: 'Grupos, serviços e perguntas', icon: FolderTree },
     { href: '/admin/usuarios', title: 'Usuários & Cadastros', desc: 'Buscar, verificar e moderar contas', icon: Users },
     { href: '/admin/pedidos', title: 'Pedidos & Agendamentos', desc: 'Acompanhamento e intervenção', icon: ShoppingBag },
@@ -120,8 +122,8 @@ export default function AdminHomePage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Kpi icon={TrendingUp} label="Volume (GMV)" value={formatCurrency(f.gmv)} sub={`${f.transactions} transações`} tone="brand" />
             <Kpi icon={Landmark} label="Receita da plataforma" value={formatCurrency(f.platform_revenue)} sub={`Gateway: ${formatCurrency(f.gateway_fees)}`} tone="accent" />
-            <Kpi icon={Lock} label="Em garantia" value={formatCurrency(f.held_amount)} sub={`${f.held_count} retidas`} tone="amber" />
-            <Kpi icon={Wallet} label="Liberado a prestadores" value={formatCurrency(f.released_amount)} sub={`${f.released_count} no período`} tone="violet" />
+            <Kpi icon={Lock} label="Em garantia (escrow legado)" value={formatCurrency(f.held_amount)} sub={`${f.held_count} retidas — zerar antes do lançamento`} tone="amber" />
+            <Kpi icon={Wallet} label="Liberado a prestadores (legado)" value={formatCurrency(f.released_amount)} sub={`${f.released_count} no período`} tone="violet" />
           </div>
 
           {/* KPIs secundários */}

@@ -68,7 +68,7 @@ export default function IndicarScreen() {
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator color="#1D4ED8" />
+        <ActivityIndicator color="#059669" />
       </SafeAreaView>
     )
   }
@@ -77,7 +77,7 @@ export default function IndicarScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center px-4 py-3 border-b border-neutral-200">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3"><ArrowLeft size={24} color="#111" /></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3"><ArrowLeft size={24} color="#111" /></TouchableOpacity>
         <Text className="text-lg font-bold">Indique e ganhe</Text>
       </View>
 
@@ -98,7 +98,7 @@ export default function IndicarScreen() {
 
         <View className="bg-brand-50 rounded-2xl p-4 mb-4 flex-row items-center">
           <View className="w-10 h-10 rounded-full bg-brand-100 items-center justify-center mr-3">
-            <Users color="#1D4ED8" size={20} />
+            <Users color="#059669" size={20} />
           </View>
           <View className="flex-1">
             <Text className="text-xs text-neutral-500">Indicações</Text>
@@ -110,7 +110,7 @@ export default function IndicarScreen() {
 
         <View className="bg-white border border-neutral-200 rounded-2xl p-4 mb-4">
           <View className="flex-row items-center gap-3 mb-3">
-            <Gift color="#1D4ED8" size={22} />
+            <Gift color="#059669" size={22} />
             <Text className="font-semibold">Seu código</Text>
           </View>
           <View className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 mb-3">

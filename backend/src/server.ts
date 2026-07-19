@@ -8,6 +8,8 @@ import { generateUpcomingOccurrences } from './modules/subscriptions/subscriptio
 import { runCrossSellPushSweep } from './modules/recommendations/crossSellPush.service'
 import { runUrgencySla } from './modules/urgency/urgency.service'
 import { releaseEligiblePayments } from './modules/payments/payments.service'
+import { expireOverdueProviderFees } from './modules/payments/connectionFees.service'
+import { purgeExpiredDeletionRequests } from './modules/users/deletion.service'
 import { withCronLock } from './utils/cronLock'
 
 async function start() {
@@ -44,8 +46,23 @@ async function start() {
       }
     })
 
-    // Cron diário às 03h: Segurança de Transação — libera pagamentos já
-    // aprovados pelo admin cuja janela de garantia (7 dias) terminou.
+    // Cron a cada 15min: Taxa de Conexão — expira taxa de prestador vencida,
+    // recredita o cliente e devolve o pedido para a fila.
+    cron.schedule('*/15 * * * *', async () => {
+      try {
+        await withCronLock('connection-fee-timeout', async () => {
+          const result = await expireOverdueProviderFees()
+          if (result.expired > 0) {
+            console.log(`[cron][taxa-conexao] expiradas ${result.expired} taxa(s) de prestador`)
+          }
+        })
+      } catch (err) {
+        console.error('[cron][taxa-conexao] erro:', err)
+      }
+    })
+
+    // Cron diário às 03h: (LEGADO) Segurança de Transação — libera pagamentos
+    // antigos em HELD já aprovados pelo admin. Remover quando zerar o escrow.
     cron.schedule('0 3 * * *', async () => {
       try {
         await withCronLock('release-held-payments', async () => {
@@ -56,6 +73,21 @@ async function start() {
         })
       } catch (err) {
         console.error('[cron][seguranca-transacao] erro:', err)
+      }
+    })
+
+    // Cron diário às 04h: purga contas com exclusão agendada e prazo de
+    // arrependimento vencido (página /cancelar-assinatura).
+    cron.schedule('0 4 * * *', async () => {
+      try {
+        await withCronLock('purge-deletion-requests', async () => {
+          const result = await purgeExpiredDeletionRequests()
+          if (result.purged > 0 || result.blocked > 0) {
+            console.log(`[cron][exclusao] purgadas=${result.purged} bloqueadas=${result.blocked}`)
+          }
+        })
+      } catch (err) {
+        console.error('[cron][exclusao] erro:', err)
       }
     })
 

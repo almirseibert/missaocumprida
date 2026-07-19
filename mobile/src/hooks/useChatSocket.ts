@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getAccessToken } from '../lib/secureStore'
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3333'
 const USE_SOCKET = process.env.EXPO_PUBLIC_USE_SOCKET !== 'false'
@@ -30,7 +30,7 @@ export function useChatSocket({ scheduleId, onNewMessage, onTyping }: Options) {
     if (!USE_SOCKET || !scheduleId) return
     let cancelled = false
 
-    AsyncStorage.getItem('accessToken').then((token) => {
+    getAccessToken().then((token) => {
       if (cancelled || !token) return
       const socket = io(SOCKET_URL, {
         auth: { token },

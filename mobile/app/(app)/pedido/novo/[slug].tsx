@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft } from 'lucide-react-native'
 import { api, getApiError } from '../../../../src/lib/api'
-import { formatCurrency } from '../../../../src/lib/utils'
+import { formatCurrency, maskDateBR, parseDateBR } from '../../../../src/lib/utils'
 import { PriceEstimator } from '../../../../src/components/PriceEstimator'
 
 interface Field {
@@ -72,6 +72,10 @@ export default function NovoPedidoScreen() {
 
   async function handleSubmit() {
     if (!address) { Alert.alert('Atenção', 'Informe o endereço do serviço.'); return }
+    if (desiredDate && !parseDateBR(desiredDate)) {
+      Alert.alert('Data inválida', 'Informe a data desejada no formato DD/MM/AAAA (ou deixe em branco).')
+      return
+    }
     const required = fields.filter(f => f.is_required && !answers[f.id])
     if (required.length) {
       Alert.alert('Atenção', `Responda: ${required.map(f => f.question).join(', ')}`)
@@ -100,13 +104,13 @@ export default function NovoPedidoScreen() {
     }
   }
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#059669" />
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       {/* Header — segue mockup "Novo Pedido — Questionário" */}
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3">
           <ArrowLeft size={22} color="#334155" />
         </TouchableOpacity>
         <View className="w-10 h-10 bg-brand-50 rounded-xl items-center justify-center mr-2.5">
@@ -146,7 +150,7 @@ export default function NovoPedidoScreen() {
                 <Switch
                   value={Boolean(answers[field.id])}
                   onValueChange={v => setAnswer(field.id, v)}
-                  trackColor={{ true: '#1D4ED8' }}
+                  trackColor={{ true: '#059669' }}
                 />
               </View>
             ) : field.field_type === 'SELECT' || field.field_type === 'RADIO' ? (
@@ -167,7 +171,7 @@ export default function NovoPedidoScreen() {
                         className="w-5 h-5 rounded-full"
                         style={{
                           borderWidth: active ? 6 : 2,
-                          borderColor: active ? '#1D4ED8' : '#CBD5E1',
+                          borderColor: active ? '#059669' : '#CBD5E1',
                           backgroundColor: '#fff',
                         }}
                       />
@@ -207,7 +211,7 @@ export default function NovoPedidoScreen() {
         {[
           { key: 'address',  label: 'Endereço do serviço *', value: address,     setter: setAddress,     placeholder: 'Rua, número, bairro' },
           { key: 'city',     label: 'Cidade',                value: city,        setter: setCity,        placeholder: 'Lajeado, RS' },
-          { key: 'date',     label: 'Data desejada (opcional)', value: desiredDate, setter: setDesiredDate, placeholder: 'DD/MM/AAAA' },
+          { key: 'date',     label: 'Data desejada (opcional)', value: desiredDate, setter: (v: string) => setDesiredDate(maskDateBR(v)), placeholder: 'DD/MM/AAAA' },
         ].map(({ key, label, value, setter, placeholder }) => (
           <View key={key}>
             <Text className="font-display-semibold text-sm text-slate2-900 mb-2">
@@ -221,6 +225,7 @@ export default function NovoPedidoScreen() {
               placeholderTextColor="#94A3B8"
               value={value}
               onChangeText={setter}
+              keyboardType={key === 'date' ? 'number-pad' : 'default'}
               onFocus={() => setFocused(key)}
               onBlur={() => setFocused(null)}
             />

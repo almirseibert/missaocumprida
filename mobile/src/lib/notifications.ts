@@ -93,7 +93,7 @@ export async function configureNotifications(): Promise<boolean> {
         importance: N.AndroidImportance.HIGH,
         sound: CUSTOM_SOUND,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#1D4ED8', // brand-700
+        lightColor: '#059669', // brand-700
         enableVibrate: true,
         showBadge: true,
       })

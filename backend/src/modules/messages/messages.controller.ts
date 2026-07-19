@@ -4,19 +4,29 @@ import { prisma } from '../../config/database'
 import { ok, created, badRequest, forbidden, notFound } from '../../utils/response'
 import { sendToUser } from '../push/push.service'
 import { getIO } from '../realtime/realtime'
+import { contactsUnlocked } from '../../utils/orderVisibility'
 
 const sendSchema = z.object({
   content: z.string().min(1).max(2000),
 })
 
+const CHAT_LOCKED_MSG = 'O chat é liberado depois que as taxas de conexão forem confirmadas'
+
 export async function listMessages(req: Request, res: Response) {
   const { scheduleId } = req.params
 
-  const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
+  const schedule = await prisma.schedule.findUnique({
+    where: { id: scheduleId },
+    include: { order: { select: { status: true } } },
+  })
   if (!schedule) return notFound(res, 'Agendamento não encontrado')
 
   if (schedule.provider_id !== req.userId && schedule.client_id !== req.userId) {
     return forbidden(res)
+  }
+  // Taxa de Conexão: chat só depois que as duas taxas foram pagas
+  if (!contactsUnlocked(schedule.order?.status)) {
+    return forbidden(res, CHAT_LOCKED_MSG)
   }
 
   const messages = await prisma.message.findMany({
@@ -40,11 +50,17 @@ export async function sendMessage(req: Request, res: Response) {
   const parsed = sendSchema.safeParse(req.body)
   if (!parsed.success) return badRequest(res, parsed.error.errors[0].message)
 
-  const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
+  const schedule = await prisma.schedule.findUnique({
+    where: { id: scheduleId },
+    include: { order: { select: { status: true } } },
+  })
   if (!schedule) return notFound(res, 'Agendamento não encontrado')
 
   if (schedule.provider_id !== req.userId && schedule.client_id !== req.userId) {
     return forbidden(res)
+  }
+  if (!contactsUnlocked(schedule.order?.status)) {
+    return forbidden(res, CHAT_LOCKED_MSG)
   }
 
   const message = await prisma.message.create({

@@ -49,16 +49,16 @@ export default function PackageDetailScreen() {
   }
 
   if (loading) {
-    return <SafeAreaView className="flex-1 bg-slate2-50 items-center justify-center"><ActivityIndicator /></SafeAreaView>
+    return <SafeAreaView className="flex-1 bg-paper items-center justify-center"><ActivityIndicator /></SafeAreaView>
   }
   if (!pkg) return null
 
   const isOwn = pkg.provider.id === user?.id
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-2">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-2">
           <ArrowLeft size={22} color="#334155" />
         </TouchableOpacity>
         <Text className="text-lg font-bold flex-1">Pacote</Text>

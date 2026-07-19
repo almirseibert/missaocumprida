@@ -43,7 +43,24 @@ api.interceptors.response.use(
 
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || 'Erro inesperado. Tente novamente.'
+    const data = error.response?.data as { message?: string; errors?: unknown } | undefined
+    // Surfacie as mensagens de validação por campo (zod flatten().fieldErrors),
+    // senão o usuário só vê um "Dados inválidos" genérico.
+    const fieldMsgs = extractFieldErrors(data?.errors)
+    if (fieldMsgs.length) return fieldMsgs.join('\n')
+    if (data?.message) return data.message
+    if (!error.response) return 'Sem conexão com o servidor. Verifique sua internet.'
+    return 'Erro inesperado. Tente novamente.'
   }
   return 'Erro inesperado. Tente novamente.'
+}
+
+function extractFieldErrors(errors: unknown): string[] {
+  if (!errors || typeof errors !== 'object') return []
+  const out: string[] = []
+  for (const val of Object.values(errors as Record<string, unknown>)) {
+    if (Array.isArray(val)) out.push(...val.filter((m): m is string => typeof m === 'string'))
+    else if (typeof val === 'string') out.push(val)
+  }
+  return out
 }

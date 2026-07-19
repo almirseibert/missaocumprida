@@ -4,11 +4,11 @@
 // Versão semântica: bump a CADA mudança de texto.
 // Quando a versão muda, todos os usuários precisam aceitar novamente.
 
-export const TERMS_VERSION = '1.1.0'
+export const TERMS_VERSION = '1.3.0'
 
 export const TERMS_TITLE = 'Termos de Uso e Política de Responsabilidade'
 
-export const TERMS_EFFECTIVE_DATE = '2026-06-04'
+export const TERMS_EFFECTIVE_DATE = '2026-07-10'
 
 export const TERMS_BODY_MARKDOWN = `
 ## 1. Aceitação e Natureza da Plataforma
@@ -55,28 +55,34 @@ Enquanto a verificação não for aprovada, o usuário **não poderá criar pedi
 
 Ao enviar os documentos, você declara que (a) os materiais retratam sua própria pessoa, (b) está ciente e consente com o tratamento descrito, e (c) tem direito legítimo de usar e enviar tais imagens.
 
-## 4. Pagamento e Custódia (Escrow)
+## 4. Taxa de Conexão e Pagamento Direto entre as Partes
 
-Para proteção das duas partes, **o pagamento é mantido em custódia (escrow) pela plataforma** desde o momento em que o CLIENTE confirma o pagamento até o momento em que o serviço é confirmado como concluído. O PRESTADOR só recebe o valor líquido (descontadas as taxas) após a **confirmação expressa do CLIENTE** de que o serviço foi prestado a contento.
+A Missão Cumprida cobra uma **Taxa de Conexão** de cada parte no momento em que uma proposta é aceita. A taxa é o preço do serviço de intermediação: quando paga pelos dois lados, a plataforma **libera o contato** (telefone, endereço completo e chat) entre CLIENTE e PRESTADOR.
 
-A plataforma cobra:
-- **Taxa do cliente:** percentual sobre o valor do serviço, exibido transparentemente no checkout.
-- **Taxa do prestador:** percentual descontado do valor combinado, exibido transparentemente na criação da proposta.
-- **Taxa de processamento do gateway** (PIX/cartão), conforme repassada pelo parceiro de pagamentos.
+- **Taxa do CLIENTE:** percentual sobre o valor da proposta aceita, exibido de forma transparente antes do pagamento;
+- **Taxa do PRESTADOR:** percentual sobre o valor da proposta aceita, paga após a confirmação do pagamento do CLIENTE, dentro do prazo indicado no aplicativo;
+- os **percentuais vigentes** (inclusive condições promocionais de lançamento) são exibidos no aplicativo e podem ser alterados pela plataforma mediante aviso, **sem efeito retroativo** sobre taxas já pagas;
+- cada taxa possui um **valor mínimo**, divulgado no aplicativo;
+- **repasse do meio de pagamento:** sobre a parcela da taxa paga via gateway incidem **4% (cartão)** ou **1% (Pix)**, exibidos no checkout antes da confirmação.
 
-## 5. Reclamações e Reembolsos
+**O pagamento do serviço em si é realizado diretamente entre CLIENTE e PRESTADOR**, na forma que ambos combinarem. A plataforma **não custodia, não intermedeia e não garante** o pagamento do serviço, atuando exclusivamente na conexão entre as partes (Seções 1 e 2).
 
-**Toda e qualquer insatisfação, inconformidade ou pedido de reembolso deve ser registrada ANTES da confirmação formal de conclusão do serviço.** O CLIENTE deve relatar a ocorrência no ato em que a tela de "Confirmar Conclusão" for apresentada, utilizando o botão "Relatar problema" disponível na mesma tela.
+É expressamente **vedado combinar, solicitar ou aceitar a contratação por fora da plataforma** com o objetivo de evitar a Taxa de Conexão — a prática sujeita a conta a suspensão ou banimento (Seção 5).
 
-**Reclamações ou pedidos de reembolso registrados APÓS a confirmação de conclusão não serão analisados.** A confirmação de conclusão é manifestação inequívoca de aceitação do serviço executado e libera o pagamento integral ao PRESTADOR.
+## 5. Garantia de Conexão, Créditos, Cancelamentos e Banimentos
 
-Em caso de relato tempestivo, a Missão Cumprida atuará como mediadora, podendo:
-- reter o pagamento até análise;
-- ouvir as duas partes;
-- solicitar fotos, vídeos, documentos e demais provas;
-- decidir, de forma justificada, pela liberação total, parcial ou pelo estorno do valor.
+**Garantia de Conexão:** se, após o pagamento da taxa pelo CLIENTE, o PRESTADOR não pagar a taxa dele no prazo, cancelar ou não comparecer, a taxa paga pelo CLIENTE é **devolvida automaticamente como crédito** na plataforma, abatido na próxima taxa. O estorno pelo meio de pagamento original pode ser solicitado ao suporte e é processado manualmente.
 
-A decisão da mediação é **final e vinculante** para fins de uso da plataforma, sem prejuízo do direito das partes de recorrerem ao Poder Judiciário.
+**Direito de arrependimento (CDC art. 49):** o CLIENTE pode desistir **antes da liberação dos contatos**, com devolução integral da taxa em crédito (ou estorno mediante solicitação). Após a liberação dos contatos, o serviço de intermediação considera-se **integralmente prestado**.
+
+**Regras de cancelamento e banimento**, aceitas expressamente por todos os usuários:
+
+- CLIENTE que **cancelar após receber os dados do PRESTADOR** terá a conta **banida** da plataforma;
+- PRESTADOR que **cancelar após receber os dados do CLIENTE**, ou que receber **reclamação de não comparecimento**, terá a conta **suspensa imediatamente** e **banida** após a confirmação da análise;
+- qualquer das partes que agir com **má-fé para evitar o pagamento ou obter ressarcimento indevido** da Taxa de Conexão — incluindo propostas com valor artificialmente reduzido e combinação por fora — terá a conta **banida**;
+- o banimento não afasta a apuração de responsabilidade civil ou criminal, quando cabível, e a plataforma poderá impedir novo cadastro sob outra identidade.
+
+Em disputas sobre taxas, a Missão Cumprida atuará como mediadora, podendo ouvir as partes, solicitar provas e decidir, de forma justificada, pela devolução em crédito, estorno ou manutenção da cobrança. A decisão é **final e vinculante** para fins de uso da plataforma, sem prejuízo do acesso ao Poder Judiciário. **Nenhuma cláusula destes Termos afasta os direitos assegurados pelo Código de Defesa do Consumidor (Lei nº 8.078/1990)** na relação direta entre CLIENTE e PRESTADOR.
 
 ## 6. Serviço Diferente do Solicitado
 
@@ -86,17 +92,13 @@ Se, ao chegar ao local, o PRESTADOR identificar que o serviço efetivamente dema
 
 Se, no horário e local combinados, o CLIENTE não atender o PRESTADOR ou não estiver presente, o PRESTADOR deve **aguardar no local por, no mínimo, 15 (quinze) minutos**, registrando o atendimento pelo botão "Check-in" do aplicativo, com foto e geolocalização.
 
-Decorrido esse prazo sem atendimento, o PRESTADOR pode cancelar o serviço pelo aplicativo e fará jus ao recebimento de uma **taxa de deslocamento e serviço não executado**, descontada do valor pago pelo CLIENTE em custódia. O valor exato da taxa é definido na política comercial da plataforma e exibido no momento do cancelamento.
+Decorrido esse prazo sem atendimento, o PRESTADOR pode cancelar o serviço pelo aplicativo **sem qualquer punição** e fará jus à devolução da sua Taxa de Conexão como crédito. A plataforma poderá ainda cobrar do CLIENTE uma **taxa de deslocamento e serviço não executado**, conforme a política comercial vigente, repassando-a ao PRESTADOR.
 
 ## 8. Prestador Ausente — Punições por Não Comparecimento
 
-O **não comparecimento** do PRESTADOR a um serviço previamente confirmado é considerado falta grave e prejudica toda a comunidade. As sanções aplicadas são **progressivas**:
+O **não comparecimento** do PRESTADOR a um serviço previamente confirmado (com contatos já liberados) é considerado falta grave e prejudica toda a comunidade. Conforme a Seção 5, a reclamação de não comparecimento resulta em **suspensão imediata** da conta e **banimento** após a confirmação da análise.
 
-- **1ª ocorrência:** suspensão de **7 (sete) dias** corridos da capacidade de aceitar novos serviços;
-- **2ª ocorrência:** suspensão de **30 (trinta) dias** corridos da capacidade de aceitar novos serviços;
-- **3ª ocorrência:** **desligamento permanente** da plataforma, com encerramento da conta e impedimento de cadastrar nova conta sob qualquer outra identidade.
-
-O PRESTADOR também perde o direito ao valor combinado pelo serviço não comparecido e poderá ser obrigado a indenizar o CLIENTE por gastos comprovados (compra de materiais, perda de diária etc.), por decisão da mediação.
+O PRESTADOR também perde a Taxa de Conexão paga e poderá ser obrigado a indenizar o CLIENTE por gastos comprovados (compra de materiais, perda de diária etc.), por decisão da mediação.
 
 A Missão Cumprida pode, ainda, aplicar sanções adicionais em casos de fraude, conduta abusiva, assédio, discriminação ou qualquer comportamento que viole estes Termos ou a legislação vigente.
 

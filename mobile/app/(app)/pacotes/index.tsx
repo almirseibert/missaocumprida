@@ -39,11 +39,11 @@ export default function PacotesIndexScreen() {
     : packages
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="px-4 py-3 bg-white border-b border-slate2-100">
         <Text className="text-xl font-bold flex-row items-center text-slate2-900">📦 Pacotes</Text>
         <Text className="text-xs text-slate2-500 mt-0.5">Serviços com preço fixo · contratação direta</Text>
-        <View className="flex-row items-center bg-slate2-50 border border-slate2-200 rounded-xl mt-3 px-3 py-2">
+        <View className="flex-row items-center bg-paper border border-slate2-200 rounded-xl mt-3 px-3 py-2">
           <Search size={16} color="#64748B" />
           <TextInput
             placeholder="Buscar pacote ou categoria..."
@@ -69,7 +69,7 @@ export default function PacotesIndexScreen() {
       </View>
 
       {loading ? (
-        <View className="flex-1 items-center justify-center"><ActivityIndicator color="#1D4ED8" /></View>
+        <View className="flex-1 items-center justify-center"><ActivityIndicator color="#059669" /></View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
           {filtered.length === 0 && (

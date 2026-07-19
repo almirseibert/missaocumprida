@@ -82,7 +82,7 @@ function ClientHome() {
     : null
 
   return (
-    <View className="flex-1 bg-slate2-50">
+    <View className="flex-1 bg-paper">
       <ScrollView
         contentContainerClassName="p-4 pb-8"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load() }} />}
@@ -203,7 +203,7 @@ function ClientHome() {
             )}
           </View>
         ) : loading ? (
-          <ActivityIndicator className="mt-8" color="#1D4ED8" />
+          <ActivityIndicator className="mt-8" color="#059669" />
         ) : (
           <View className="gap-2.5">
             {groups.map((group) => {
@@ -294,13 +294,13 @@ function ProviderHome() {
 
   useFocusEffect(useCallback(() => { load() }, []))
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#059669" />
 
   const balance = user?.provider_balance ?? 0
   const rating = (user?.rating_avg ?? 0).toFixed(1)
 
   return (
-    <View className="flex-1 bg-slate2-50">
+    <View className="flex-1 bg-paper">
       {/* Header brand-700 */}
       <View className="bg-brand-700 px-4 pt-4 pb-4">
         <Text className="font-display-extrabold text-[17px] text-white">

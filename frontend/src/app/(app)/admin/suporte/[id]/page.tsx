@@ -163,7 +163,7 @@ export default function AdminTicketDetailPage() {
                 <Avatar name={m.sender?.name ?? 'U'} avatar={m.sender?.avatar} size="sm" />
               )}
             </div>
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${m.from_admin ? 'bg-brand-50 border border-brand-100' : 'bg-white border border-slate2-200'}`}>
+            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${m.from_admin ? 'bg-trust-50 border border-trust-100' : 'bg-white border border-slate2-200'}`}>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-medium text-slate2-700">
                   {m.from_admin ? `Equipe — ${m.sender?.name ?? 'admin'}` : (m.sender?.name ?? 'Usuário')}

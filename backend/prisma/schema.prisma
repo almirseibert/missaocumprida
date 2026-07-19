@@ -60,6 +60,8 @@ enum ReviewerRole {
   PROVIDER
 }
 
+// DEPRECATED (Remap 2.0): usado apenas pelo escrow legado (model Payment).
+// Pedidos novos usam ConnectionFee — o serviço é pago direto entre as partes.
 enum PaymentStatus {
   PENDING
   PAID
@@ -68,6 +70,22 @@ enum PaymentStatus {
   REFUNDED
   FAILED
   DISPUTED // admin segurou por reclamação/análise dentro da janela de garantia
+}
+
+// ---- Taxa de Conexão (Remap 2.0) ----
+enum FeeSide {
+  CLIENT
+  PROVIDER
+}
+
+enum ConnectionFeeStatus {
+  PENDING // aguardando pagamento
+  PAID // pago via gateway (Pix/cartão MP)
+  COVERED // coberto integralmente por crédito/saldo (sem passar pelo gateway)
+  CREDITED // devolvida como crédito na plataforma (no-show/timeout/cancelamento)
+  EXPIRED // prestador estourou o prazo de pagamento da taxa
+  CANCELLED // proposta/pedido cancelado antes do pagamento
+  REFUNDED // estorno bancário manual feito pelo admin
 }
 
 enum WithdrawalStatus {
@@ -123,6 +141,11 @@ model User {
   is_active                    Boolean            @default(true)
   no_show_count                Int                @default(0)
   suspended_until              DateTime?
+  // ---- Banimento (Remap 2.0 — regras da Taxa de Conexão) ----
+  banned_at                    DateTime?
+  ban_reason                   String?
+  // ---- Exclusão de conta com prazo de arrependimento (LGPD/CDC) ----
+  deletion_requested_at        DateTime?
   document_photo_url           String?
   selfie_photo_url             String?
   document_submitted_at        DateTime?
@@ -176,6 +199,7 @@ model User {
   support_tickets         SupportTicket[]           @relation("UserTickets")
   support_assigned        SupportTicket[]           @relation("TicketAssignee")
   support_messages        SupportTicketMessage[]
+  connection_fees         ConnectionFee[]
 
   @@map("users")
 }
@@ -436,11 +460,15 @@ model Order {
   subscription_occurrence_id String?     @unique
   // ---- Modo Urgência (feature #5) ----
   is_urgent                  Boolean     @default(false)
-  urgency_fee_pct            Float?
-  urgency_fee_value          Float?
+  urgency_fee_pct            Float? // DEPRECATED (Remap 2.0): urgência é precificada na proposta
+  urgency_fee_value          Float? // DEPRECATED (Remap 2.0)
   urgency_deadline           DateTime?
   urgency_radius_km          Int?
   urgency_expanded_at        DateTime?
+  // ---- Taxa de Conexão (Remap 2.0) ----
+  client_fee_paid_at         DateTime? // cliente pagou a taxa dele
+  provider_fee_paid_at       DateTime? // prestador pagou a taxa dele → contatos liberados
+  provider_fee_due_at        DateTime? // prazo do prestador (timeout → recredita cliente)
   created_at                 DateTime    @default(now())
   updated_at                 DateTime    @updatedAt
 
@@ -453,6 +481,7 @@ model Order {
   package                 ServicePackage?         @relation(fields: [package_id], references: [id])
   subscription            Subscription?           @relation(fields: [subscription_id], references: [id])
   subscription_occurrence SubscriptionOccurrence? @relation(fields: [subscription_occurrence_id], references: [id])
+  connection_fees         ConnectionFee[]
 
   @@map("orders")
 }
@@ -479,6 +508,7 @@ model Proposal {
   provider        User            @relation(fields: [provider_id], references: [id])
   schedule        Schedule?
   boost_purchases BoostPurchase[]
+  connection_fees ConnectionFee[]
 
   @@unique([order_id, provider_id])
   @@map("proposals")
@@ -579,7 +609,10 @@ model Message {
 }
 
 // ============================================================
-// PAGAMENTOS (ESCROW)
+// PAGAMENTOS (ESCROW) — DEPRECATED (Remap 2.0)
+// Mantido apenas para liberar transações antigas em HELD.
+// Pedidos novos usam ConnectionFee: a plataforma cobra taxa de
+// conexão dos dois lados e o serviço é pago direto entre as partes.
 // ============================================================
 
 model Payment {
@@ -611,6 +644,93 @@ model Payment {
   provider User  @relation("ProviderPayments", fields: [provider_id], references: [id])
 
   @@map("payments")
+}
+
+// ============================================================
+// TAXA DE CONEXÃO (Remap 2.0)
+// Cobrada de cada lado ao aceitar uma proposta, para liberar os
+// contatos (telefone/endereço/chat). O pagamento do serviço em si
+// é direto entre cliente e prestador — a plataforma não custodia.
+// ============================================================
+
+model ConnectionFee {
+  id                String              @id @default(uuid())
+  order_id          String
+  proposal_id       String
+  user_id           String // quem paga esta taxa
+  side              FeeSide
+  pct_applied       Float // percentual cobrado no momento do aceite (pode ser promocional)
+  regular_pct       Float // percentual cheio — exibido riscado quando em promoção
+  base_amount       Float // max(valor da proposta × pct_applied, fee_min)
+  credit_used       Float               @default(0) // crédito (cliente) ou saldo (prestador) abatido
+  surcharge_amount  Float               @default(0) // repasse do gateway (4% cartão / 1% Pix) sobre a parte cobrada
+  gateway_amount    Float               @default(0) // valor efetivamente cobrado no gateway
+  method            String? // 'pix' | 'card' | 'balance' | 'credit'
+  mp_payment_id     String?             @unique // "mp_<id>" ou "fee_dev_<ts>"
+  status            ConnectionFeeStatus @default(PENDING)
+  paid_at           DateTime?
+  expires_at        DateTime? // só side=PROVIDER: prazo para pagar após o cliente pagar
+  credited_at       DateTime?
+  credit_reason     String? // PROVIDER_TIMEOUT | PROVIDER_NOSHOW | CLIENT_CANCELLED | PRE_CONNECTION_CANCEL | ADMIN
+  admin_reviewer_id String?
+  notes             String?
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @updatedAt
+
+  order    Order    @relation(fields: [order_id], references: [id])
+  proposal Proposal @relation(fields: [proposal_id], references: [id])
+  user     User     @relation(fields: [user_id], references: [id])
+
+  @@unique([proposal_id, side])
+  @@index([order_id])
+  @@index([user_id, status])
+  @@map("connection_fees")
+}
+
+// ============================================================
+// CONFIGURAÇÕES DA PLATAFORMA (editáveis pelo admin em runtime)
+// Percentuais de taxa, promo, prazos — o app lê via /api/config/public.
+// ============================================================
+
+model PlatformSetting {
+  key        String   @id
+  value      Json
+  updated_by String? // id do admin (auditoria, sem FK)
+  updated_at DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+// ============================================================
+// AVISOS DO ADMIN (pop-ups/banners no app + push)
+// ============================================================
+
+enum AnnouncementType {
+  POPUP
+  BANNER
+}
+
+enum AnnouncementAudience {
+  ALL
+  CLIENTS
+  PROVIDERS
+}
+
+model Announcement {
+  id           String               @id @default(uuid())
+  title        String
+  body         String
+  type         AnnouncementType     @default(POPUP)
+  audience     AnnouncementAudience @default(ALL)
+  is_active    Boolean              @default(true)
+  starts_at    DateTime             @default(now())
+  ends_at      DateTime?
+  push_sent_at DateTime?
+  created_by   String? // id do admin (auditoria, sem FK)
+  created_at   DateTime             @default(now())
+
+  @@index([is_active, starts_at])
+  @@map("announcements")
 }
 
 // ============================================================
@@ -647,6 +767,10 @@ enum NotificationType {
   SERVICE_COMPLETED
   SERVICE_CONFIRMED
   PAYMENT_RECEIVED
+  FEE_REQUIRED // taxa de conexão aguardando pagamento
+  CONTACT_UNLOCKED // ambas as taxas pagas — contatos liberados
+  FEE_CREDITED // taxa devolvida como crédito (no-show/timeout)
+  ANNOUNCEMENT // aviso enviado pelo admin
   GENERAL
 }
 

@@ -27,8 +27,8 @@ export default function LandingPage() {
     },
     {
       icon: <CreditCard className="w-5 h-5 text-brand-700" />,
-      title: 'Pagamento Protegido',
-      desc: 'O valor fica retido e só é liberado quando você confirma a conclusão.',
+      title: 'Garantia de Conexão',
+      desc: 'Você paga só uma pequena taxa para liberar o contato. Se o profissional não confirmar, ela volta como crédito na hora.',
       bg: 'bg-brand-50',
     },
   ]
@@ -61,16 +61,16 @@ export default function LandingPage() {
     },
     {
       icon: <CheckCircle2 className="w-6 h-6 text-white" />,
-      title: 'Pague com segurança',
-      desc: 'PIX ou cartão com valor protegido: só liberamos ao prestador quando você confirmar.',
+      title: 'Feche direto com o profissional',
+      desc: 'Aceite a melhor proposta e pague uma pequena Taxa de Conexão para liberar o contato. O serviço você combina e paga direto com o profissional.',
     },
   ]
 
   const stats = [
-    { value: '+2.400', label: 'Profissionais verificados' },
-    { value: '+12 mil', label: 'Missões concluídas' },
-    { value: '4.9★', label: 'Avaliação média' },
-    { value: '100%', label: 'Pagamento protegido' },
+    { value: '+150', label: 'Tipos de serviço' },
+    { value: '17', label: 'Grupos de categorias' },
+    { value: '100%', label: 'Identidade verificada (documento + selfie)' },
+    { value: 'R$ 0', label: 'Mensalidade — taxa só quando fecha negócio' },
   ]
 
   return (
@@ -114,7 +114,7 @@ export default function LandingPage() {
       <section
         className="relative overflow-hidden px-6 sm:px-12 py-20 sm:py-24"
         style={{
-          background: 'linear-gradient(120deg, #1E40AF 0%, #1D4ED8 38%, #059669 100%)',
+          background: 'linear-gradient(120deg, #065F46 0%, #047857 38%, #059669 100%)',
         }}
       >
         {/* brilhos decorativos */}
@@ -134,7 +134,7 @@ export default function LandingPage() {
           <div className="text-center lg:text-left">
             <div className="inline-flex items-center gap-2 bg-white/15 border border-white/20 rounded-full px-4 py-1.5 mb-6 backdrop-blur-sm">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
-              <span className="text-xs font-medium text-white/90">+2.400 profissionais verificados perto de você</span>
+              <span className="text-xs font-medium text-white/90">Profissionais com identidade verificada perto de você</span>
             </div>
             <h1 className="font-display font-extrabold text-white text-4xl sm:text-5xl md:text-[54px] leading-[1.06] tracking-tight mb-5">
               Todo serviço vira{' '}
@@ -146,8 +146,9 @@ export default function LandingPage() {
               </span>
             </h1>
             <p className="text-white/80 text-base sm:text-lg max-w-md mx-auto lg:mx-0 leading-relaxed mb-9">
-              Descreva o que precisa, compare propostas de profissionais verificados e pague
-              com segurança via PIX ou cartão — o valor só é liberado quando você aprovar.
+              Descreva o que precisa e compare propostas de profissionais verificados.
+              Você paga só uma pequena Taxa de Conexão para liberar o contato — o serviço
+              é combinado e pago direto com o profissional, sem intermediários.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8">
               <Link
@@ -164,26 +165,17 @@ export default function LandingPage() {
                 Quero trabalhar
               </Link>
             </div>
-            <div className="flex items-center gap-3 justify-center lg:justify-start">
-              <div className="flex -space-x-2">
-                {['MC', 'AS', 'JP', 'RL'].map((ini, i) => (
-                  <div
-                    key={ini}
-                    className="w-8 h-8 rounded-full border-2 border-white/40 flex items-center justify-center text-[10px] font-display font-bold text-white"
-                    style={{ backgroundColor: ['#059669', '#2563EB', '#7C3AED', '#D97706'][i] }}
-                  >
-                    {ini}
-                  </div>
-                ))}
-              </div>
-              <div className="text-left">
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                  ))}
-                </div>
-                <p className="text-[11px] text-white/75 mt-0.5">4.9 de média em +12 mil missões</p>
-              </div>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 justify-center lg:justify-start">
+              {[
+                { icon: <ShieldCheck className="w-4 h-4 text-white/90" />, label: 'Documento e selfie conferidos' },
+                { icon: <Star className="w-4 h-4 text-amber-300 fill-amber-300" />, label: 'Avaliação dupla' },
+                { icon: <CheckCircle2 className="w-4 h-4 text-white/90" />, label: 'Garantia de Conexão' },
+              ].map((t) => (
+                <span key={t.label} className="inline-flex items-center gap-1.5 text-[12px] text-white/85">
+                  {t.icon}
+                  {t.label}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -215,7 +207,7 @@ export default function LandingPage() {
                 <div className="flex-1">
                   <p className="font-display font-bold text-[13px] text-slate2-900 flex items-center gap-1">
                     Ana Nogueira
-                    <ShieldCheck className="w-3.5 h-3.5 text-brand-600" />
+                    <ShieldCheck className="w-3.5 h-3.5 text-trust-600" />
                   </p>
                   <p className="text-[11px] text-slate2-500 flex items-center gap-1">
                     <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> 4.9 · 213 missões
@@ -235,7 +227,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <p className="font-display font-bold text-[13px] text-slate2-900">Missão cumprida! 🎉</p>
-                <p className="text-[11px] text-slate2-500">Pagamento liberado para Ana</p>
+                <p className="text-[11px] text-slate2-500">Contato liberado — combine direto com Ana</p>
               </div>
             </div>
           </div>
@@ -273,7 +265,7 @@ export default function LandingPage() {
               <div className="flex items-center gap-3 mb-4">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg, #1D4ED8 0%, #059669 100%)' }}
+                  style={{ background: 'linear-gradient(135deg, #047857 0%, #10B981 100%)' }}
                 >
                   {s.icon}
                 </div>
@@ -297,7 +289,7 @@ export default function LandingPage() {
           <h2 className="font-display text-3xl font-extrabold text-slate2-900">
             O que você precisa hoje?
           </h2>
-          <p className="text-slate2-500 mt-2">Mais de 60 serviços em 10 grupos — da torneira ao banho do pet.</p>
+          <p className="text-slate2-500 mt-2">Mais de 150 serviços em 17 grupos — da torneira ao banho do pet.</p>
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 max-w-5xl mx-auto">
           {categories.map((c) => (
@@ -350,7 +342,7 @@ export default function LandingPage() {
       {/* ── CTA FINAL ── */}
       <section
         className="px-6 sm:px-12 py-16 text-center"
-        style={{ background: 'linear-gradient(135deg, #1E40AF 0%, #1D4ED8 55%, #047857 100%)' }}
+        style={{ background: 'linear-gradient(135deg, #064E3B 0%, #047857 55%, #059669 100%)' }}
       >
         <h2 className="font-display text-3xl sm:text-[34px] font-extrabold text-white mb-3">
           Pronto para sua primeira missão?
@@ -377,15 +369,15 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer className="bg-slate2-900 px-6 sm:px-12 pt-12 pb-8">
         <div className="max-w-6xl mx-auto">
-          <div className="grid sm:grid-cols-[1.4fr_1fr_1fr] gap-10 pb-10 border-b border-white/10">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] gap-10 pb-10 border-b border-white/10">
             <div>
               <div className="flex items-center gap-2.5 mb-3">
                 <Logo size={30} />
                 <span className="font-display font-bold text-white">Missão Cumprida</span>
               </div>
               <p className="text-sm text-slate2-400 leading-relaxed max-w-xs">
-                O marketplace brasileiro de serviços locais com profissionais verificados
-                e pagamento protegido.
+                O marketplace brasileiro de serviços locais com profissionais de identidade
+                verificada e Garantia de Conexão.
               </p>
             </div>
             <div>
@@ -406,6 +398,16 @@ export default function LandingPage() {
                 <li><Link href="/register" className="text-slate2-300 hover:text-white transition-colors">Contratar serviço</Link></li>
                 <li><Link href="/register?tipo=prestador" className="text-slate2-300 hover:text-white transition-colors">Trabalhar como prestador</Link></li>
                 <li><Link href="/login" className="text-slate2-300 hover:text-white transition-colors">Entrar na conta</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-display text-xs font-bold uppercase tracking-wider text-slate2-400 mb-3">
+                Legal
+              </h4>
+              <ul className="space-y-2 text-sm">
+                <li><Link href="/termos" className="text-slate2-300 hover:text-white transition-colors">Termos de Uso</Link></li>
+                <li><Link href="/privacidade" className="text-slate2-300 hover:text-white transition-colors">Política de Privacidade</Link></li>
+                <li><Link href="/exclusao-de-conta" className="text-slate2-300 hover:text-white transition-colors">Exclusão de conta e dados</Link></li>
               </ul>
             </div>
           </div>

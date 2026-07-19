@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './secureStore'
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3333'
 
@@ -10,7 +10,7 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-  const token = await AsyncStorage.getItem('accessToken')
+  const token = await getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -22,15 +22,14 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true
       try {
-        const refreshToken = await AsyncStorage.getItem('refreshToken')
+        const refreshToken = await getRefreshToken()
         if (!refreshToken) throw new Error('sem refresh token')
         const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken })
-        await AsyncStorage.setItem('accessToken', data.data.accessToken)
-        await AsyncStorage.setItem('refreshToken', data.data.refreshToken)
+        await setTokens(data.data.accessToken, data.data.refreshToken)
         original.headers.Authorization = `Bearer ${data.data.accessToken}`
         return api(original)
       } catch {
-        await AsyncStorage.multiRemove(['accessToken', 'refreshToken'])
+        await clearTokens()
       }
     }
     return Promise.reject(error)
@@ -39,7 +38,24 @@ api.interceptors.response.use(
 
 export function getApiError(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || 'Erro inesperado. Tente novamente.'
+    const data = error.response?.data as { message?: string; errors?: unknown } | undefined
+    // Mostra as mensagens de validação por campo (zod flatten().fieldErrors),
+    // senão o usuário só vê um "Dados inválidos" genérico ou nada útil.
+    const fieldMsgs = extractFieldErrors(data?.errors)
+    if (fieldMsgs.length) return fieldMsgs.join('\n')
+    if (data?.message) return data.message
+    if (!error.response) return 'Sem conexão com o servidor. Verifique sua internet.'
+    return 'Erro inesperado. Tente novamente.'
   }
   return 'Erro inesperado. Tente novamente.'
+}
+
+function extractFieldErrors(errors: unknown): string[] {
+  if (!errors || typeof errors !== 'object') return []
+  const out: string[] = []
+  for (const val of Object.values(errors as Record<string, unknown>)) {
+    if (Array.isArray(val)) out.push(...val.filter((m): m is string => typeof m === 'string'))
+    else if (typeof val === 'string') out.push(val)
+  }
+  return out
 }

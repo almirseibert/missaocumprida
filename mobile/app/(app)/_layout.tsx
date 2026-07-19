@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { useAuthStore } from '../../src/store/auth'
 import { TermsModal } from '../../src/components/TermsModal'
 import { TopNav } from '../../src/components/TopNav'
+import { AnnouncementsGate } from '../../src/components/AnnouncementsGate'
 import {
   configureNotifications,
   startNotificationPolling,
@@ -75,6 +76,7 @@ export default function AppLayout() {
         <Tabs.Screen name="carteira" options={{ href: null }} />
         <Tabs.Screen name="verificacao" options={{ href: null }} />
         <Tabs.Screen name="pagamento/[orderId]" options={{ href: null }} />
+        <Tabs.Screen name="taxa-conexao/[orderId]" options={{ href: null }} />
         <Tabs.Screen name="suporte/index" options={{ href: null }} />
         <Tabs.Screen name="suporte/[id]" options={{ href: null }} />
         <Tabs.Screen name="dashboard" options={{ href: null }} />
@@ -83,6 +85,7 @@ export default function AppLayout() {
         <Tabs.Screen name="assinatura-nova" options={{ href: null }} />
         <Tabs.Screen name="agenda-config" options={{ href: null }} />
         <Tabs.Screen name="notificacoes-config" options={{ href: null }} />
+        <Tabs.Screen name="notificacoes" options={{ href: null }} />
         <Tabs.Screen name="indicar" options={{ href: null }} />
         <Tabs.Screen name="pacotes/index" options={{ href: null }} />
         <Tabs.Screen name="pacotes/[id]" options={{ href: null }} />
@@ -90,6 +93,7 @@ export default function AppLayout() {
         <Tabs.Screen name="verificar-pro" options={{ href: null }} />
       </Tabs>
       <TermsModal />
+      <AnnouncementsGate />
     </View>
   )
 }

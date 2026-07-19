@@ -5,29 +5,55 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Azul Confiança — primária (substitui o laranja)
+        // Remap 2.0 "Verde Missão": verde-esmeralda é a cor de AÇÃO (CTA único,
+        // tab ativa, preço). Azul fica reservado a confiança (selo Pro, links,
+        // banners de segurança) via escala `trust`.
         brand: {
+          50:  '#ECFDF5',
+          100: '#D1FAE5',
+          200: '#A7F3D0',
+          300: '#6EE7B7',
+          400: '#34D399',
+          500: '#10B981',
+          600: '#059669', // PRINCIPAL — CTA
+          700: '#047857',
+          800: '#065F46',
+          900: '#064E3B',
+        },
+        // Azul Confiança — institucional (selo Verificado Pro, links, TrustBanner)
+        trust: {
           50:  '#EFF6FF',
           100: '#DBEAFE',
           200: '#BFDBFE',
           300: '#93C5FD',
           400: '#60A5FA',
           500: '#3B82F6',
-          600: '#2563EB',
+          600: '#2563EB', // PRINCIPAL — selo/link
           700: '#1D4ED8',
           800: '#1E40AF',
           900: '#1E3A8A',
         },
-        // Verde Missão — acento de conclusão
+        // `accent` aponta para a mesma escala verde (retrocompat de classes antigas)
         accent: {
           50:  '#ECFDF5',
           100: '#D1FAE5',
+          200: '#A7F3D0',
           300: '#6EE7B7',
+          400: '#34D399',
           500: '#10B981',
           600: '#059669',
           700: '#047857',
+          800: '#065F46',
           900: '#064E3B',
         },
+        // Papel quente + tinta (fundos e texto do mockup Verde Missão)
+        paper:  '#F8F7F4', // fundo de tela
+        sunken: '#F1EFEA', // áreas rebaixadas (segmented control)
+        line:   '#E7E5E0', // bordas suaves
+        ink:    '#101828', // títulos (grafite, não preto)
+        soft:   '#475467', // texto secundário
+        mute:   '#98A2B3', // texto terciário
+        star:   '#F59E0B', // ★ avaliações, exclusivamente
         // Ardósia — neutros (mesmo set do frontend web)
         slate2: {
           50:  '#F8FAFC',
@@ -41,13 +67,13 @@ module.exports = {
           800: '#1E293B',
           900: '#0F172A',
         },
-        // Mantemos `primary` por retrocompat de classes existentes
+        // Mantemos `primary` por retrocompat de classes existentes (agora verde)
         primary: {
-          50:  '#EFF6FF',
-          100: '#DBEAFE',
-          500: '#3B82F6',
-          600: '#2563EB',
-          700: '#1D4ED8',
+          50:  '#ECFDF5',
+          100: '#D1FAE5',
+          500: '#10B981',
+          600: '#059669',
+          700: '#047857',
         },
       },
       // Hermes/RN exige nome exato da fonte por peso — não há fallback chain.

@@ -6,6 +6,16 @@ import type { Server as HttpServer } from 'http'
 import { verifyAccessToken } from '../../utils/jwt'
 import { prisma } from '../../config/database'
 import { sendToUser } from '../push/push.service'
+import { contactsUnlocked } from '../../utils/orderVisibility'
+import { env } from '../../config/env'
+
+// Mesmas origens de navegador do CORS do Express (security.ts). Apps nativos
+// (mobile) não enviam Origin no handshake e são liberados pelo socket.io.
+const allowedOrigins = [
+  env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://localhost:3001',
+].filter(Boolean)
 
 let io: IOServer | null = null
 
@@ -20,7 +30,7 @@ export function getIO(): IOServer | null {
 
 export function initRealtime(httpServer: HttpServer): IOServer {
   io = new IOServer(httpServer, {
-    cors: { origin: '*', methods: ['GET', 'POST'] },
+    cors: { origin: allowedOrigins, methods: ['GET', 'POST'] },
     transports: ['websocket', 'polling'],
   })
 
@@ -51,11 +61,15 @@ export function initRealtime(httpServer: HttpServer): IOServer {
       try {
         const schedule = await prisma.schedule.findUnique({
           where: { id: scheduleId },
-          select: { client_id: true, provider_id: true },
+          select: { client_id: true, provider_id: true, order: { select: { status: true } } },
         })
         if (!schedule) return socket.emit('chat:error', { message: 'Agendamento não encontrado' })
         if (schedule.client_id !== socket.userId && schedule.provider_id !== socket.userId) {
           return socket.emit('chat:error', { message: 'Sem acesso a este chat' })
+        }
+        // Taxa de Conexão: chat só depois que as duas taxas foram pagas
+        if (!contactsUnlocked(schedule.order?.status)) {
+          return socket.emit('chat:error', { message: 'O chat é liberado depois que as taxas de conexão forem confirmadas' })
         }
         socket.join(`schedule:${scheduleId}`)
         socket.emit('chat:joined', { scheduleId })
@@ -82,11 +96,14 @@ export function initRealtime(httpServer: HttpServer): IOServer {
 
         const schedule = await prisma.schedule.findUnique({
           where: { id: scheduleId },
-          select: { client_id: true, provider_id: true },
+          select: { client_id: true, provider_id: true, order: { select: { status: true } } },
         })
         if (!schedule) return ack?.({ ok: false, error: 'Agendamento não encontrado' })
         if (schedule.client_id !== socket.userId && schedule.provider_id !== socket.userId) {
           return ack?.({ ok: false, error: 'Sem acesso' })
+        }
+        if (!contactsUnlocked(schedule.order?.status)) {
+          return ack?.({ ok: false, error: 'O chat é liberado depois que as taxas de conexão forem confirmadas' })
         }
 
         const message = await prisma.message.create({

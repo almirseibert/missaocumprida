@@ -57,11 +57,11 @@ export default function DashboardScreen() {
   }, [period])
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-200">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3"><ArrowLeft size={24} color="#334155" /></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3"><ArrowLeft size={24} color="#334155" /></TouchableOpacity>
         <Text className="text-lg font-bold flex-1">Dashboard</Text>
-        {loading && <ActivityIndicator size="small" color="#1D4ED8" />}
+        {loading && <ActivityIndicator size="small" color="#059669" />}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
@@ -70,7 +70,7 @@ export default function DashboardScreen() {
         {/* KPIs em grid 2x4 */}
         <View className="flex-row flex-wrap" style={{ gap: 8, marginHorizontal: -4 }}>
           <Kpi icon={<DollarSign size={16} color="#047857" />} label="Ganhos" value={formatCurrency(overview?.total_earnings ?? 0)} tone="emerald" />
-          <Kpi icon={<Wallet size={16} color="#1D4ED8" />} label="Saldo" value={formatCurrency(overview?.provider_balance ?? 0)} tone="brand" />
+          <Kpi icon={<Wallet size={16} color="#059669" />} label="Saldo" value={formatCurrency(overview?.provider_balance ?? 0)} tone="brand" />
           <Kpi icon={<Target size={16} color="#7C3AED" />} label="Conversão" value={`${Math.round((overview?.conversion_rate ?? 0) * 100)}%`} tone="violet" />
           <Kpi icon={<Star size={16} color="#B45309" />} label="Avaliação" value={`${(overview?.rating_avg ?? 0).toFixed(1)} ★`} tone="amber" />
           <Kpi icon={<CheckCircle2 size={16} color="#334155" />} label="Concluídos" value={`${overview?.services_done ?? 0}`} />
@@ -169,7 +169,7 @@ function BarChart({ points }: { points: SeriesPoint[] }) {
                 width: barW,
                 height: h,
                 marginLeft: i === 0 ? 0 : gap,
-                backgroundColor: '#1D4ED8',
+                backgroundColor: '#059669',
                 opacity: p.value > 0 ? 1 : 0.15,
                 borderTopLeftRadius: 3,
                 borderTopRightRadius: 3,

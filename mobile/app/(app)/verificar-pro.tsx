@@ -6,7 +6,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { ArrowLeft, ShieldCheck, Check, Star, TrendingUp, Award, X } from 'lucide-react-native'
+import type { PurchasesPackage } from 'react-native-purchases'
 import { api, getApiError } from '../../src/lib/api'
+import { formatDateShort } from '../../src/lib/utils'
+import {
+  getCurrentOffering, purchasePackage, isPurchasesReady, restorePurchases,
+} from '../../src/lib/purchases'
 
 const BENEFITS = [
   { icon: ShieldCheck, title: 'Selo Verificado ✓ azul', desc: 'Em perfil, propostas e cards.' },
@@ -25,6 +30,7 @@ export default function VerificarProScreen() {
   const [docNumber, setDocNumber] = useState('')
   const [consent, setConsent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [proPackage, setProPackage] = useState<PurchasesPackage | null>(null)
 
   useEffect(() => { load() }, [])
 
@@ -36,6 +42,12 @@ export default function VerificarProScreen() {
     } catch {} finally {
       setLoading(false)
     }
+    // Carrega a oferta da loja (Google Play via RevenueCat)
+    try {
+      const offering = await getCurrentOffering()
+      const pkg = offering?.availablePackages?.[0] ?? null
+      setProPackage(pkg)
+    } catch {}
   }
 
   async function submitData() {
@@ -56,15 +68,41 @@ export default function VerificarProScreen() {
   }
 
   async function activate() {
+    if (!isPurchasesReady()) {
+      return Alert.alert(
+        'Indisponível',
+        'A compra pela loja ainda não está configurada nesta versão do app. Tente novamente após a próxima atualização.',
+      )
+    }
+    if (!proPackage) {
+      return Alert.alert('Indisponível', 'Não foi possível carregar a assinatura na loja. Tente novamente mais tarde.')
+    }
     setSubmitting(true)
     try {
-      await api.post('/verification/subscribe', { payment_method: 'PIX' })
-      Alert.alert('Sucesso', 'Selo Verificado Pro ativado!')
-      await load()
-    } catch (err) {
-      Alert.alert('Erro', getApiError(err))
+      // Google Play Billing (via RevenueCat). O selo é concedido pelo backend
+      // ao receber o webhook da RevenueCat.
+      await purchasePackage(proPackage)
+      Alert.alert('Compra confirmada', 'Estamos ativando seu Selo Verificado Pro. Isso pode levar alguns segundos.')
+      // Dá tempo do webhook processar e recarrega o status do backend.
+      setTimeout(() => { load() }, 2500)
+    } catch (err: any) {
+      if (err?.userCancelled) {
+        // Usuário cancelou a compra — silencioso.
+      } else {
+        Alert.alert('Erro', err?.message || getApiError(err))
+      }
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function restore() {
+    try {
+      await restorePurchases()
+      Alert.alert('Pronto', 'Compras restauradas. Atualizando status...')
+      setTimeout(() => { load() }, 1500)
+    } catch (err) {
+      Alert.alert('Erro', getApiError(err))
     }
   }
 
@@ -83,8 +121,8 @@ export default function VerificarProScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-slate2-50 items-center justify-center">
-        <ActivityIndicator color="#1D4ED8" />
+      <SafeAreaView className="flex-1 bg-paper items-center justify-center">
+        <ActivityIndicator color="#059669" />
       </SafeAreaView>
     )
   }
@@ -92,9 +130,9 @@ export default function VerificarProScreen() {
   const isPro = status?.is_verified_pro && status?.active_subscription
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-paper" edges={['top']}>
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100 gap-2">
-        <TouchableOpacity onPress={() => router.back()} className="p-1">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="p-1">
           <ArrowLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <ShieldCheck size={20} color="#2563EB" />
@@ -119,7 +157,7 @@ export default function VerificarProScreen() {
             <View className="flex-1">
               <Text className="font-bold text-emerald-900">Você é Verificado Pro ✓</Text>
               <Text className="text-xs text-emerald-700">
-                Ativo até {new Date(status.active_subscription.current_period_end).toLocaleDateString('pt-BR')}
+                Ativo até {formatDateShort(status.active_subscription.current_period_end)}
               </Text>
             </View>
             <TouchableOpacity onPress={cancel} disabled={submitting} className="p-2">
@@ -195,7 +233,7 @@ export default function VerificarProScreen() {
                 <Check size={40} color="#059669" />
                 <Text className="font-bold text-slate2-900">Dados recebidos!</Text>
                 <Text className="text-sm text-slate2-600 text-center">
-                  Ative agora sua assinatura mensal de R$ 29,90.
+                  Ative sua assinatura mensal pela Google Play.
                 </Text>
                 <TouchableOpacity
                   onPress={activate}
@@ -203,12 +241,17 @@ export default function VerificarProScreen() {
                   className="bg-blue-600 py-4 rounded-2xl items-center w-full"
                 >
                   {submitting ? <ActivityIndicator color="#fff" /> : (
-                    <Text className="text-white font-bold">Ativar — R$ 29,90/mês</Text>
+                    <Text className="text-white font-bold">
+                      Assinar{proPackage?.product?.priceString ? ` — ${proPackage.product.priceString}/mês` : ''}
+                    </Text>
                   )}
                 </TouchableOpacity>
                 <Text className="text-[11px] text-slate2-500 text-center">
-                  Cobrança mensal. Cancele a qualquer momento.
+                  Cobrança mensal pela Google Play. Cancele quando quiser na assinatura da Play Store.
                 </Text>
+                <TouchableOpacity onPress={restore}>
+                  <Text className="text-[12px] text-blue-600 text-center mt-1">Restaurar compras</Text>
+                </TouchableOpacity>
               </View>
             )}
           </>

@@ -36,7 +36,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-slate2-50"
+      className="flex-1 bg-paper"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerClassName="flex-grow justify-center px-6 py-12">

@@ -113,17 +113,17 @@ export default function AgendamentoDetailScreen() {
     ])
   }
 
-  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#1D4ED8" />
+  if (loading) return <ActivityIndicator className="flex-1 mt-20" color="#059669" />
   if (!schedule) return null
 
   const isProvider = user?.id === schedule.provider_id
   const isClient = user?.id === schedule.client_id
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50">
+    <SafeAreaView className="flex-1 bg-paper">
       {/* Header — segue mockup "Chat / Agendamento" das Telas Mobile */}
       <View className="flex-row items-center px-4 py-3 bg-white border-b border-slate2-100">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => router.back()} className="mr-3">
           <ArrowLeft size={22} color="#334155" />
         </TouchableOpacity>
         <View className="flex-1">
@@ -271,7 +271,7 @@ export default function AgendamentoDetailScreen() {
         {schedule.status !== 'DONE' && schedule.status !== 'CANCELLED' && (
           <View className="flex-row items-center px-3 py-2.5 bg-white border-t border-slate2-100 gap-2">
             <TextInput
-              className="flex-1 bg-slate2-50 border border-slate2-200 rounded-xl px-4 py-2.5 text-slate2-900 font-sans"
+              className="flex-1 bg-paper border border-slate2-200 rounded-xl px-4 py-2.5 text-slate2-900 font-sans"
               placeholder="Escreva uma mensagem..."
               placeholderTextColor="#94A3B8"
               value={text}

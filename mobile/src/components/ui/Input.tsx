@@ -25,7 +25,7 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   const borderColor = error
     ? '#EF4444'
     : focused
-    ? '#3B82F6' // brand-500
+    ? '#10B981' // brand-500 (Verde Missão)
     : '#CBD5E1' // slate2-300
 
   return (

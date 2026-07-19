@@ -34,6 +34,41 @@ export function formatRelative(date: string | Date): string {
   return formatDateShort(date)
 }
 
+/**
+ * Máscara progressiva de data brasileira: digita-se só números e o campo
+ * vira DD/MM/AAAA. Use junto com keyboardType="number-pad".
+ */
+export function maskDateBR(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+}
+
+/**
+ * Valida DD/MM/AAAA como data real do calendário e devolve 'AAAA-MM-DD',
+ * ou null se inválida/incompleta.
+ */
+export function parseDateBR(value: string): string | null {
+  const m = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!m) return null
+  const [, dd, mm, yyyy] = m
+  const day = Number(dd)
+  const month = Number(mm)
+  const year = Number(yyyy)
+  if (year < 1900 || year > 2100 || month < 1 || month > 12) return null
+  const daysInMonth = [31, (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  if (day < 1 || day > daysInMonth[month - 1]) return null
+  return `${yyyy}-${mm}-${dd}`
+}
+
+/** Converte 'AAAA-MM-DD' (ou ISO) para DD/MM/AAAA para exibição/edição. */
+export function isoToDateBR(value: string | null | undefined): string {
+  if (!value) return ''
+  const m = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+}
+
 export const ORDER_STATUS_LABEL: Record<string, string> = {
   OPEN: 'Aberto',
   IN_PROPOSAL: 'Em proposta',

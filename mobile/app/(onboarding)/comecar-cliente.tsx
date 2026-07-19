@@ -80,24 +80,24 @@ export default function ComecarClienteScreen() {
 
         {step === 0 && (
           <Shell
-            icon={<ShoppingBag color="#1D4ED8" size={28} />}
+            icon={<ShoppingBag color="#059669" size={28} />}
             title="Como funciona"
             subtitle="3 passos para resolver seu serviço."
           >
-            <Item icon={<Search size={18} color="#1D4ED8" />} title="1. Peça" desc="Escolha o serviço e descreva o que precisa." />
-            <Item icon={<ShoppingBag size={18} color="#1D4ED8" />} title="2. Receba propostas" desc="Prestadores próximos enviam orçamentos." />
-            <Item icon={<Star size={18} color="#1D4ED8" />} title="3. Avalie" desc="Pague seguro pelo app e avalie no fim." />
+            <Item icon={<Search size={18} color="#059669" />} title="1. Peça" desc="Escolha o serviço e descreva o que precisa." />
+            <Item icon={<ShoppingBag size={18} color="#059669" />} title="2. Receba propostas" desc="Prestadores próximos enviam orçamentos." />
+            <Item icon={<Star size={18} color="#059669" />} title="3. Avalie" desc="Combine o pagamento direto com o profissional e avalie no fim." />
             <PrimaryButton onPress={advance} loading={loading}>Continuar</PrimaryButton>
           </Shell>
         )}
 
         {step === 1 && (
           <Shell
-            icon={<MapPin color="#1D4ED8" size={28} />}
+            icon={<MapPin color="#059669" size={28} />}
             title="Sua localização"
             subtitle="Para encontrar prestadores perto."
           >
-            <Text className="text-sm text-neutral-600 mb-4">
+            <Text className="text-sm text-slate2-600 mb-4">
               Libere a localização para o app recomendar profissionais qualificados no seu raio.
             </Text>
             <PrimaryButton onPress={useLocation} loading={loading}>Usar minha localização</PrimaryButton>
@@ -111,7 +111,7 @@ export default function ComecarClienteScreen() {
             title="Pronto!"
             subtitle="Você já pode pedir seu primeiro serviço."
           >
-            <Text className="text-sm text-neutral-600 mb-6">
+            <Text className="text-sm text-slate2-600 mb-6">
               Comece pela tela inicial — ali estão todas as categorias.
             </Text>
             <PrimaryButton onPress={advance} loading={loading}>Ir para o início</PrimaryButton>
@@ -119,7 +119,7 @@ export default function ComecarClienteScreen() {
         )}
 
         <TouchableOpacity onPress={handleSkip} disabled={loading} className="mt-6 self-center">
-          <Text className="text-sm text-neutral-500">Pular por enquanto</Text>
+          <Text className="text-sm text-slate2-500">Pular por enquanto</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -131,10 +131,10 @@ function Progress({ current, total }: { current: number; total: number }) {
   return (
     <View className="mb-6">
       <View className="flex-row justify-between mb-2">
-        <Text className="text-xs text-neutral-500">Passo {Math.min(current, total)} de {total}</Text>
-        <Text className="text-xs text-neutral-500">{pct}%</Text>
+        <Text className="text-xs text-slate2-500">Passo {Math.min(current, total)} de {total}</Text>
+        <Text className="text-xs text-slate2-500">{pct}%</Text>
       </View>
-      <View className="h-2 bg-neutral-200 rounded-full overflow-hidden">
+      <View className="h-2 bg-slate2-200 rounded-full overflow-hidden">
         <View style={{ width: `${pct}%` }} className="h-full bg-brand-600" />
       </View>
     </View>
@@ -143,14 +143,14 @@ function Progress({ current, total }: { current: number; total: number }) {
 
 function Shell({ icon, title, subtitle, children }: any) {
   return (
-    <View className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+    <View className="bg-white border border-slate2-200 rounded-2xl p-5 shadow-sm">
       <View className="flex-row items-center gap-3 mb-3">
         <View className="w-12 h-12 rounded-full bg-brand-50 items-center justify-center">
           {icon}
         </View>
         <View className="flex-1">
           <Text className="text-lg font-bold">{title}</Text>
-          <Text className="text-sm text-neutral-600">{subtitle}</Text>
+          <Text className="text-sm text-slate2-600">{subtitle}</Text>
         </View>
       </View>
       {children}
@@ -164,7 +164,7 @@ function Item({ icon, title, desc }: any) {
       <View className="w-8 h-8 rounded-full bg-brand-100 items-center justify-center">{icon}</View>
       <View className="flex-1">
         <Text className="font-semibold text-sm">{title}</Text>
-        <Text className="text-xs text-neutral-600">{desc}</Text>
+        <Text className="text-xs text-slate2-600">{desc}</Text>
       </View>
     </View>
   )
@@ -184,8 +184,8 @@ function PrimaryButton({ onPress, loading, children }: any) {
 
 function SecondaryButton({ onPress, children }: any) {
   return (
-    <TouchableOpacity onPress={onPress} className="border border-neutral-300 rounded-xl py-3 items-center mt-2">
-      <Text className="text-neutral-700 font-semibold">{children}</Text>
+    <TouchableOpacity onPress={onPress} className="border border-slate2-300 rounded-xl py-3 items-center mt-2">
+      <Text className="text-slate2-700 font-semibold">{children}</Text>
     </TouchableOpacity>
   )
 }

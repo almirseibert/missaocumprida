@@ -1,23 +1,30 @@
 import { useCallback, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity,
-  Alert, TextInput, RefreshControl, ActivityIndicator,
+  Alert, TextInput, RefreshControl, ActivityIndicator, Modal, Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
-import { LogOut, Wallet, Star, ChevronRight, MapPin, ShieldAlert, ShieldCheck, Clock, AlertCircle, Gift, BellRing, BarChart3, Package, CalendarDays, Repeat, LifeBuoy } from 'lucide-react-native'
+import { LogOut, Wallet, Star, ChevronRight, MapPin, ShieldAlert, ShieldCheck, Clock, AlertCircle, Gift, BellRing, BarChart3, Package, CalendarDays, Repeat, LifeBuoy, Trash2, FileText } from 'lucide-react-native'
 import { useAuthStore } from '../../src/store/auth'
 import { api, getApiError } from '../../src/lib/api'
+import { maskDateBR, parseDateBR, isoToDateBR } from '../../src/lib/utils'
 
 type Section = 'view' | 'basic' | 'address' | 'emergency'
 
 const onlyDigits = (v: string) => v.replace(/\D/g, '')
+
+// Base do site para abrir termos/privacidade (páginas públicas do frontend).
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || 'https://missaocumprida-front.oehpg2.easypanel.host'
 
 export default function PerfilScreen() {
   const { user, setUser, logout } = useAuthStore()
   const [section, setSection] = useState<Section>('view')
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [deleteModal, setDeleteModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   // Basic
   const [name, setName] = useState(user?.name ?? '')
@@ -25,7 +32,7 @@ export default function PerfilScreen() {
   const [bio, setBio] = useState(user?.bio ?? '')
   const [cpf, setCpf] = useState(user?.cpf ?? '')
   const [rg, setRg] = useState(user?.rg ?? '')
-  const [birthDate, setBirthDate] = useState(user?.birth_date ? user.birth_date.slice(0, 10) : '')
+  const [birthDate, setBirthDate] = useState(isoToDateBR(user?.birth_date))
   const [motherName, setMotherName] = useState(user?.mother_name ?? '')
   // Address
   const [zip, setZip] = useState(user?.address_zip ?? '')
@@ -47,7 +54,7 @@ export default function PerfilScreen() {
   function reloadFromUser() {
     if (!user) return
     setName(user.name); setPhone(user.phone ?? ''); setBio(user.bio ?? '')
-    setCpf(user.cpf ?? ''); setRg(user.rg ?? ''); setBirthDate(user.birth_date ? user.birth_date.slice(0, 10) : '')
+    setCpf(user.cpf ?? ''); setRg(user.rg ?? ''); setBirthDate(isoToDateBR(user.birth_date))
     setMotherName(user.mother_name ?? '')
     setZip(user.address_zip ?? ''); setStreet(user.address_street ?? ''); setNumber(user.address_number ?? '')
     setComplement(user.address_complement ?? ''); setNeighborhood(user.address_neighborhood ?? '')
@@ -73,6 +80,11 @@ export default function PerfilScreen() {
   }
 
   async function save(which: Section) {
+    const birthIso = birthDate ? parseDateBR(birthDate) : null
+    if (which === 'basic' && birthDate && !birthIso) {
+      Alert.alert('Data inválida', 'Informe o nascimento no formato DD/MM/AAAA.')
+      return
+    }
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {}
@@ -80,7 +92,7 @@ export default function PerfilScreen() {
         Object.assign(payload, {
           name, phone: phone || undefined, bio: bio || undefined,
           cpf: cpf ? onlyDigits(cpf) : undefined, rg: rg || undefined,
-          birth_date: birthDate ? new Date(birthDate + 'T00:00:00Z').toISOString() : undefined,
+          birth_date: birthIso ? new Date(birthIso + 'T00:00:00Z').toISOString() : undefined,
           mother_name: motherName || undefined,
         })
       } else if (which === 'address') {
@@ -117,6 +129,23 @@ export default function PerfilScreen() {
     ])
   }
 
+  async function handleDeleteAccount() {
+    if (!deletePassword) { Alert.alert('Atenção', 'Informe sua senha para confirmar.'); return }
+    setDeleting(true)
+    try {
+      await api.delete('/users/me', { data: { password: deletePassword } })
+      setDeleteModal(false)
+      setDeletePassword('')
+      Alert.alert('Conta excluída', 'Seus dados pessoais foram anonimizados.')
+      await logout()
+      router.replace('/(auth)/login')
+    } catch (err) {
+      Alert.alert('Erro', getApiError(err))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (!user) return null
 
   const isProvider = user.role === 'PROVIDER' || user.role === 'BOTH'
@@ -125,7 +154,7 @@ export default function PerfilScreen() {
   // Estilos para o card de verificação por status
   const verStyles = {
     APPROVED: { bg: 'bg-accent-50', border: 'border-accent-100',  title: 'text-accent-700', body: 'text-accent-700', icon: '#059669', Icon: ShieldCheck,  label: 'Conta verificada',      desc: 'Você pode usar todas as funcionalidades.' },
-    PENDING:  { bg: 'bg-brand-50',  border: 'border-brand-100',   title: 'text-brand-700',  body: 'text-brand-700',  icon: '#1D4ED8', Icon: Clock,         label: 'Em análise',            desc: 'Aguarde até 48h pela análise.' },
+    PENDING:  { bg: 'bg-trust-50',  border: 'border-trust-100',   title: 'text-trust-700',  body: 'text-trust-700',  icon: '#1D4ED8', Icon: Clock,         label: 'Em análise',            desc: 'Aguarde até 48h pela análise.' },
     REJECTED: { bg: 'bg-red-50',    border: 'border-red-200',     title: 'text-red-700',    body: 'text-red-700',    icon: '#DC2626', Icon: AlertCircle,   label: 'Verificação recusada',  desc: user.document_rejection_reason || 'Toque para reenviar.' },
     UNSENT:   { bg: 'bg-amber-50',  border: 'border-amber-200',   title: 'text-amber-800',  body: 'text-amber-800',  icon: '#D97706', Icon: ShieldAlert,   label: 'Verificação pendente',  desc: 'Envie documento e selfie para criar pedidos e propostas.' },
   } as const
@@ -134,7 +163,7 @@ export default function PerfilScreen() {
   const VerIcon = ver.Icon
 
   return (
-    <SafeAreaView className="flex-1 bg-slate2-50" edges={['bottom']}>
+    <SafeAreaView className="flex-1 bg-paper" edges={['bottom']}>
       <ScrollView
         contentContainerClassName="pb-10"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
@@ -212,7 +241,7 @@ export default function PerfilScreen() {
                 <Field label="Telefone *" value={phone} onChange={setPhone} keyboardType="phone-pad" />
                 <Field label="CPF / CNPJ *" value={cpf} onChange={setCpf} keyboardType="number-pad" />
                 <Field label="RG *" value={rg} onChange={setRg} />
-                <Field label="Data de nascimento (AAAA-MM-DD) *" value={birthDate} onChange={setBirthDate} placeholder="2000-01-31" />
+                <Field label="Data de nascimento *" value={birthDate} onChange={(v: string) => setBirthDate(maskDateBR(v))} placeholder="31/01/2000" keyboardType="number-pad" />
                 <Field label="Nome da mãe *" value={motherName} onChange={setMotherName} />
                 <Field label="Bio" value={bio} onChange={setBio} multiline />
                 <SaveBtn loading={saving} onPress={() => save('basic')} />
@@ -222,7 +251,7 @@ export default function PerfilScreen() {
                 <InfoRow label="Telefone" value={user.phone || '—'} />
                 <InfoRow label="CPF" value={user.cpf || '—'} />
                 <InfoRow label="RG" value={user.rg || '—'} />
-                <InfoRow label="Nascimento" value={user.birth_date ? user.birth_date.slice(0, 10) : '—'} />
+                <InfoRow label="Nascimento" value={isoToDateBR(user.birth_date) || '—'} />
                 <InfoRow label="Mãe" value={user.mother_name || '—'} />
                 <InfoRow label="Tipo de conta" value={
                   user.role === 'CLIENT' ? 'Cliente' :
@@ -488,6 +517,30 @@ export default function PerfilScreen() {
             </Card>
           )}
 
+          {/* Legal */}
+          <View className="bg-white rounded-2xl border border-slate2-200 overflow-hidden">
+            <TouchableOpacity
+              onPress={() => Linking.openURL(`${WEB_URL}/termos`)}
+              className="p-4 flex-row items-center justify-between border-b border-slate2-100"
+            >
+              <View className="flex-row items-center gap-3">
+                <FileText size={18} color="#64748B" />
+                <Text className="font-sans-medium text-slate2-700">Termos de Uso</Text>
+              </View>
+              <ChevronRight size={18} color="#94A3B8" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => Linking.openURL(`${WEB_URL}/privacidade`)}
+              className="p-4 flex-row items-center justify-between"
+            >
+              <View className="flex-row items-center gap-3">
+                <FileText size={18} color="#64748B" />
+                <Text className="font-sans-medium text-slate2-700">Política de Privacidade</Text>
+              </View>
+              <ChevronRight size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+
           {/* Sair */}
           <TouchableOpacity
             onPress={handleLogout}
@@ -497,12 +550,64 @@ export default function PerfilScreen() {
             <Text className="font-display-semibold text-red-600">Sair da conta</Text>
           </TouchableOpacity>
 
+          {/* Excluir conta */}
+          <TouchableOpacity
+            onPress={() => setDeleteModal(true)}
+            className="flex-row items-center justify-center gap-2 py-3"
+          >
+            <Trash2 size={16} color="#94A3B8" />
+            <Text className="font-sans-medium text-slate2-400 text-sm">Excluir minha conta</Text>
+          </TouchableOpacity>
+
           <Text className="font-sans text-[10px] text-slate2-400 text-center mt-2 px-4 leading-relaxed">
             * Campos obrigatórios. Os dados podem ser usados para consultas de antecedentes
             conforme nossos termos de uso.
           </Text>
         </View>
       </ScrollView>
+
+      {/* Modal excluir conta */}
+      <Modal
+        visible={deleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteModal(false)}
+      >
+        <View className="flex-1 bg-black/50 items-center justify-center px-6">
+          <View className="bg-white rounded-2xl p-5 w-full max-w-sm">
+            <Text className="font-display-bold text-lg text-slate2-900 mb-2">Excluir conta</Text>
+            <Text className="font-sans text-sm text-slate2-600 mb-4">
+              Esta ação é irreversível e anonimiza seus dados. Você não pode ter saldo a sacar nem
+              serviços/pagamentos em andamento. Digite sua senha para confirmar.
+            </Text>
+            <TextInput
+              className="bg-white border border-slate2-200 rounded-xl px-3 py-2.5 text-slate2-900 font-sans mb-4"
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="Sua senha"
+              placeholderTextColor="#94A3B8"
+              secureTextEntry
+            />
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                onPress={() => { setDeleteModal(false); setDeletePassword('') }}
+                className="flex-1 rounded-xl py-3 items-center border border-slate2-200"
+              >
+                <Text className="font-sans-semibold text-slate2-600">Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleDeleteAccount}
+                disabled={deleting}
+                className={`flex-1 rounded-xl py-3 items-center ${deleting ? 'bg-red-400' : 'bg-red-600'}`}
+              >
+                {deleting
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text className="font-display-bold text-white">Excluir</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
