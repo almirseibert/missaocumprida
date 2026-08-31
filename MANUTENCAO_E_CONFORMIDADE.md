@@ -123,7 +123,7 @@ Isso atualiza a senha do admin existente (o seed **não** sobrescreve senha de u
 ## 4. 📋 Guia de submissão ao Google Play
 
 ### 4.1 RevenueCat (Google Play Billing)
-1. Crie conta em **revenuecat.com** → novo projeto → app Android `com.missaocumprida.app`.
+1. Crie conta em **revenuecat.com** → novo projeto → app Android `com.missaocumpridabr.app`.
 2. No **Google Play Console**: crie um produto de **assinatura** (ex.: id `pro_monthly`, R$ 29,90/mês). Crie uma conta de serviço e conecte à RevenueCat (Play Developer API).
 3. Na RevenueCat: crie o **entitlement** `pro`; anexe o produto `pro_monthly`; crie uma **offering** "current" com um package contendo esse produto.
 4. Copie a **chave pública do SDK Android** (`goog_...`) → coloque em `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` (mobile `.env` e env do build EAS de produção).

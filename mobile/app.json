@@ -9,14 +9,14 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.missaocumprida.app"
+      "bundleIdentifier": "com.missaocumpridabr.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#059669"
       },
-      "package": "com.missaocumprida.app",
+      "package": "com.missaocumpridabr.app",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -28,7 +28,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",
