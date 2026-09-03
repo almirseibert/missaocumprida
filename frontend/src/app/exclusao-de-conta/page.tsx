@@ -5,7 +5,7 @@ export const metadata = {
 
 // Página PÚBLICA (sem login) exigida pelo Google Play para solicitação de
 // exclusão de conta/dados. Conteúdo estático — não depende do backend.
-const CONTACT_EMAIL = 'contato@missaocumprida.com.br' // ajuste para o e-mail oficial
+const CONTACT_EMAIL = 'almir.seibert@gmail.com'
 
 export default function ExclusaoDeContaPage() {
   return (
