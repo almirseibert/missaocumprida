@@ -103,6 +103,15 @@ Confirme que já existem (auditoria de junho): `JWT_SECRET`/`JWT_REFRESH_SECRET`
 1. Faça commit/push das mudanças e **redeploy do back e do front** no EasyPanel.
 2. Migrações: `npm run db:migrate:prod` (não há novas nesta rodada, mas garanta que as pendentes da "Segurança de Transação" foram aplicadas).
 
+### 3.2.1 Rodada de outubro/2026 (segurança + SDK 57)
+- **Backend:** confirme `API_URL` (URLs de imagem passam a usar só ela) e, se houver mais de um proxy na frente da API, defina `TRUST_PROXY_HOPS` (padrão `1`).
+- **Mercado Pago:** o retorno do cartão agora vai para `FRONTEND_URL/retorno-pagamento` (página pública com botão "Voltar para o app"). Estornos/chargebacks marcam a taxa como `REFUNDED` e pagamentos que chegam com a taxa já quitada/expirada viram crédito automático (`credit_transactions.reason = MP_ORPHAN_PAYMENT`).
+- **RevenueCat:** o webhook trata `TRANSFER` (restaurar compras em outra conta). Cancelamento do Verificado Pro é só pela Google Play.
+- **Site:** Next 15.5 / React 19 — redeploy do front com `npm ci && npm run build`.
+- **App:** Expo SDK 57 (React Native 0.86.3, corrige a regressão de memória do Hermes do SDK 56) e RevenueCat 10 (Play Billing Library 8). Gere um build novo; não reaproveite builds do SDK 56.
+- **Senha:** novos cadastros exigem 8+ caracteres (contas antigas continuam entrando).
+- ⚠️ **Migrações do Prisma:** o histórico em `prisma/migrations` não cria tabelas como `referral_events` (parte do schema foi aplicada com `db push`). `migrate deploy` num banco **novo** falha. Antes de criar um ambiente novo, gere um baseline a partir do banco de produção (`prisma migrate diff` + `prisma migrate resolve`).
+
 ### 3.3 Rotacionar a senha do admin (crítico — S1)
 No shell do container do backend (ou local apontando para o banco de prod), com `ADMIN_EMAIL` e `ADMIN_PASSWORD` definidos:
 ```

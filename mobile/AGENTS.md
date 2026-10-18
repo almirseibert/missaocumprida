@@ -1,12 +1,12 @@
 # Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
+Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
 
 ---
 
 # Guia de manutenção do mobile
 
-Stack: Expo SDK 56 · React Native 0.85 (Hermes) · React 19 · expo-router · NativeWind v4 · Zustand · Axios.
+Stack: Expo SDK 57 · React Native 0.86 (Hermes) · React 19 · expo-router · NativeWind v4 · Zustand · Axios.
 
 ## 1. Hermes NÃO suporta a API `Intl`
 

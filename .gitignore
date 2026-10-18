@@ -1,2 +1,8 @@
 
 .claude/settings.local.json
+
+# segurança: nunca versionar dependências nem segredos em nenhuma pasta
+node_modules/
+.env
+.env.*
+!.env.example

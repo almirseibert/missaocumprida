@@ -161,6 +161,13 @@ async function checkNewNotifications() {
     const lastSeen = await AsyncStorage.getItem(LAST_SEEN_KEY)
     const newest = list[0]
     if (!newest || lastSeen === newest.id) return
+    // Com push remoto registrado, o servidor já entrega estas notificações:
+    // mostrar a local também duplicaria o alerta. Só avança o marcador.
+    const pushActive = !!(await AsyncStorage.getItem(PUSH_TOKEN_KEY))
+    if (pushActive) {
+      await AsyncStorage.setItem(LAST_SEEN_KEY, newest.id)
+      return
+    }
     const newOnes: AppNotification[] = []
     for (const n of list) {
       if (n.id === lastSeen) break
