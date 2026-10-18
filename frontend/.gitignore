@@ -5,3 +5,5 @@ out/
 *.log
 *.tsbuildinfo
 tsconfig.tsbuildinfo
+.env
+.env.production
