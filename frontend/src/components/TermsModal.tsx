@@ -151,5 +151,12 @@ function MarkdownRender({ source }: { source: string }) {
 
 // **negrito** → <strong>
 function inline(s: string): string {
-  return s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  // Escapa o texto antes de aplicar o negrito: o HTML vai para
+  // dangerouslySetInnerHTML e não pode carregar tags vindas do conteúdo.
+  const escaped = s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+  return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
 }

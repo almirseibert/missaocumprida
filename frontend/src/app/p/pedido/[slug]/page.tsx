@@ -18,7 +18,8 @@ interface PublicOrder {
   client: { first_name: string; avatar: string | null; rating_avg: number; rating_count: number }
 }
 
-interface Props { params: { slug: string } }
+// Next 15: params é assíncrono
+interface Props { params: Promise<{ slug: string }> }
 
 async function fetchOrder(slug: string): Promise<PublicOrder | null> {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
@@ -38,7 +39,8 @@ function fmt(value: number | null | undefined): string {
 }
 
 export async function generateMetadata({ params }: Props) {
-  const order = await fetchOrder(params.slug)
+  const { slug } = await params
+  const order = await fetchOrder(slug)
   if (!order) return { title: 'Pedido — Missão Cumprida' }
   return {
     title: `${order.title} — Missão Cumprida`,
@@ -52,7 +54,8 @@ export async function generateMetadata({ params }: Props) {
 }
 
 export default async function PublicOrderPage({ params }: Props) {
-  const order = await fetchOrder(params.slug)
+  const { slug } = await params
+  const order = await fetchOrder(slug)
   if (!order) notFound()
 
   const localText = [order.location.neighborhood, order.location.city, order.location.state]

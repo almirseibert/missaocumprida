@@ -60,32 +60,8 @@ export default function VerificarPage() {
     }
   }
 
-  async function activate() {
-    setSubmitting(true)
-    try {
-      await api.post('/verification/subscribe', { payment_method: 'PIX' })
-      toast.success('Selo Verificado Pro ativado!')
-      await load()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function cancel() {
-    if (!confirm('Cancelar Verificado Pro? O selo será removido imediatamente.')) return
-    setSubmitting(true)
-    try {
-      await api.post('/verification/cancel', {})
-      toast.success('Assinatura cancelada')
-      await load()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err))
-    } finally {
-      setSubmitting(false)
-    }
-  }
+  // A assinatura é cobrada pela Google Play (no app); aqui só orientamos.
+  const PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions?package=com.missaocumpridabr.app'
 
   if (loading) return <PageSpinner />
 
@@ -112,9 +88,10 @@ export default function VerificarPage() {
                 Ativo até {new Date(status.active_subscription.current_period_end).toLocaleDateString('pt-BR')}
               </p>
             </div>
-            <Button variant="ghost" onClick={cancel} disabled={submitting} className="text-rose-600">
-              <X className="w-4 h-4" /> Cancelar
-            </Button>
+            <a href={PLAY_SUBSCRIPTIONS_URL} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium text-rose-600 hover:underline">
+              <X className="w-4 h-4" /> Cancelar na Google Play
+            </a>
           </div>
         </Card>
       )}
@@ -171,12 +148,16 @@ export default function VerificarPage() {
             <Card className="p-6 text-center space-y-3">
               <Check className="w-10 h-10 text-emerald-600 mx-auto" />
               <h2 className="font-bold">Dados recebidos!</h2>
-              <p className="text-sm text-slate2-600">Ative agora sua assinatura mensal de R$ 29,90 para começar a usar o selo.</p>
-              <Button onClick={activate} disabled={submitting} className="w-full" size="lg">
-                {submitting ? 'Ativando...' : 'Ativar Verificado Pro — R$ 29,90/mês'}
-              </Button>
+              <p className="text-sm text-slate2-600">
+                A assinatura mensal é feita pelo app Missão Cumprida no Android (pagamento pela Google Play).
+                Abra o app, entre com esta conta e vá em <strong>Perfil → Verificado Pro</strong>.
+              </p>
+              <a href="https://play.google.com/store/apps/details?id=com.missaocumpridabr.app" target="_blank" rel="noopener noreferrer"
+                className="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700">
+                Abrir na Google Play
+              </a>
               <p className="text-[11px] text-slate2-500">
-                Cobrança recorrente mensal. Cancele a qualquer momento.
+                Cobrança recorrente mensal pela Google Play. Cancele quando quiser na sua conta da Play Store.
               </p>
             </Card>
           )}

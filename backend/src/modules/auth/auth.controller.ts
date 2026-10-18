@@ -8,8 +8,8 @@ import { applyReferralOnRegister, ensureReferralCode } from '../referrals/referr
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Nome deve ter ao menos 2 caracteres'),
-  email: z.string().email('E-mail inválido'),
-  password: z.string().min(6, 'Senha deve ter ao menos 6 caracteres'),
+  email: z.string().trim().toLowerCase().pipe(z.string().email('E-mail inválido')),
+  password: z.string().min(8, 'Senha deve ter ao menos 8 caracteres').max(128),
   phone: z.string().optional(),
   role: z.enum(['CLIENT', 'PROVIDER', 'BOTH']).default('CLIENT'),
   // Trata string vazia como ausente — clientes enviavam "" e a validação
@@ -21,9 +21,18 @@ const registerSchema = z.object({
 })
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: z.string().trim().pipe(z.string().email()),
+  password: z.string().min(1).max(128),
 })
+
+// Hash fixo usado quando o e-mail não existe: mantém o tempo de resposta igual
+// ao de uma senha errada e evita enumeração de contas por tempo.
+const DUMMY_HASH = bcrypt.hashSync('missao-cumprida-dummy-password', 10)
+
+/** Busca por e-mail sem diferenciar maiúsculas (contas antigas podem ter caixa mista). */
+export function findUserByEmail(email: string) {
+  return prisma.user.findFirst({ where: { email: { equals: email.trim(), mode: 'insensitive' } } })
+}
 
 export async function register(req: Request, res: Response) {
   const parsed = registerSchema.safeParse(req.body)
@@ -33,7 +42,7 @@ export async function register(req: Request, res: Response) {
 
   const { name, email, password, phone, role, referral_code } = parsed.data
 
-  const exists = await prisma.user.findUnique({ where: { email } })
+  const exists = await findUserByEmail(email)
   if (exists) return R.conflict(res, 'E-mail já cadastrado')
 
   const hashed = await bcrypt.hash(password, 10)
@@ -73,11 +82,9 @@ export async function login(req: Request, res: Response) {
 
   const { email, password } = parsed.data
 
-  const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) return R.unauthorized(res, 'E-mail ou senha incorretos')
-
-  const valid = await bcrypt.compare(password, user.password)
-  if (!valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
+  const user = await findUserByEmail(email)
+  const valid = await bcrypt.compare(password, user?.password ?? DUMMY_HASH)
+  if (!user || !valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
 
   if (!user.is_active) {
     return R.forbidden(
@@ -107,6 +114,8 @@ export async function refresh(req: Request, res: Response) {
   const { refreshToken } = req.body
   if (!refreshToken) return R.badRequest(res, 'Refresh token não fornecido')
 
+  if (typeof refreshToken !== 'string') return R.badRequest(res, 'Refresh token inválido')
+
   const stored = await prisma.refreshToken.findUnique({ where: { token: refreshToken } })
   if (!stored || stored.expires_at < new Date()) {
     return R.unauthorized(res, 'Refresh token inválido ou expirado')
@@ -114,14 +123,30 @@ export async function refresh(req: Request, res: Response) {
 
   try {
     const payload = verifyRefreshToken(refreshToken)
-    const newAccessToken = generateAccessToken({ userId: payload.userId, role: payload.role })
-    const newRefreshToken = generateRefreshToken({ userId: payload.userId, role: payload.role })
 
-    await prisma.refreshToken.delete({ where: { token: refreshToken } })
+    // Conta suspensa/banida/excluída não renova sessão, e o papel vem do banco
+    // (não do token antigo) para refletir mudanças de role.
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, role: true, is_active: true },
+    })
+    if (!user || !user.is_active || user.id !== stored.user_id) {
+      await prisma.refreshToken.deleteMany({ where: { token: refreshToken } })
+      return R.unauthorized(res, 'Sessão encerrada')
+    }
+
+    // Rotação atômica: só um uso por refresh token (requisições concorrentes
+    // com o mesmo token não geram duas sessões).
+    const consumed = await prisma.refreshToken.deleteMany({ where: { token: refreshToken } })
+    if (consumed.count === 0) return R.unauthorized(res, 'Refresh token já utilizado')
+
+    const newAccessToken = generateAccessToken({ userId: user.id, role: user.role })
+    const newRefreshToken = generateRefreshToken({ userId: user.id, role: user.role })
+
     await prisma.refreshToken.create({
       data: {
         token: newRefreshToken,
-        user_id: payload.userId,
+        user_id: user.id,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     })
@@ -134,7 +159,7 @@ export async function refresh(req: Request, res: Response) {
 
 export async function logout(req: Request, res: Response) {
   const { refreshToken } = req.body
-  if (refreshToken) {
+  if (typeof refreshToken === 'string' && refreshToken) {
     await prisma.refreshToken.deleteMany({ where: { token: refreshToken } })
   }
   return R.ok(res, null, 'Logout realizado com sucesso')

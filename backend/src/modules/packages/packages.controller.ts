@@ -3,6 +3,10 @@ import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
 import { haversineDistance } from '../../utils/geo'
+import { env } from '../../config/env'
+import { getSettings } from '../settings/settings.service'
+import { acceptedOrderFields, createFeesOnAccept } from '../payments/connectionFees.service'
+import { notify } from '../push/push.service'
 
 const createSchema = z.object({
   category_id: z.string().uuid(),
@@ -186,9 +190,9 @@ const purchaseSchema = z.object({
   address: z.string().optional().default(''),
   neighborhood: z.string().optional().default(''),
   city: z.string().min(2),
-  state: z.string().default('SP'),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  state: z.string().length(2).default('SP'),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
   notes: z.string().max(1000).optional(),
 })
 
@@ -202,13 +206,11 @@ export async function purchasePackage(req: Request, res: Response) {
   if (!pkg) return R.notFound(res, 'Pacote não encontrado')
   if (!pkg.is_active) return R.badRequest(res, 'Este pacote não está mais disponível.')
   if (pkg.provider_id === req.userId) return R.badRequest(res, 'Você não pode contratar seu próprio pacote.')
+  if (!pkg.provider.is_active) return R.badRequest(res, 'Este profissional não está disponível no momento.')
 
-  const PROVIDER_FEE_PCT = 0.10
-  const CLIENT_FEE_PCT = 0.10
-  const providerFeeValue = Math.round(pkg.price * PROVIDER_FEE_PCT * 100) / 100
-  const providerAmount = Math.round((pkg.price - providerFeeValue) * 100) / 100
-  const clientFeeValue = Math.round(pkg.price * CLIENT_FEE_PCT * 100) / 100
-  const clientTotal = Math.round((pkg.price + clientFeeValue) * 100) / 100
+  // Mesmo modelo do aceite de proposta: taxas de conexão vigentes (admin)
+  const s = await getSettings()
+  const financials = acceptedOrderFields(s, pkg.price)
 
   const title = `${pkg.title} — ${parsed.data.city}`
   const desiredDate = parsed.data.desired_date ? new Date(parsed.data.desired_date) : new Date()
@@ -221,7 +223,6 @@ export async function purchasePackage(req: Request, res: Response) {
         title,
         description: parsed.data.notes,
         answers: {} as any,
-        status: 'ACCEPTED',                 // pula etapa OPEN/proposals
         desired_date: desiredDate,
         address: parsed.data.address || undefined,
         neighborhood: parsed.data.neighborhood || undefined,
@@ -231,13 +232,7 @@ export async function purchasePackage(req: Request, res: Response) {
         longitude: parsed.data.longitude,
         estimated_price_min: pkg.price,
         estimated_price_max: pkg.price,
-        final_price: pkg.price,
-        platform_fee_pct: PROVIDER_FEE_PCT,
-        platform_fee_value: providerFeeValue,
-        provider_amount: providerAmount,
-        client_fee_pct: CLIENT_FEE_PCT,
-        client_fee_value: clientFeeValue,
-        client_total: clientTotal,
+        ...financials,                      // pula etapa OPEN/proposals
         package_id: pkg.id,
       },
     })
@@ -261,6 +256,16 @@ export async function purchasePackage(req: Request, res: Response) {
         scheduled_at: desiredDate,
       },
     })
+    // Sem isso a tela de pagamento não encontrava a taxa ("Taxa não encontrada")
+    if (env.FEES_ENABLED) {
+      await createFeesOnAccept(tx, s, {
+        order_id: order.id,
+        proposal_id: proposal.id,
+        client_id: req.userId!,
+        provider_id: pkg.provider_id,
+        value: pkg.price,
+      })
+    }
     await tx.servicePackage.update({
       where: { id: pkg.id },
       data: { purchases_count: { increment: 1 } },
@@ -268,10 +273,20 @@ export async function purchasePackage(req: Request, res: Response) {
     return order
   })
 
+  await notify(pkg.provider_id, {
+    type: 'PROPOSAL_ACCEPTED',
+    title: 'Seu pacote foi contratado!',
+    body: env.FEES_ENABLED
+      ? `Um cliente contratou "${pkg.title}". Assim que ele pagar a taxa de conexão, você paga a sua e o contato é liberado.`
+      : `Um cliente contratou "${pkg.title}". O agendamento foi confirmado.`,
+    data: { order_id: result.id },
+    channel: 'proposal_update',
+  }).catch(() => {})
+
   return R.created(res, {
     order_id: result.id,
     final_price: pkg.price,
-    client_total: clientTotal,
-    payment_required: true,
+    client_total: financials.client_total,
+    payment_required: env.FEES_ENABLED,
   }, 'Pacote contratado! Realize o pagamento para confirmar.')
 }

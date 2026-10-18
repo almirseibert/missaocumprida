@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authenticate } from '../../middlewares/auth'
+import { authenticate, requireVerified } from '../../middlewares/auth'
 import {
   putMyRules, getMyRules, postException, deleteException,
   getProviderSlots, directBook,
@@ -18,4 +18,4 @@ providerAvailabilityRouter.get('/:providerId/availability', getProviderSlots)
 
 // Rota de booking direto sob /api/orders/direct-book
 export const directBookRouter = Router()
-directBookRouter.post('/direct-book', authenticate, directBook)
+directBookRouter.post('/direct-book', authenticate, requireVerified, directBook)

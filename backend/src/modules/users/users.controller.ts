@@ -8,6 +8,8 @@ import * as R from '../../utils/response'
 import { persistUpload } from '../files/files.service'
 import { banUser } from './moderation.service'
 import { anonymizeUser, DELETION_GRACE_DAYS } from './deletion.service'
+import { findUserByEmail } from '../auth/auth.controller'
+import { invalidateAccountState } from '../../middlewares/auth'
 
 export async function getMe(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
@@ -84,6 +86,7 @@ export async function deleteMe(req: Request, res: Response) {
   }
 
   await anonymizeUser(user.id)
+  invalidateAccountState(user.id)
 
   return R.ok(res, null, 'Conta excluída. Seus dados pessoais foram anonimizados.')
 }
@@ -102,7 +105,7 @@ export async function requestCancellationAndDeletion(req: Request, res: Response
   const parsed = publicCredentialsSchema.safeParse(req.body)
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
 
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
+  const user = await findUserByEmail(parsed.data.email)
   if (!user || !user.is_active) return R.unauthorized(res, 'E-mail ou senha incorretos')
   const valid = await bcrypt.compare(parsed.data.password, user.password)
   if (!valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
@@ -130,7 +133,7 @@ export async function undoDeletionRequest(req: Request, res: Response) {
   const parsed = publicCredentialsSchema.safeParse(req.body)
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
 
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
+  const user = await findUserByEmail(parsed.data.email)
   if (!user || !user.is_active) return R.unauthorized(res, 'E-mail ou senha incorretos')
   const valid = await bcrypt.compare(parsed.data.password, user.password)
   if (!valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
@@ -196,6 +199,29 @@ export async function updateMe(req: Request, res: Response) {
   const parsed = updateSchema.safeParse(req.body)
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
 
+  // Depois que os documentos foram aprovados, os dados de identidade não
+  // podem mudar pelo app (senão uma conta verificada assumiria outro CPF).
+  const IDENTITY_FIELDS = ['cpf', 'rg', 'birth_date', 'mother_name'] as const
+  const touchesIdentity = IDENTITY_FIELDS.some((f) => parsed.data[f] !== undefined)
+  if (touchesIdentity) {
+    const current = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { document_verification_status: true, cpf: true, rg: true, birth_date: true, mother_name: true },
+    })
+    if (current?.document_verification_status === 'APPROVED' || current?.document_verification_status === 'PENDING') {
+      const changed = IDENTITY_FIELDS.some((f) => {
+        const next = parsed.data[f]
+        if (next === undefined) return false
+        const prev = current[f]
+        if (f === 'birth_date') return (prev ? (prev as Date).toISOString().slice(0, 10) : null) !== (next ? String(next).slice(0, 10) : null)
+        return (prev ?? null) !== (next ?? null)
+      })
+      if (changed) {
+        return R.badRequest(res, 'Seus documentos já foram enviados/aprovados. Para alterar CPF, RG, nascimento ou nome da mãe, fale com o suporte.')
+      }
+    }
+  }
+
   const data: Record<string, unknown> = { ...parsed.data }
   if (parsed.data.birth_date) data.birth_date = new Date(parsed.data.birth_date)
 
@@ -212,6 +238,7 @@ export async function updateMe(req: Request, res: Response) {
       emergency_contact_name: true, emergency_contact_phone: true,
     },
   })
+  if (parsed.data.role) invalidateAccountState(req.userId)
   return R.ok(res, user, 'Perfil atualizado com sucesso')
 }
 
@@ -439,9 +466,13 @@ export async function reviewVerification(req: Request, res: Response) {
 }
 
 export async function changePassword(req: Request, res: Response) {
-  const { currentPassword, newPassword } = req.body
-  if (!currentPassword || !newPassword) return R.badRequest(res, 'Senhas não informadas')
-  if (newPassword.length < 6) return R.badRequest(res, 'Nova senha deve ter ao menos 6 caracteres')
+  const { currentPassword, newPassword, refreshToken } = req.body ?? {}
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    return R.badRequest(res, 'Senhas não informadas')
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    return R.badRequest(res, 'Nova senha deve ter ao menos 8 caracteres')
+  }
 
   const user = await prisma.user.findUnique({ where: { id: req.userId } })
   if (!user) return R.notFound(res)
@@ -450,7 +481,17 @@ export async function changePassword(req: Request, res: Response) {
   if (!valid) return R.badRequest(res, 'Senha atual incorreta')
 
   const hashed = await bcrypt.hash(newPassword, 10)
-  await prisma.user.update({ where: { id: req.userId }, data: { password: hashed } })
+  // Encerra as outras sessões (ex.: aparelho perdido/senha vazada); mantém só
+  // a sessão atual quando o app informa o próprio refresh token.
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: req.userId }, data: { password: hashed } }),
+    prisma.refreshToken.deleteMany({
+      where: {
+        user_id: req.userId,
+        ...(typeof refreshToken === 'string' && refreshToken ? { token: { not: refreshToken } } : {}),
+      },
+    }),
+  ])
   return R.ok(res, null, 'Senha alterada com sucesso')
 }
 
@@ -607,11 +648,16 @@ export async function adminSuspendUser(req: Request, res: Response) {
   if (target.role === 'ADMIN') return R.badRequest(res, 'Não é possível suspender outro administrador.')
 
   const until = req.body?.until ? new Date(req.body.until) : null
-  const user = await prisma.user.update({
-    where: { id: req.params.id },
-    data: { is_active: false, suspended_until: until },
-    select: { id: true, is_active: true, suspended_until: true },
-  })
+  if (until && isNaN(until.getTime())) return R.badRequest(res, 'Data inválida')
+  const [user] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: req.params.id },
+      data: { is_active: false, suspended_until: until },
+      select: { id: true, is_active: true, suspended_until: true },
+    }),
+    prisma.refreshToken.deleteMany({ where: { user_id: req.params.id } }),
+  ])
+  invalidateAccountState(req.params.id)
   return R.ok(res, user, 'Usuário suspenso')
 }
 
@@ -624,6 +670,7 @@ export async function adminReactivateUser(req: Request, res: Response) {
     data: { is_active: true, suspended_until: null, banned_at: null, ban_reason: null },
     select: { id: true, is_active: true, suspended_until: true },
   })
+  invalidateAccountState(req.params.id)
   return R.ok(res, user, 'Usuário reativado')
 }
 

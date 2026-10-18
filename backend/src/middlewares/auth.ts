@@ -12,20 +12,48 @@ declare global {
   }
 }
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+// Cache curto do estado da conta: sem ele, um usuário banido/suspenso seguiria
+// usando a API até o access token expirar (15 min).
+const ACTIVE_TTL_MS = 30_000
+const activeCache = new Map<string, { active: boolean; role: string; at: number }>()
+
+async function loadAccountState(userId: string) {
+  const hit = activeCache.get(userId)
+  if (hit && Date.now() - hit.at < ACTIVE_TTL_MS) return hit
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { is_active: true, role: true } })
+  const state = { active: !!user?.is_active, role: user?.role ?? '', at: Date.now() }
+  if (activeCache.size > 50_000) activeCache.clear()
+  activeCache.set(userId, state)
+  return state
+}
+
+/** Invalida o cache após suspender/banir/excluir/reativar ou mudar o papel. */
+export function invalidateAccountState(userId: string) {
+  activeCache.delete(userId)
+}
+
+export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) {
     return unauthorized(res, 'Token de acesso não fornecido')
   }
 
   const token = authHeader.split(' ')[1]
+  let payload: { userId: string; role: string }
   try {
-    const payload = verifyAccessToken(token)
-    req.userId = payload.userId
-    req.userRole = payload.role
-    next()
+    payload = verifyAccessToken(token)
   } catch {
     return unauthorized(res, 'Token inválido ou expirado')
+  }
+  try {
+    const state = await loadAccountState(payload.userId)
+    if (!state.active) return unauthorized(res, 'Conta inativa')
+    req.userId = payload.userId
+    // Papel atual do banco: rebaixamentos de ADMIN valem na hora.
+    req.userRole = state.role || payload.role
+    next()
+  } catch (err) {
+    next(err)
   }
 }
 

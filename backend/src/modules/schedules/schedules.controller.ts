@@ -5,7 +5,7 @@ import * as R from '../../utils/response'
 import { sendToUser, PushChannel } from '../push/push.service'
 import { persistUpload } from '../files/files.service'
 import { computeHoldUntil } from '../payments/payments.service'
-import { CONTACT_UNLOCKED_ORDER_STATUSES, contactsUnlocked } from '../../utils/orderVisibility'
+import { contactsUnlocked, unlockedOrderWhere } from '../../utils/orderVisibility'
 import {
   creditFee,
   cancelPendingFeesForProposal,
@@ -43,20 +43,17 @@ async function notify(
   await sendToUser(userId, { title, body, data: data as any, channel })
 }
 
-// Statuses visible to the provider only after both connection fees are paid
-const PROVIDER_VISIBLE_ORDER_STATUSES = CONTACT_UNLOCKED_ORDER_STATUSES
-
 // Taxa de Conexão: telefone das partes só aparece depois que as duas taxas
 // foram pagas (pedido SCHEDULED+). Antes disso, o cliente veria o telefone do
 // prestador logo no aceite — este helper anula os campos na resposta.
 function maskScheduleContacts<
   T extends {
-    order?: { status?: string } | null
+    order?: { status?: string; provider_fee_paid_at?: Date | null } | null
     provider?: { phone?: string | null } | null
     client?: { phone?: string | null } | null
   },
 >(schedule: T): T {
-  if (contactsUnlocked(schedule.order?.status)) return schedule
+  if (contactsUnlocked(schedule.order?.status, schedule.order?.provider_fee_paid_at)) return schedule
   return {
     ...schedule,
     provider: schedule.provider ? { ...schedule.provider, phone: null } : schedule.provider,
@@ -72,7 +69,7 @@ export async function listMySchedules(req: Request, res: Response) {
       // Provider only sees schedules once both fees are paid (SCHEDULED or beyond)
       {
         provider_id: req.userId,
-        order: { status: { in: PROVIDER_VISIBLE_ORDER_STATUSES } },
+        order: unlockedOrderWhere() as any,
       },
     ],
   }
@@ -99,7 +96,7 @@ export async function getSchedule(req: Request, res: Response) {
   if (
     schedule.provider_id === req.userId &&
     schedule.client_id !== req.userId &&
-    !PROVIDER_VISIBLE_ORDER_STATUSES.includes(schedule.order?.status as string)
+    !contactsUnlocked(schedule.order?.status, schedule.order?.provider_fee_paid_at)
   ) {
     return R.notFound(res, 'Agendamento não encontrado')
   }
@@ -221,7 +218,7 @@ export async function cancelSchedule(req: Request, res: Response) {
   const order = schedule.order
   const clientFee = order.connection_fees.find((f) => f.side === 'CLIENT')
   const providerFee = order.connection_fees.find((f) => f.side === 'PROVIDER')
-  const unlocked = contactsUnlocked(order.status)
+  const unlocked = contactsUnlocked(order.status, order.provider_fee_paid_at)
 
   // ---- Pré-liberação (janela ACCEPTED): sem punição ----
   if (!unlocked) {
@@ -295,7 +292,7 @@ export async function reportNoShow(req: Request, res: Response) {
   if (schedule.client_id !== req.userId) return R.forbidden(res)
 
   const order = schedule.order
-  if (!contactsUnlocked(order.status)) {
+  if (!contactsUnlocked(order.status, order.provider_fee_paid_at)) {
     return R.badRequest(res, 'A conexão ainda não foi concluída — cancele o agendamento se necessário')
   }
   if (schedule.status !== 'CONFIRMED') {

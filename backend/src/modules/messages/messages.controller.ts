@@ -17,7 +17,7 @@ export async function listMessages(req: Request, res: Response) {
 
   const schedule = await prisma.schedule.findUnique({
     where: { id: scheduleId },
-    include: { order: { select: { status: true } } },
+    include: { order: { select: { status: true, provider_fee_paid_at: true } } },
   })
   if (!schedule) return notFound(res, 'Agendamento não encontrado')
 
@@ -25,7 +25,7 @@ export async function listMessages(req: Request, res: Response) {
     return forbidden(res)
   }
   // Taxa de Conexão: chat só depois que as duas taxas foram pagas
-  if (!contactsUnlocked(schedule.order?.status)) {
+  if (!contactsUnlocked(schedule.order?.status, schedule.order?.provider_fee_paid_at)) {
     return forbidden(res, CHAT_LOCKED_MSG)
   }
 
@@ -52,14 +52,14 @@ export async function sendMessage(req: Request, res: Response) {
 
   const schedule = await prisma.schedule.findUnique({
     where: { id: scheduleId },
-    include: { order: { select: { status: true } } },
+    include: { order: { select: { status: true, provider_fee_paid_at: true } } },
   })
   if (!schedule) return notFound(res, 'Agendamento não encontrado')
 
   if (schedule.provider_id !== req.userId && schedule.client_id !== req.userId) {
     return forbidden(res)
   }
-  if (!contactsUnlocked(schedule.order?.status)) {
+  if (!contactsUnlocked(schedule.order?.status, schedule.order?.provider_fee_paid_at)) {
     return forbidden(res, CHAT_LOCKED_MSG)
   }
 

@@ -153,13 +153,27 @@ export async function boostProposal(req: Request, res: Response) {
     return R.badRequest(res, `Saldo insuficiente. É necessário R$ ${price.toFixed(2)} para esse nível.`)
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  let updated
+  try {
+    updated = await prisma.$transaction(async (tx) => {
     if (price > 0) {
-      await tx.user.update({
-        where: { id: proposal.provider_id },
+      // Débito condicional: dois boosts simultâneos não deixam o saldo negativo
+      const debited = await tx.user.updateMany({
+        where: { id: proposal.provider_id, provider_balance: { gte: price } },
         data: { provider_balance: { decrement: price } },
       })
+      if (debited.count === 0) throw new Error('INSUFFICIENT_BALANCE')
     }
+    // Só sobe de nível se ainda estiver abaixo (evita cobrar duas vezes)
+    const bumped = await tx.proposal.updateMany({
+      where: { id: proposal.id, status: 'PENDING', boost_level: { lt: parsed.data.level } },
+      data: {
+        boost_level: parsed.data.level,
+        boost_paid_at: new Date(),
+        boost_value: price,
+      },
+    })
+    if (bumped.count === 0) throw new Error('ALREADY_BOOSTED')
     await tx.boostPurchase.create({
       data: {
         provider_id: proposal.provider_id,
@@ -169,15 +183,17 @@ export async function boostProposal(req: Request, res: Response) {
         payment_ref: isProFreeLevel1 ? 'VERIFIED_PRO_FREE' : 'INTERNAL_BALANCE',
       },
     })
-    return tx.proposal.update({
-      where: { id: proposal.id },
-      data: {
-        boost_level: parsed.data.level,
-        boost_paid_at: new Date(),
-        boost_value: price,
-      },
+    return tx.proposal.findUnique({ where: { id: proposal.id } })
     })
-  })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'INSUFFICIENT_BALANCE') {
+      return R.badRequest(res, `Saldo insuficiente. É necessário R$ ${price.toFixed(2)} para esse nível.`)
+    }
+    if (err instanceof Error && err.message === 'ALREADY_BOOSTED') {
+      return R.badRequest(res, 'Sua proposta já está em nível igual ou superior')
+    }
+    throw err
+  }
   return R.ok(res, updated, 'Proposta destacada!')
 }
 
@@ -307,12 +323,19 @@ export async function cancelProposal(req: Request, res: Response) {
 }
 
 export async function listMyProposals(req: Request, res: Response) {
+  // Só campos não sensíveis do pedido: endereço exato, coordenadas e dados do
+  // cliente ficam para o detalhe (GET /orders/:id), que aplica a liberação
+  // por taxa de conexão. Antes a lista vazava o endereço antes do pagamento.
   const proposals = await prisma.proposal.findMany({
     where: { provider_id: req.userId },
     orderBy: { created_at: 'desc' },
+    take: 200,
     include: {
       order: {
-        include: {
+        select: {
+          id: true, title: true, status: true, city: true, neighborhood: true, state: true,
+          desired_date: true, estimated_price_min: true, estimated_price_max: true,
+          final_price: true, is_urgent: true, created_at: true, photos: true,
           category: { select: { id: true, name: true, icon: true } },
         },
       },

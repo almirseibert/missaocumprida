@@ -8,7 +8,7 @@ import * as R from '../../utils/response'
 import { mpPayment } from './mercadopago'
 import { consumeCredit } from '../referrals/referrals.service'
 import { releasePayment } from './payments.service'
-import { onFeePaidByExternalRef } from './connectionFees.service'
+import { onFeePaidByExternalRef, onFeeReversedByExternalRef } from './connectionFees.service'
 import { notify } from '../push/push.service'
 
 async function pixToQrBase64(pixCode: string): Promise<string> {
@@ -154,7 +154,6 @@ export async function createCheckout(req: Request, res: Response) {
         })
       }
 
-      console.log('[PIX MP] Enviando para MP:', JSON.stringify(mpBody, null, 2))
       const mpResponse = await mpPayment.create({ body: mpBody })
 
       const pixData = mpResponse.point_of_interaction?.transaction_data
@@ -190,15 +189,8 @@ export async function createCheckout(req: Request, res: Response) {
       })
     } catch (err: unknown) {
       const mpErr = err as { message?: string; cause?: unknown; status?: number; error?: string }
-      console.error('[PIX MP] Erro completo:', {
-        message: mpErr.message,
-        status: mpErr.status,
-        error: mpErr.error,
-        cause: mpErr.cause,
-        raw: String(err),
-      })
-      const msg = mpErr.message ?? 'Erro ao gerar PIX'
-      return R.badRequest(res, msg)
+      console.error('[PIX MP] Erro ao gerar PIX:', { message: mpErr.message, status: mpErr.status, error: mpErr.error })
+      return R.badRequest(res, 'Não foi possível gerar o PIX agora. Tente novamente em instantes.')
     }
   }
 }
@@ -288,7 +280,7 @@ export async function handleMpWebhook(req: Request, res: Response) {
 
         if (ref?.startsWith('fee_')) {
           // Taxa de Conexão (Remap 2.0)
-          await onFeePaidByExternalRef(ref, `mp_${mpId}`)
+          await onFeePaidByExternalRef(ref, `mp_${mpId}`, Number(mpPay.transaction_amount ?? 0))
         } else if (ref) {
           // Fluxo legado de escrow (deprecated)
           await prisma.$transaction([
@@ -301,6 +293,13 @@ export async function handleMpWebhook(req: Request, res: Response) {
               data: { status: 'SCHEDULED' },
             }),
           ])
+        }
+      } else if (mpPay.status === 'refunded' || mpPay.status === 'charged_back') {
+        const ref = mpPay.external_reference as string | undefined
+        if (ref?.startsWith('fee_')) {
+          await onFeeReversedByExternalRef(ref, `mp_${mpId}`, mpPay.status)
+        } else {
+          console.warn(`[MP Webhook] pagamento legado ${mpId} ${mpPay.status} — revisar manualmente`)
         }
       }
     }
@@ -387,8 +386,10 @@ export async function getMyBalance(req: Request, res: Response) {
   })
 }
 
+const MIN_WITHDRAWAL = 10
+
 const withdrawalSchema = z.object({
-  amount: z.number().positive('Valor deve ser positivo'),
+  amount: z.number().min(MIN_WITHDRAWAL, `Valor mínimo para saque: R$ ${MIN_WITHDRAWAL.toFixed(2)}`).max(100_000),
   pix_key: z.string().min(5, 'Chave PIX inválida'),
   pix_key_type: z.enum(['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'RANDOM']),
 })
@@ -406,20 +407,32 @@ export async function requestWithdrawal(req: Request, res: Response) {
   })
   if (!user) return R.notFound(res, 'Usuário não encontrado')
 
-  const { amount, pix_key, pix_key_type } = parsed.data
+  const { pix_key, pix_key_type } = parsed.data
+  const amount = Math.round(parsed.data.amount * 100) / 100
   if (amount > user.provider_balance) {
     return R.badRequest(res, `Saldo insuficiente. Disponível: R$ ${user.provider_balance.toFixed(2)}`)
   }
 
-  const [withdrawal] = await prisma.$transaction([
-    prisma.providerWithdrawal.create({
-      data: { provider_id: req.userId, amount, pix_key, pix_key_type },
-    }),
-    prisma.user.update({
-      where: { id: req.userId },
-      data: { provider_balance: { decrement: amount } },
-    }),
-  ])
+  // Débito condicional dentro da transação: dois pedidos de saque simultâneos
+  // não conseguem sacar mais do que o saldo (antes era check-then-decrement).
+  let withdrawal
+  try {
+    withdrawal = await prisma.$transaction(async (tx) => {
+      const debited = await tx.user.updateMany({
+        where: { id: req.userId, provider_balance: { gte: amount } },
+        data: { provider_balance: { decrement: amount } },
+      })
+      if (debited.count === 0) throw new Error('INSUFFICIENT_BALANCE')
+      return tx.providerWithdrawal.create({
+        data: { provider_id: req.userId, amount, pix_key, pix_key_type },
+      })
+    })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'INSUFFICIENT_BALANCE') {
+      return R.badRequest(res, 'Saldo insuficiente')
+    }
+    throw err
+  }
 
   return R.created(res, withdrawal, 'Solicitação de saque enviada. Processaremos em até 2 dias úteis.')
 }
@@ -444,10 +457,13 @@ export async function approveWithdrawal(req: Request, res: Response) {
   if (!withdrawal) return R.notFound(res, 'Saque não encontrado')
   if (withdrawal.status !== 'REQUESTED') return R.badRequest(res, 'Saque já processado')
 
-  const updated = await prisma.providerWithdrawal.update({
-    where: { id: withdrawal.id },
-    data: { status: 'PAID', processed_at: new Date(), notes: notes ?? null },
+  // Transição condicional: dois admins não processam o mesmo saque duas vezes
+  const changed = await prisma.providerWithdrawal.updateMany({
+    where: { id: withdrawal.id, status: 'REQUESTED' },
+    data: { status: 'PAID', processed_at: new Date(), notes: typeof notes === 'string' ? notes : null },
   })
+  if (changed.count === 0) return R.badRequest(res, 'Saque já processado')
+  const updated = await prisma.providerWithdrawal.findUnique({ where: { id: withdrawal.id } })
   return R.ok(res, updated, 'Saque aprovado e pago')
 }
 
@@ -460,16 +476,20 @@ export async function rejectWithdrawal(req: Request, res: Response) {
   if (!withdrawal) return R.notFound(res, 'Saque não encontrado')
   if (withdrawal.status !== 'REQUESTED') return R.badRequest(res, 'Saque já processado')
 
-  await prisma.$transaction([
-    prisma.providerWithdrawal.update({
-      where: { id: withdrawal.id },
-      data: { status: 'REJECTED', processed_at: new Date(), notes: notes ?? null },
-    }),
-    prisma.user.update({
+  // Só devolve o saldo se ESTA chamada fez a transição (evita estorno em dobro)
+  const refunded = await prisma.$transaction(async (tx) => {
+    const changed = await tx.providerWithdrawal.updateMany({
+      where: { id: withdrawal.id, status: 'REQUESTED' },
+      data: { status: 'REJECTED', processed_at: new Date(), notes: typeof notes === 'string' ? notes : null },
+    })
+    if (changed.count === 0) return false
+    await tx.user.update({
       where: { id: withdrawal.provider_id },
       data: { provider_balance: { increment: withdrawal.amount } },
-    }),
-  ])
+    })
+    return true
+  })
+  if (!refunded) return R.badRequest(res, 'Saque já processado')
   return R.ok(res, null, 'Saque rejeitado e saldo devolvido ao prestador')
 }
 

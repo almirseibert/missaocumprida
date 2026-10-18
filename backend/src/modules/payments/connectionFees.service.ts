@@ -1,11 +1,11 @@
 import QRCode from 'qrcode'
-import { Prisma, ConnectionFee } from '@prisma/client'
+import { Prisma, ConnectionFee, OrderStatus } from '@prisma/client'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import { mpPayment, mpPreference } from './mercadopago'
 import { getSettings, PlatformSettings } from '../settings/settings.service'
 import { notify } from '../push/push.service'
-import { consumeCredit, accrueReferralVolume } from '../referrals/referrals.service'
+import { accrueReferralVolume } from '../referrals/referrals.service'
 
 /**
  * Taxa de Conexão (Remap 2.0)
@@ -57,6 +57,26 @@ export function feePublicView(fee: ConnectionFee, proposalValue: number, s: Plat
   }
 }
 
+/**
+ * Campos financeiros + status de um pedido que já nasce aceito (pacote ou
+ * agendamento direto). Com as taxas ligadas fica ACCEPTED aguardando as duas
+ * taxas, como no aceite de proposta; sem elas, vai direto para SCHEDULED.
+ */
+export function acceptedOrderFields(s: PlatformSettings, price: number) {
+  const providerFee = computeFeeBase(price, s.fee_provider_pct, s.fee_min)
+  const clientFee = computeFeeBase(price, s.fee_client_pct, s.fee_min)
+  return {
+    status: (env.FEES_ENABLED ? 'ACCEPTED' : 'SCHEDULED') as OrderStatus,
+    final_price: price,
+    platform_fee_pct: s.fee_provider_pct,
+    platform_fee_value: providerFee,
+    provider_amount: round2(price - providerFee),
+    client_fee_pct: s.fee_client_pct,
+    client_fee_value: clientFee,
+    client_total: round2(price + clientFee),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Criação no aceite (dentro da transação do acceptProposal)
 // ---------------------------------------------------------------------------
@@ -98,6 +118,18 @@ export async function createFeesOnAccept(
 // ---------------------------------------------------------------------------
 // Cobrança Pix no Mercado Pago (com simulação em dev/sandbox)
 // ---------------------------------------------------------------------------
+/** Validade do Pix gerado: QR antigo não deve ser pago depois de muito tempo. */
+const PIX_EXPIRATION_MIN = 60
+
+/** Data no formato aceito pelo Mercado Pago (yyyy-MM-ddTHH:mm:ss.SSS-03:00). */
+function mpDateBrasilia(d: Date): string {
+  return new Date(d.getTime() - 3 * 3600_000).toISOString().replace('Z', '-03:00')
+}
+
+function isRealMercadoPago(): boolean {
+  return !!env.MP_ACCESS_TOKEN && !env.MP_ACCESS_TOKEN.startsWith('TEST-')
+}
+
 async function pixToQrBase64(pixCode: string): Promise<string> {
   return QRCode.toDataURL(pixCode).then((url) => url.replace('data:image/png;base64,', ''))
 }
@@ -108,9 +140,7 @@ async function createFeePixCharge(args: {
   description: string
   payer: { name: string; email: string; cpf: string | null }
 }) {
-  const isReal = !!env.MP_ACCESS_TOKEN && !env.MP_ACCESS_TOKEN.startsWith('TEST-')
-
-  if (!isReal) {
+  if (!isRealMercadoPago()) {
     // Dev/sandbox: gera um Pix fictício; confirmação via POST /payments/fees/simulate
     const devRef = `fee_dev_${Date.now()}`
     const cents = String(Math.round(args.amount * 100)).padStart(6, '0')
@@ -151,7 +181,11 @@ async function createFeePixCharge(args: {
       },
       ...(notificationUrl ? { notification_url: notificationUrl } : {}),
       external_reference: `fee_${args.feeId}`,
+      date_of_expiration: mpDateBrasilia(new Date(Date.now() + PIX_EXPIRATION_MIN * 60_000)),
     },
+    // Idempotência no MP: o mesmo request repetido (retry de rede) não cria
+    // uma segunda cobrança.
+    requestOptions: { idempotencyKey: `fee_${args.feeId}_${Math.round(args.amount * 100)}_${Math.floor(Date.now() / 60_000)}` },
   })
 
   const mpId = String(mpResponse.id)
@@ -176,9 +210,7 @@ async function createFeeCardCharge(args: {
   description: string
   payer: { name: string; email: string }
 }) {
-  const isReal = !!env.MP_ACCESS_TOKEN && !env.MP_ACCESS_TOKEN.startsWith('TEST-')
-
-  if (!isReal) {
+  if (!isRealMercadoPago()) {
     // Dev/sandbox: sem checkout externo; confirmação via POST /payments/fees/simulate
     const devRef = `fee_dev_card_${Date.now()}`
     return {
@@ -189,7 +221,9 @@ async function createFeeCardCharge(args: {
 
   const notificationUrl =
     env.NODE_ENV === 'production' ? `${env.API_URL}/api/payments/mp-webhook` : undefined
-  const backUrl = `${env.FRONTEND_URL}/pagamento/${args.orderId}`
+  // Página pública: quem paga pelo app volta ao app pelo deep link sem
+  // precisar de sessão no site.
+  const backUrl = `${env.FRONTEND_URL}/retorno-pagamento?pedido=${args.orderId}`
 
   const pref = await mpPreference.create({
     body: {
@@ -222,6 +256,39 @@ async function createFeeCardCharge(args: {
   return {
     mp_ref: `mp_pref_${pref.id}`,
     payload: { init_point: initPoint as string | null, mp_payment_id: String(pref.id) },
+  }
+}
+
+/**
+ * Consulta o Pix gravado na taxa: se ainda estiver pendente (e for do mesmo
+ * valor), devolve os dados do QR; se já foi aprovado (webhook atrasado),
+ * confirma a taxa e devolve 'PAID'. Caso contrário, null (gerar um novo).
+ */
+async function reusePendingPix(
+  feeId: string,
+  mpRef: string | null,
+  amount: number,
+): Promise<{ pix_code: string; pix_qr_base64: string | null; mp_payment_id: string } | 'PAID' | null> {
+  if (!isRealMercadoPago() || !mpRef?.startsWith('mp_') || mpRef.startsWith('mp_pref_')) return null
+  try {
+    const mpId = mpRef.slice('mp_'.length)
+    const pay = await mpPayment.get({ id: mpId })
+    if (pay.status === 'approved') {
+      await markFeePaid(feeId, { finalStatus: 'PAID', mpRef })
+      return 'PAID'
+    }
+    if (pay.status !== 'pending' || round2(Number(pay.transaction_amount ?? 0)) !== round2(amount)) return null
+    if (pay.date_of_expiration && new Date(pay.date_of_expiration).getTime() < Date.now() + 2 * 60_000) return null
+    const data = pay.point_of_interaction?.transaction_data
+    if (!data?.qr_code) return null
+    return {
+      pix_code: data.qr_code,
+      pix_qr_base64: data.qr_code_base64 ?? (await pixToQrBase64(data.qr_code)),
+      mp_payment_id: mpId,
+    }
+  } catch (err) {
+    console.warn('[taxa-conexao] não foi possível reutilizar o Pix pendente:', (err as Error).message)
+    return null
   }
 }
 
@@ -284,20 +351,29 @@ export async function startFeeCheckout(args: {
     }
   }
 
-  // Crédito da plataforma (cliente) é abatido automaticamente
+  // Crédito da plataforma (cliente) é abatido automaticamente. A linha da
+  // taxa fica travada (FOR UPDATE) durante o abatimento: checkouts simultâneos
+  // esperam e enxergam o crédito já aplicado, em vez de cobrar o valor cheio.
   let creditUsed = fee.credit_used
-  if (side === 'CLIENT' && (args.useCredit ?? true) && creditUsed === 0) {
-    const used = await consumeCredit(args.userId, fee.base_amount, {
-      reason: 'FEE_PAYMENT',
-      ref_id: fee.id,
-    })
-    if (used > 0) {
-      creditUsed = used
-      await prisma.connectionFee.update({
-        where: { id: fee.id },
-        data: { credit_used: used },
+  if (side === 'CLIENT' && (args.useCredit ?? true)) {
+    creditUsed = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM connection_fees WHERE id = ${fee.id} FOR UPDATE`
+      const current = await tx.connectionFee.findUnique({ where: { id: fee.id }, select: { credit_used: true } })
+      if ((current?.credit_used ?? 0) > 0) return current!.credit_used
+      const user = await tx.user.findUnique({ where: { id: args.userId }, select: { credit_balance: true } })
+      const used = round2(Math.min(user?.credit_balance ?? 0, fee.base_amount))
+      if (used <= 0) return 0
+      const debited = await tx.user.updateMany({
+        where: { id: args.userId, credit_balance: { gte: used } },
+        data: { credit_balance: { decrement: used } },
       })
-    }
+      if (debited.count === 0) return 0
+      await tx.creditTransaction.create({
+        data: { user_id: args.userId, amount: -used, reason: 'FEE_PAYMENT', ref_id: fee.id },
+      })
+      await tx.connectionFee.update({ where: { id: fee.id }, data: { credit_used: used } })
+      return used
+    })
   }
 
   const remaining = round2(fee.base_amount - creditUsed)
@@ -316,6 +392,28 @@ export async function startFeeCheckout(args: {
   const surchargePct = args.method === 'card' ? s.gateway_surcharge_card : s.gateway_surcharge_pix
   const surcharge = round2(remaining * surchargePct)
   const gatewayTotal = round2(remaining + surcharge)
+
+  // Pix já gerado e ainda pendente para o mesmo valor: devolve o mesmo QR em
+  // vez de criar outra cobrança (antes, cada toque gerava um Pix novo e o
+  // usuário podia pagar duas vezes).
+  if (args.method === 'pix') {
+    const reused = await reusePendingPix(fee.id, fee.mp_payment_id, gatewayTotal)
+    if (reused === 'PAID') return { already_paid: true, status: 'PAID' }
+    if (reused) {
+      return {
+        ...reused,
+        side,
+        method: args.method,
+        base_amount: fee.base_amount,
+        credit_used: creditUsed,
+        surcharge_pct: surchargePct,
+        surcharge_amount: surcharge,
+        amount: gatewayTotal,
+        promo_active: s.fee_promo_active && fee.regular_pct > fee.pct_applied,
+        regular_amount: computeFeeBase(order.final_price ?? 0, fee.regular_pct, s.fee_min),
+      }
+    }
+  }
 
   const payer = side === 'CLIENT' ? order.client : order.schedule!.provider
   const description = `Taxa de conexão — ${(order.title ?? 'serviço').slice(0, 40)}`
@@ -491,10 +589,72 @@ async function handleProviderFeePaid(fee: ConnectionFee) {
   await accrueReferralVolume(order.client_id, order.id, order.final_price ?? 0).catch(() => {})
 }
 
-/** Localiza a taxa a partir do external_reference do webhook (fee_<id>). */
-export async function onFeePaidByExternalRef(externalRef: string, mpRef?: string): Promise<boolean> {
+/**
+ * Localiza a taxa a partir do external_reference do webhook (fee_<id>).
+ * Se a taxa já não estava pendente (paga por outro Pix, expirada, pedido
+ * cancelado) e ESTE pagamento não é o que a quitou, o dinheiro entrou sem
+ * serviço: devolve o valor como crédito/saldo uma única vez.
+ */
+export async function onFeePaidByExternalRef(externalRef: string, mpRef?: string, paidAmount = 0): Promise<boolean> {
   const feeId = externalRef.slice('fee_'.length)
-  return markFeePaid(feeId, { finalStatus: 'PAID', mpRef })
+  const paid = await markFeePaid(feeId, { finalStatus: 'PAID', mpRef })
+  if (paid || !mpRef) return paid
+
+  const fee = await prisma.connectionFee.findUnique({ where: { id: feeId } })
+  if (!fee || fee.mp_payment_id === mpRef) return false // reentrega do mesmo webhook
+  await creditOrphanPayment(fee, mpRef, paidAmount)
+  return false
+}
+
+async function creditOrphanPayment(fee: ConnectionFee, mpRef: string, amount: number) {
+  const value = round2(amount)
+  if (value <= 0) return
+  try {
+    const credited = await prisma.$transaction(async (tx) => {
+      // Idempotência: um crédito por pagamento do MP
+      const already = await tx.creditTransaction.findFirst({
+        where: { reason: 'MP_ORPHAN_PAYMENT', ref_id: mpRef },
+        select: { id: true },
+      })
+      if (already) return false
+      await tx.creditTransaction.create({
+        data: { user_id: fee.user_id, amount: value, reason: 'MP_ORPHAN_PAYMENT', ref_id: mpRef },
+      })
+      await tx.user.update({
+        where: { id: fee.user_id },
+        data: fee.side === 'CLIENT'
+          ? { credit_balance: { increment: value } }
+          : { provider_balance: { increment: value } },
+      })
+      return true
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+    if (!credited) return
+    console.warn(`[taxa-conexao] pagamento ${mpRef} chegou com a taxa ${fee.id} em ${fee.status} — R$ ${value.toFixed(2)} creditados`)
+    await notify(fee.user_id, {
+      type: 'FEE_CREDITED',
+      title: 'Pagamento devolvido como crédito 💚',
+      body: `Recebemos um pagamento de R$ ${value.toFixed(2)} que não era mais necessário. O valor voltou como ${fee.side === 'CLIENT' ? 'crédito' : 'saldo'} na sua conta.`,
+      data: { order_id: fee.order_id },
+      channel: 'payment',
+    }).catch(() => {})
+  } catch (err) {
+    console.error(`[taxa-conexao] falha ao creditar pagamento órfão ${mpRef}:`, err)
+  }
+}
+
+/**
+ * Estorno ou chargeback no Mercado Pago de um pagamento que quitou a taxa:
+ * marca a taxa como REFUNDED (fila de exceção do admin decide o restante).
+ */
+export async function onFeeReversedByExternalRef(externalRef: string, mpRef: string, mpStatus: string) {
+  const feeId = externalRef.slice('fee_'.length)
+  const updated = await prisma.connectionFee.updateMany({
+    where: { id: feeId, mp_payment_id: mpRef, status: { in: ['PAID', 'COVERED'] } },
+    data: { status: 'REFUNDED', notes: `Mercado Pago: ${mpStatus} em ${new Date().toISOString()}` },
+  })
+  if (updated.count > 0) {
+    console.warn(`[taxa-conexao] taxa ${feeId} ${mpStatus} no Mercado Pago (${mpRef}) — revisar no painel admin`)
+  }
 }
 
 // ---------------------------------------------------------------------------

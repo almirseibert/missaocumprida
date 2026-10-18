@@ -174,19 +174,29 @@ export async function createOrder(req: Request, res: Response) {
   return R.created(res, order, 'Pedido criado com sucesso')
 }
 
+const ORDER_STATUSES = ['OPEN', 'IN_PROPOSAL', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'DONE', 'RATED', 'CANCELLED', 'DISPUTED']
+
+/** Paginação segura: evita limit gigante (dump/DoS) e valores não numéricos. */
+function pageParams(query: Request['query'], defLimit = 10) {
+  const page = Math.max(parseInt(String(query.page ?? '1'), 10) || 1, 1)
+  const limit = Math.min(Math.max(parseInt(String(query.limit ?? defLimit), 10) || defLimit, 1), 50)
+  return { page, limit }
+}
+
 export async function listMyOrders(req: Request, res: Response) {
-  const { status, page = '1', limit = '10' } = req.query
-  const skip = (parseInt(page as string) - 1) * parseInt(limit as string)
+  const { status } = req.query
+  const { page, limit } = pageParams(req.query)
+  const skip = (page - 1) * limit
 
   const where: Record<string, unknown> = { client_id: req.userId }
-  if (status) where.status = status
+  if (typeof status === 'string' && ORDER_STATUSES.includes(status)) where.status = status
 
   const [orders, total] = await Promise.all([
     prisma.order.findMany({
       where,
       orderBy: { created_at: 'desc' },
       skip,
-      take: parseInt(limit as string),
+      take: limit,
       include: {
         category: { select: { id: true, name: true, icon: true } },
         proposals: { select: { id: true, status: true } },
@@ -196,7 +206,7 @@ export async function listMyOrders(req: Request, res: Response) {
     prisma.order.count({ where }),
   ])
 
-  return R.ok(res, { orders, total, page: parseInt(page as string), limit: parseInt(limit as string) })
+  return R.ok(res, { orders, total, page, limit })
 }
 
 // Blurs coordinates to a ~500m grid cell (0.005° ≈ 555m) and strips exact address
@@ -211,9 +221,8 @@ function maskLocationForProvider<T extends { latitude: number | null; longitude:
 const PRE_ACCEPTANCE_STATUSES = ['OPEN', 'IN_PROPOSAL']
 
 export async function getProviderFeed(req: Request, res: Response) {
-  const { page = '1', limit = '10', city } = req.query
-  const pageNum = parseInt(page as string)
-  const limitNum = parseInt(limit as string)
+  const { city } = req.query
+  const { page: pageNum, limit: limitNum } = pageParams(req.query)
 
   // Busca habilidades e localização do prestador
   const [skills, provider] = await Promise.all([
@@ -240,7 +249,7 @@ export async function getProviderFeed(req: Request, res: Response) {
     category_id: { in: categoryIds },
     client_id: { not: req.userId },
   }
-  if (city) where.city = { contains: city as string, mode: 'insensitive' }
+  if (typeof city === 'string' && city) where.city = { contains: city, mode: 'insensitive' }
 
   // Busca todos os pedidos candidatos para filtrar por distância em memória
   // Urgentes primeiro (com deadline ainda vigente), depois por data
@@ -336,25 +345,33 @@ export async function getOrder(req: Request, res: Response) {
     order.schedule?.provider_id === req.userId ||
     order.proposals.some(p => p.provider_id === req.userId && p.status === 'ACCEPTED')
   const isProposalProvider = order.proposals.some(p => p.provider_id === req.userId)
-  const unlocked = contactsUnlocked(order.status)
+  const unlocked = contactsUnlocked(order.status, order.provider_fee_paid_at)
 
   if (isClient) return R.ok(res, order)
-
-  if (!isProposalProvider) {
-    // Unknown visitor — minimal public view, always masked (location + phone)
-    const { proposals: _, ...publicOrder } = stripClientPhone(order)
-    return R.ok(res, maskLocationForProvider(publicOrder))
-  }
 
   if (isAcceptedProvider && unlocked) {
     // Both connection fees paid — full contact for the accepted provider
     return R.ok(res, order)
   }
 
+  // O agendamento guarda endereço/GPS de check-in e conclusão: fora da
+  // conexão liberada, só id/status/data.
+  const safeSchedule = order.schedule
+    ? { id: order.schedule.id, status: order.schedule.status, scheduled_at: order.schedule.scheduled_at }
+    : null
+
+  if (!isProposalProvider) {
+    // Unknown visitor — minimal public view, always masked (location + phone)
+    const { proposals: _, ...publicOrder } = stripClientPhone(order)
+    return R.ok(res, maskLocationForProvider({ ...publicOrder, schedule: safeSchedule }))
+  }
+
   // Provider with proposal (accepted or not) BEFORE the fees are paid:
-  // keeps proposals visible but masks address/coords and client phone.
+  // keeps only their own proposal visible (others' values are competitors'
+  // data) and masks address/coords and client phone.
   const { proposals, ...rest } = stripClientPhone(order)
-  return R.ok(res, { ...maskLocationForProvider(rest), proposals })
+  const ownProposals = proposals.filter((p) => p.provider_id === req.userId)
+  return R.ok(res, { ...maskLocationForProvider({ ...rest, schedule: safeSchedule }), proposals: ownProposals })
 }
 
 export async function uploadOrderPhotos(req: Request, res: Response) {

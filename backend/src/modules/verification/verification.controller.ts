@@ -1,4 +1,5 @@
 import { Request, Response } from 'express'
+import crypto from 'crypto'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
@@ -62,10 +63,29 @@ const GRANT_EVENTS = new Set([
 ])
 const REVOKE_EVENTS = new Set(['EXPIRATION'])
 
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb)
+}
+
+async function revokePro(userId: string) {
+  await prisma.$transaction([
+    prisma.verifiedProSubscription.updateMany({
+      where: { user_id: userId, status: 'ACTIVE' },
+      data: { status: 'CANCELLED', cancelled_at: new Date() },
+    }),
+    prisma.user.updateMany({
+      where: { id: userId },
+      data: { is_verified_pro: false, verified_pro_expires: new Date() },
+    }),
+  ])
+}
+
 export async function handleRevenueCatWebhook(req: Request, res: Response) {
-  // Autenticação do webhook
+  // Autenticação do webhook (comparação em tempo constante)
   const auth = req.headers['authorization']
-  if (!env.REVENUECAT_WEBHOOK_AUTH || auth !== env.REVENUECAT_WEBHOOK_AUTH) {
+  if (!env.REVENUECAT_WEBHOOK_AUTH || typeof auth !== 'string' || !safeEqual(auth, env.REVENUECAT_WEBHOOK_AUTH)) {
     return res.sendStatus(401)
   }
 
@@ -74,9 +94,21 @@ export async function handleRevenueCatWebhook(req: Request, res: Response) {
       type?: string
       app_user_id?: string
       expiration_at_ms?: number
+      transferred_from?: string[]
+      transferred_to?: string[]
     }
-    const userId = event.app_user_id
     const type = event.type ?? ''
+
+    // "Restaurar compras" em outra conta move a assinatura: o selo sai da conta
+    // antiga (a nova recebe um evento próprio de concessão/renovação).
+    if (type === 'TRANSFER') {
+      for (const fromId of event.transferred_from ?? []) {
+        if (!fromId.startsWith('$RCAnonymousID')) await revokePro(fromId)
+      }
+      return res.sendStatus(200)
+    }
+
+    const userId = event.app_user_id
     if (!userId) return res.sendStatus(200) // nada a fazer
 
     // Ignora usuários anônimos da RC (ex.: "$RCAnonymousID:...")
@@ -102,12 +134,18 @@ export async function handleRevenueCatWebhook(req: Request, res: Response) {
             data: { user_id: userId, status: 'ACTIVE', current_period_end: periodEnd, monthly_value: MONTHLY_VALUE },
           })
         }
+        const current = await tx.user.findUnique({ where: { id: userId }, select: { verified_pro_since: true, is_verified_pro: true } })
         await tx.user.update({
           where: { id: userId },
-          data: { is_verified_pro: true, verified_pro_since: new Date(), verified_pro_expires: periodEnd },
+          data: {
+            is_verified_pro: true,
+            // Mantém a data original nas renovações
+            verified_pro_since: current?.is_verified_pro && current.verified_pro_since ? current.verified_pro_since : new Date(),
+            verified_pro_expires: periodEnd,
+          },
         })
       })
-      await notify(userId, {
+      if (type === 'INITIAL_PURCHASE') await notify(userId, {
         type: 'VERIFIED_PRO',
         title: 'Selo Verificado Pro ativo ✓',
         body: 'Sua assinatura foi confirmada. Aproveite os benefícios!',
@@ -115,16 +153,7 @@ export async function handleRevenueCatWebhook(req: Request, res: Response) {
         channel: 'general',
       }).catch(() => {})
     } else if (REVOKE_EVENTS.has(type)) {
-      await prisma.$transaction([
-        prisma.verifiedProSubscription.updateMany({
-          where: { user_id: userId, status: 'ACTIVE' },
-          data: { status: 'CANCELLED', cancelled_at: new Date() },
-        }),
-        prisma.user.update({
-          where: { id: userId },
-          data: { is_verified_pro: false, verified_pro_expires: new Date() },
-        }),
-      ])
+      await revokePro(userId)
     }
     // CANCELLATION (auto-renovação desligada) mantém o selo até EXPIRATION.
   } catch (err) {

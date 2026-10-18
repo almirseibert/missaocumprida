@@ -1538,7 +1538,7 @@ async function main() {
     },
   })
 
-  const prestadorPassword = await bcrypt.hash('Teste@123', 10)
+  const prestadorPassword = await bcrypt.hash(seedPassword('SEED_TEST_PASSWORD', 'Teste@123'), 10)
   const prestador = await prisma.user.upsert({
     where: { email: 'prestador@teste.com' },
     update: {},

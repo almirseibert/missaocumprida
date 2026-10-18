@@ -2,6 +2,10 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
+import { env } from '../../config/env'
+import { getSettings } from '../settings/settings.service'
+import { acceptedOrderFields, createFeesOnAccept } from '../payments/connectionFees.service'
+import { notify } from '../push/push.service'
 
 const timeRe = /^\d{2}:\d{2}$/
 
@@ -186,13 +190,13 @@ const bookSchema = z.object({
   title: z.string().min(3).max(200),
   description: z.string().max(2000).optional(),
   answers: z.record(z.unknown()).optional().default({}),
-  address: z.string().optional(),
-  neighborhood: z.string().optional(),
-  city: z.string(),
-  state: z.string().default('SP'),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
-  agreed_price: z.number().positive(),
+  address: z.string().max(300).optional(),
+  neighborhood: z.string().max(120).optional(),
+  city: z.string().min(2).max(120),
+  state: z.string().length(2).default('SP'),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  agreed_price: z.number().positive().max(100_000),
 })
 
 export async function directBook(req: Request, res: Response) {
@@ -202,6 +206,26 @@ export async function directBook(req: Request, res: Response) {
   if (d.provider_id === req.userId) return R.badRequest(res, 'Você não pode agendar consigo mesmo')
 
   const scheduledAt = new Date(d.scheduled_at)
+  if (scheduledAt.getTime() < Date.now()) return R.badRequest(res, 'Escolha um horário futuro')
+
+  // O prestador precisa existir, estar ativo e atender a categoria
+  const skill = await prisma.providerSkill.findFirst({
+    where: {
+      provider_id: d.provider_id,
+      category_id: d.category_id,
+      is_active: true,
+      provider: { is_active: true, role: { in: ['PROVIDER', 'BOTH'] } },
+    },
+    select: { category: { select: { base_price_min: true } } },
+  })
+  if (!skill) return R.badRequest(res, 'Este profissional não atende esta categoria')
+
+  // Mesmo piso antifraude das propostas: a taxa é % do valor combinado
+  const s = await getSettings()
+  const minValue = Math.max(10, Math.round((skill.category.base_price_min ?? 0) * s.proposal_min_ratio * 100) / 100)
+  if (d.agreed_price < minValue) {
+    return R.badRequest(res, `O valor mínimo para esta categoria é R$ ${minValue.toFixed(2)}`)
+  }
   // valida que o slot não está ocupado
   const conflict = await prisma.schedule.findFirst({
     where: {
@@ -212,12 +236,7 @@ export async function directBook(req: Request, res: Response) {
   })
   if (conflict) return R.badRequest(res, 'Horário não está mais disponível')
 
-  const PROVIDER_FEE_PCT = 0.1
-  const CLIENT_FEE_PCT = 0.1
-  const providerFeeValue = Math.round(d.agreed_price * PROVIDER_FEE_PCT * 100) / 100
-  const providerAmount = Math.round((d.agreed_price - providerFeeValue) * 100) / 100
-  const clientFeeValue = Math.round(d.agreed_price * CLIENT_FEE_PCT * 100) / 100
-  const clientTotal = Math.round((d.agreed_price + clientFeeValue) * 100) / 100
+  const financials = acceptedOrderFields(s, d.agreed_price)
 
   const result = await prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
@@ -227,7 +246,6 @@ export async function directBook(req: Request, res: Response) {
         title: d.title,
         description: d.description,
         answers: d.answers as any,
-        status: 'ACCEPTED',
         desired_date: scheduledAt,
         address: d.address,
         neighborhood: d.neighborhood,
@@ -237,13 +255,7 @@ export async function directBook(req: Request, res: Response) {
         longitude: d.longitude,
         estimated_price_min: d.agreed_price,
         estimated_price_max: d.agreed_price,
-        final_price: d.agreed_price,
-        platform_fee_pct: PROVIDER_FEE_PCT,
-        platform_fee_value: providerFeeValue,
-        provider_amount: providerAmount,
-        client_fee_pct: CLIENT_FEE_PCT,
-        client_fee_value: clientFeeValue,
-        client_total: clientTotal,
+        ...financials,
       },
     })
     const proposal = await tx.proposal.create({
@@ -264,9 +276,25 @@ export async function directBook(req: Request, res: Response) {
         scheduled_at: scheduledAt,
       },
     })
+    if (env.FEES_ENABLED) {
+      await createFeesOnAccept(tx, s, {
+        order_id: order.id,
+        proposal_id: proposal.id,
+        client_id: req.userId!,
+        provider_id: d.provider_id,
+        value: d.agreed_price,
+      })
+    }
     return order
   })
-  return R.created(res, { order_id: result.id, client_total: clientTotal, payment_required: true })
+  await notify(d.provider_id, {
+    type: 'PROPOSAL_ACCEPTED',
+    title: 'Novo agendamento direto',
+    body: `Um cliente reservou "${d.title}". Assim que ele pagar a taxa de conexão, você confirma pagando a sua.`,
+    data: { order_id: result.id },
+    channel: 'proposal_update',
+  }).catch(() => {})
+  return R.created(res, { order_id: result.id, client_total: financials.client_total, payment_required: env.FEES_ENABLED })
 }
 
 function toUTCDateStr(d: Date) {

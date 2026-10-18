@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { Gift } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 
-interface PageProps { params: { code: string } }
+// Next 15: params é assíncrono
+interface PageProps { params: Promise<{ code: string }> }
 
 async function fetchInviter(code: string) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
@@ -17,7 +18,7 @@ async function fetchInviter(code: string) {
 }
 
 export default async function ConvitePage({ params }: PageProps) {
-  const code = params.code.toUpperCase()
+  const code = (await params).code.toUpperCase()
   const inviter = await fetchInviter(code)
 
   return (

@@ -41,10 +41,14 @@ export default function RegisterScreen() {
       Alert.alert('Atenção', 'Preencha nome, e-mail e senha.')
       return
     }
+    if (password.length < 8) {
+      Alert.alert('Atenção', 'A senha precisa ter ao menos 8 caracteres.')
+      return
+    }
     setLoading(true)
     try {
       const { data } = await api.post('/auth/register', {
-        name, email, phone, password, role,
+        name, email: email.trim().toLowerCase(), phone, password, role,
         referral_code: referralCode.trim() ? referralCode.trim().toUpperCase() : undefined,
       })
       await setTokens(data.data.accessToken, data.data.refreshToken)
@@ -110,7 +114,7 @@ export default function RegisterScreen() {
           <Input label="Nome completo" placeholder="Seu nome" value={name} onChangeText={setName} autoCapitalize="words" />
           <Input label="E-mail" placeholder="seu@email.com" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
           <Input label="Telefone (opcional)" placeholder="(51) 99999-9999" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-          <Input label="Senha" placeholder="Mínimo 6 caracteres" secureTextEntry value={password} onChangeText={setPassword} />
+          <Input label="Senha" placeholder="Mínimo 8 caracteres" secureTextEntry value={password} onChangeText={setPassword} />
           <Input
             label="Código de indicação (opcional)"
             placeholder="Ex: JOAOX42K"

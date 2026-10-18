@@ -189,21 +189,19 @@ export async function consumeCredit(
     select: { credit_balance: true },
   })
   if (!user) return 0
-  const used = Math.min(user.credit_balance, amount)
+  const used = Math.round(Math.min(user.credit_balance, amount) * 100) / 100
   if (used <= 0) return 0
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: userId },
+  // Débito condicional: dois checkouts simultâneos não gastam o mesmo crédito
+  const ok = await prisma.$transaction(async (tx) => {
+    const debited = await tx.user.updateMany({
+      where: { id: userId, credit_balance: { gte: used } },
       data: { credit_balance: { decrement: used } },
-    }),
-    prisma.creditTransaction.create({
-      data: {
-        user_id: userId,
-        amount: -used,
-        reason: ref.reason,
-        ref_id: ref.ref_id,
-      },
-    }),
-  ])
-  return used
+    })
+    if (debited.count === 0) return false
+    await tx.creditTransaction.create({
+      data: { user_id: userId, amount: -used, reason: ref.reason, ref_id: ref.ref_id },
+    })
+    return true
+  })
+  return ok ? used : 0
 }

@@ -1,7 +1,11 @@
 import express from 'express'
+// Express 4 não captura erros de handlers async: sem isto, qualquer exceção
+// num controller vira rejeição não tratada e derruba o processo (Node 15+).
+import 'express-async-errors'
 import path from 'path'
 import { env } from './config/env'
 import { errorHandler } from './middlewares/errorHandler'
+import { blockLegacySensitiveUploads } from './middlewares/legacyUploads'
 import { corsMiddleware, helmetMiddleware, apiLimiter, authLimiter } from './middlewares/security'
 
 // Routers
@@ -34,16 +38,17 @@ import announcementsRoutes from './modules/announcements/announcements.routes'
 
 const app = express()
 
-// Atrás de proxy (EasyPanel/Traefik, Nginx...). Necessário para que
-// req.protocol/host reflitam o domínio público HTTPS real ao gerar URLs.
-app.set('trust proxy', true)
+// Atrás de proxy (EasyPanel/Traefik, Nginx...). Confia só no número de saltos
+// configurado (padrão 1): `true` aceitaria qualquer X-Forwarded-For enviado
+// pelo cliente e permitiria burlar o rate limit trocando o IP no cabeçalho.
+app.set('trust proxy', env.TRUST_PROXY_HOPS)
 
 // ---- Middlewares globais ----
 app.use(helmetMiddleware)
 app.use(corsMiddleware)
 app.use(apiLimiter)
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json({ limit: '200kb' }))
+app.use(express.urlencoded({ extended: true, limit: '200kb' }))
 
 // ---- Imagens armazenadas no banco ----
 app.use('/api/files', filesRoutes)
@@ -51,7 +56,8 @@ app.use('/api/files', filesRoutes)
 // ---- Arquivos estáticos legados (uploads em disco — compatibilidade) ----
 // Imagens novas vão para o banco (/api/files/:id). Mantido para servir
 // arquivos antigos que ainda existam em disco.
-app.use('/uploads', express.static(path.resolve(env.UPLOAD_DIR)))
+// Documentos KYC antigos podem estar em disco: nunca servi-los publicamente.
+app.use('/uploads', blockLegacySensitiveUploads, express.static(path.resolve(env.UPLOAD_DIR)))
 
 // ---- Health check ----
 app.get('/health', (_req, res) => {

@@ -13,6 +13,11 @@ import { env } from '../config/env'
  * proxy quando os cabeçalhos forwarded não estiverem presentes.
  */
 export function publicBaseUrl(req: Request): string {
+  // Com API_URL configurada (produção), ela é a fonte de verdade: os
+  // cabeçalhos Host/X-Forwarded-Host vêm do cliente e permitiriam gravar URLs
+  // de imagem apontando para um domínio arbitrário.
+  if (process.env.API_URL) return env.API_URL.replace(/\/+$/, '')
+
   const fwdProto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim()
   const fwdHost = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim()
 

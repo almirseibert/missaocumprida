@@ -34,6 +34,8 @@ export const env = {
   FEES_ENABLED: !!process.env.MP_ACCESS_TOKEN || process.env.FEES_ENABLED === 'true',
 
   API_URL: process.env.API_URL || 'http://localhost:3333',
+  // Quantos proxies reversos ficam na frente da API (EasyPanel/Traefik = 1).
+  TRUST_PROXY_HOPS: parseInt(process.env.TRUST_PROXY_HOPS || '1', 10),
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
 
   MP_ACCESS_TOKEN: process.env.MP_ACCESS_TOKEN || '',

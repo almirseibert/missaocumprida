@@ -5,9 +5,9 @@ import * as R from '../../utils/response'
 import { sendToUser } from './push.service'
 
 const registerSchema = z.object({
-  token: z.string().min(1),
+  token: z.string().min(1).max(512),
   platform: z.enum(['EXPO', 'FCM', 'APNS', 'WEB']).default('EXPO'),
-  device_id: z.string().optional(),
+  device_id: z.string().max(200).optional(),
 })
 
 // POST /api/push/register
@@ -46,21 +46,24 @@ export async function unregisterToken(req: Request, res: Response) {
 
 // PUT /api/push/preferences
 export async function updatePreferences(req: Request, res: Response) {
-  const prefs = req.body
-  if (!prefs || typeof prefs !== 'object') return R.badRequest(res, 'Preferências inválidas')
+  // Só pares simples (canal → valor); evita gravar JSON arbitrário no perfil
+  const parsed = z.record(z.string().max(64), z.union([z.boolean(), z.string().max(64), z.number()]))
+    .refine((o) => Object.keys(o).length <= 50)
+    .safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Preferências inválidas')
   const user = await prisma.user.update({
     where: { id: req.userId },
-    data: { notification_preferences: prefs },
+    data: { notification_preferences: parsed.data },
     select: { notification_preferences: true },
   })
   return R.ok(res, user)
 }
 
-// POST /api/push/test (dev only) — envia push para o próprio usuário
+// POST /api/push/test — envia um push de teste (texto fixo) para o próprio usuário
 export async function sendTest(req: Request, res: Response) {
   await sendToUser(req.userId!, {
-    title: req.body.title || 'Teste de notificação',
-    body: req.body.body || 'Se você está vendo isso, push real funciona ✅',
+    title: 'Teste de notificação',
+    body: 'Se você está vendo isso, push real funciona ✅',
     channel: 'general',
     data: { test: true },
   })

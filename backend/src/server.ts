@@ -118,6 +118,17 @@ async function start() {
   }
 }
 
+// Rede de segurança: registra em vez de derrubar a API por um erro isolado
+// (ex.: cron, push assíncrono sem catch).
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason)
+})
+
+process.on('SIGTERM', async () => {
+  await prisma.$disconnect()
+  process.exit(0)
+})
+
 process.on('SIGINT', async () => {
   await prisma.$disconnect()
   console.log('\n👋 Servidor encerrado.')

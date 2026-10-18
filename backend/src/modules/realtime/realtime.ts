@@ -61,14 +61,14 @@ export function initRealtime(httpServer: HttpServer): IOServer {
       try {
         const schedule = await prisma.schedule.findUnique({
           where: { id: scheduleId },
-          select: { client_id: true, provider_id: true, order: { select: { status: true } } },
+          select: { client_id: true, provider_id: true, order: { select: { status: true, provider_fee_paid_at: true } } },
         })
         if (!schedule) return socket.emit('chat:error', { message: 'Agendamento não encontrado' })
         if (schedule.client_id !== socket.userId && schedule.provider_id !== socket.userId) {
           return socket.emit('chat:error', { message: 'Sem acesso a este chat' })
         }
         // Taxa de Conexão: chat só depois que as duas taxas foram pagas
-        if (!contactsUnlocked(schedule.order?.status)) {
+        if (!contactsUnlocked(schedule.order?.status, schedule.order?.provider_fee_paid_at)) {
           return socket.emit('chat:error', { message: 'O chat é liberado depois que as taxas de conexão forem confirmadas' })
         }
         socket.join(`schedule:${scheduleId}`)
@@ -96,13 +96,13 @@ export function initRealtime(httpServer: HttpServer): IOServer {
 
         const schedule = await prisma.schedule.findUnique({
           where: { id: scheduleId },
-          select: { client_id: true, provider_id: true, order: { select: { status: true } } },
+          select: { client_id: true, provider_id: true, order: { select: { status: true, provider_fee_paid_at: true } } },
         })
         if (!schedule) return ack?.({ ok: false, error: 'Agendamento não encontrado' })
         if (schedule.client_id !== socket.userId && schedule.provider_id !== socket.userId) {
           return ack?.({ ok: false, error: 'Sem acesso' })
         }
-        if (!contactsUnlocked(schedule.order?.status)) {
+        if (!contactsUnlocked(schedule.order?.status, schedule.order?.provider_fee_paid_at)) {
           return ack?.({ ok: false, error: 'O chat é liberado depois que as taxas de conexão forem confirmadas' })
         }
 
@@ -143,6 +143,8 @@ export function initRealtime(httpServer: HttpServer): IOServer {
 
     // ---- Marcar como lida ----
     socket.on('chat:message:read', async ({ scheduleId }: { scheduleId: string }) => {
+      // Só quem entrou na sala (chat:join valida o acesso) pode marcar como lida
+      if (!socket.rooms.has(`schedule:${scheduleId}`)) return
       try {
         await prisma.message.updateMany({
           where: { schedule_id: scheduleId, sender_id: { not: socket.userId }, is_read: false },
@@ -156,9 +158,11 @@ export function initRealtime(httpServer: HttpServer): IOServer {
 
     // ---- Digitando ----
     socket.on('chat:typing:start', ({ scheduleId }: { scheduleId: string }) => {
+      if (!socket.rooms.has(`schedule:${scheduleId}`)) return
       socket.to(`schedule:${scheduleId}`).emit('chat:typing', { scheduleId, userId: socket.userId, typing: true })
     })
     socket.on('chat:typing:stop', ({ scheduleId }: { scheduleId: string }) => {
+      if (!socket.rooms.has(`schedule:${scheduleId}`)) return
       socket.to(`schedule:${scheduleId}`).emit('chat:typing', { scheduleId, userId: socket.userId, typing: false })
     })
 

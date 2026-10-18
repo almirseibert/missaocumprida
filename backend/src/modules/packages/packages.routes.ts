@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authenticate } from '../../middlewares/auth'
+import { authenticate, requireVerified } from '../../middlewares/auth'
 import {
   createPackage, listPackages, getPackage, listProviderPackages,
   updatePackage, deletePackage, purchasePackage, listMyPackages,
@@ -13,7 +13,7 @@ router.get('/:id', getPackage)                     // público
 router.post('/', authenticate, createPackage)
 router.patch('/:id', authenticate, updatePackage)
 router.delete('/:id', authenticate, deletePackage)
-router.post('/:id/purchase', authenticate, purchasePackage)
+router.post('/:id/purchase', authenticate, requireVerified, purchasePackage)
 
 export default router
 
