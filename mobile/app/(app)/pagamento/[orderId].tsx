@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft, Copy, CheckCircle, Clock, ShieldCheck, CreditCard } from 'lucide-react-native'
 import { api, getApiError } from '../../../src/lib/api'
 import { formatCurrency, formatDate, formatTime } from '../../../src/lib/utils'
@@ -31,13 +31,21 @@ export default function TaxaConexaoClienteScreen() {
     } catch {}
   }, [orderId])
 
-  useEffect(() => { loadFees() }, [loadFees])
-
-  // Polling: acompanha o pagamento do Pix e a confirmação do prestador
+  // A tela fica montada ao navegar (abas): ao trocar de pedido, descarta o
+  // estado do anterior para não exibir o Pix/taxas de outro pedido.
   useEffect(() => {
+    setFees(null)
+    setCheckout(null)
+    setCopied(false)
+  }, [orderId])
+
+  // Polling só enquanto a tela está em foco: acompanha o Pix/cartão e a
+  // confirmação da outra parte sem gastar bateria/dados em segundo plano.
+  useFocusEffect(useCallback(() => {
+    loadFees()
     const interval = setInterval(loadFees, 5000)
     return () => clearInterval(interval)
-  }, [loadFees])
+  }, [loadFees]))
 
   const clientFee = fees?.client_fee
   const providerFee = fees?.provider_fee

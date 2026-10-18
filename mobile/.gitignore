@@ -42,3 +42,7 @@ yarn-error.*
 
 # env local (nunca versionar)
 .env
+
+# logs locais de build (eas build > arquivo)
+build-log*
+build-trigger.log

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput,
+  Alert, TextInput, Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -9,8 +9,10 @@ import { ArrowLeft, ShieldCheck, Check, Star, TrendingUp, Award, X } from 'lucid
 import type { PurchasesPackage } from 'react-native-purchases'
 import { api, getApiError } from '../../src/lib/api'
 import { formatDateShort } from '../../src/lib/utils'
+import { useAuthStore } from '../../src/store/auth'
 import {
   getCurrentOffering, purchasePackage, isPurchasesReady, restorePurchases,
+  loginPurchases, getManagementUrl,
 } from '../../src/lib/purchases'
 
 const BENEFITS = [
@@ -23,6 +25,7 @@ const BENEFITS = [
 type Step = 'landing' | 'form' | 'subscribe'
 
 export default function VerificarProScreen() {
+  const user = useAuthStore((s) => s.user)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<any>(null)
   const [step, setStep] = useState<Step>('landing')
@@ -45,7 +48,7 @@ export default function VerificarProScreen() {
     // Carrega a oferta da loja (Google Play via RevenueCat)
     try {
       const offering = await getCurrentOffering()
-      const pkg = offering?.availablePackages?.[0] ?? null
+      const pkg = offering?.monthly ?? offering?.availablePackages?.[0] ?? null
       setProPackage(pkg)
     } catch {}
   }
@@ -79,6 +82,12 @@ export default function VerificarProScreen() {
     }
     setSubmitting(true)
     try {
+      // Garante que a compra fique no id do backend (app_user_id do webhook);
+      // senão o usuário paga e o selo não é concedido.
+      if (!user?.id || !(await loginPurchases(user.id))) {
+        Alert.alert('Erro', 'Não foi possível conectar à loja. Verifique sua internet e tente novamente.')
+        return
+      }
       // Google Play Billing (via RevenueCat). O selo é concedido pelo backend
       // ao receber o webhook da RevenueCat.
       await purchasePackage(proPackage)
@@ -97,26 +106,37 @@ export default function VerificarProScreen() {
   }
 
   async function restore() {
+    if (!isPurchasesReady()) {
+      return Alert.alert('Indisponível', 'A loja ainda não está configurada nesta versão do app.')
+    }
     try {
+      if (user?.id) await loginPurchases(user.id)
       await restorePurchases()
       Alert.alert('Pronto', 'Compras restauradas. Atualizando status...')
       setTimeout(() => { load() }, 1500)
-    } catch (err) {
-      Alert.alert('Erro', getApiError(err))
+    } catch (err: any) {
+      Alert.alert('Erro', err?.message || getApiError(err))
     }
   }
 
+  // A assinatura é cobrada pela Google Play: cancelar só no nosso backend
+  // removeria o selo mas a cobrança continuaria. O cancelamento é feito na
+  // loja; o webhook da RevenueCat remove o selo ao fim do período pago.
   async function cancel() {
-    Alert.alert('Cancelar Verificado Pro?', 'O selo será removido imediatamente.', [
-      { text: 'Não', style: 'cancel' },
-      {
-        text: 'Cancelar assinatura', style: 'destructive',
-        onPress: async () => {
-          try { await api.post('/verification/cancel', {}); await load() }
-          catch (err) { Alert.alert('Erro', getApiError(err)) }
+    Alert.alert(
+      'Cancelar Verificado Pro?',
+      'O cancelamento é feito na Google Play. Seu selo continua ativo até o fim do período já pago.',
+      [
+        { text: 'Voltar', style: 'cancel' },
+        {
+          text: 'Abrir Google Play', style: 'destructive',
+          onPress: async () => {
+            try { await Linking.openURL(await getManagementUrl()) }
+            catch { Alert.alert('Erro', 'Não foi possível abrir a Google Play.') }
+          },
         },
-      },
-    ])
+      ],
+    )
   }
 
   if (loading) {
@@ -147,7 +167,8 @@ export default function VerificarProScreen() {
           <Text className="text-2xl font-bold text-slate2-900">Profissional Verificado</Text>
           <Text className="text-sm text-slate2-600 mt-1">Conquiste mais clientes</Text>
           <Text className="text-2xl font-bold text-blue-600 mt-2">
-            R$ 29,90<Text className="text-sm text-slate2-500">/mês</Text>
+            {/* Preço vem da loja (Play exige exibir o valor real cobrado) */}
+            {proPackage?.product?.priceString ?? 'R$ 29,90'}<Text className="text-sm text-slate2-500">/mês</Text>
           </Text>
         </View>
 

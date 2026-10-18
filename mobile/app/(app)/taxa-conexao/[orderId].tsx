@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft, Copy, CheckCircle, Clock, Wallet, CreditCard } from 'lucide-react-native'
 import { api, getApiError } from '../../../src/lib/api'
 import { formatCurrency, formatDate, formatTime } from '../../../src/lib/utils'
@@ -34,11 +34,21 @@ export default function TaxaConexaoPrestadorScreen() {
     } catch {}
   }, [orderId])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  // A tela fica montada ao navegar (abas): ao trocar de pedido, descarta o
+  // estado do anterior para não exibir o Pix/taxas de outro pedido.
   useEffect(() => {
+    setFees(null)
+    setCheckout(null)
+    setCopied(false)
+  }, [orderId])
+
+  // Polling só enquanto a tela está em foco: acompanha o Pix/cartão e a
+  // confirmação da outra parte sem gastar bateria/dados em segundo plano.
+  useFocusEffect(useCallback(() => {
+    loadAll()
     const interval = setInterval(loadAll, 5000)
     return () => clearInterval(interval)
-  }, [loadAll])
+  }, [loadAll]))
 
   const providerFee = fees?.provider_fee
   const clientPaid = fees?.client_fee && ['PAID', 'COVERED'].includes(fees.client_fee.status)

@@ -1,4 +1,5 @@
 import { Platform } from 'react-native'
+import Constants from 'expo-constants'
 import Purchases, {
   LOG_LEVEL,
   type CustomerInfo,
@@ -33,10 +34,20 @@ export function isPurchasesReady(): boolean {
   return configured
 }
 
-/** Associa as compras ao id do usuário do nosso backend (== app_user_id). */
-export async function loginPurchases(userId: string): Promise<void> {
-  if (!configured) return
-  try { await Purchases.logIn(userId) } catch (e) { console.warn('[purchases] logIn falhou', e) }
+/**
+ * Associa as compras ao id do usuário do nosso backend (== app_user_id).
+ * Retorna false se falhar: comprar sem isso deixa a assinatura num usuário
+ * anônimo da RevenueCat e o webhook não concede o selo.
+ */
+export async function loginPurchases(userId: string): Promise<boolean> {
+  if (!configured) return false
+  try {
+    await Purchases.logIn(userId)
+    return true
+  } catch (e) {
+    console.warn('[purchases] logIn falhou', e)
+    return false
+  }
 }
 
 export async function logoutPurchases(): Promise<void> {
@@ -70,4 +81,15 @@ export function isProActive(info: CustomerInfo | null): boolean {
 
 export async function restorePurchases(): Promise<CustomerInfo> {
   return Purchases.restorePurchases()
+}
+
+/**
+ * Página de gestão da assinatura na Google Play. Cancelar/alterar o plano só
+ * é possível pela loja — cancelar no nosso backend não interrompe a cobrança.
+ */
+export async function getManagementUrl(): Promise<string> {
+  const info = await getCustomerInfo().catch(() => null)
+  if (info?.managementURL) return info.managementURL
+  const pkg = Constants.expoConfig?.android?.package ?? 'com.missaocumpridabr.app'
+  return `https://play.google.com/store/account/subscriptions?package=${pkg}`
 }

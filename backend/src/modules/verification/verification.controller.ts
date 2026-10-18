@@ -139,17 +139,13 @@ export async function cancelSubscription(req: Request, res: Response) {
     where: { user_id: req.userId!, status: 'ACTIVE' },
   })
   if (!sub) return R.notFound(res, 'Nenhuma assinatura ativa encontrada')
-  await prisma.$transaction([
-    prisma.verifiedProSubscription.update({
-      where: { id: sub.id },
-      data: { status: 'CANCELLED', cancelled_at: new Date() },
-    }),
-    prisma.user.update({
-      where: { id: req.userId! },
-      data: { is_verified_pro: false, verified_pro_expires: new Date() },
-    }),
-  ])
-  return R.ok(res, null, 'Assinatura cancelada. Selo será removido imediatamente.')
+  // A assinatura é cobrada pela Google Play (RevenueCat). Cancelar só aqui
+  // removeria o selo sem parar a cobrança, e a próxima RENEWAL o reativaria.
+  // O selo é revogado pelo webhook (EXPIRATION) ao fim do período pago.
+  return R.badRequest(
+    res,
+    'Cancele a assinatura na Google Play (Play Store → Pagamentos e assinaturas → Assinaturas). O selo fica ativo até o fim do período pago.',
+  )
 }
 
 // GET /api/verification/me — status do usuário
