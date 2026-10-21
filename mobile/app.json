@@ -31,7 +31,7 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
-      "versionCode": 2
+      "versionCode": 4
     },
     "web": {
       "bundler": "metro",
