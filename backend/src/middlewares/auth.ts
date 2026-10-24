@@ -27,6 +27,11 @@ async function loadAccountState(userId: string) {
   return state
 }
 
+/** Conta ativa? (mesmo cache curto do authenticate — usado também pelo socket) */
+export async function isAccountActive(userId: string): Promise<boolean> {
+  return (await loadAccountState(userId)).active
+}
+
 /** Invalida o cache após suspender/banir/excluir/reativar ou mudar o papel. */
 export function invalidateAccountState(userId: string) {
   activeCache.delete(userId)

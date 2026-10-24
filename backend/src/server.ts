@@ -20,8 +20,9 @@ async function start() {
     const httpServer = createServer(app)
     initRealtime(httpServer)
 
-    // Cron diário às 02h: gera ocorrências de assinaturas dos próximos 7 dias
-    cron.schedule('0 2 * * *', async () => {
+    // Cron diário às 02h: gera ocorrências de assinaturas dos próximos 7 dias.
+    // Desligado (RECURRING_ENABLED) até as ocorrências cobrarem a Taxa de Conexão.
+    if (env.RECURRING_ENABLED) cron.schedule('0 2 * * *', async () => {
       try {
         await withCronLock('subscriptions-occurrences', async () => {
           const result = await generateUpcomingOccurrences(7)

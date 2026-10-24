@@ -1,3 +1,22 @@
+// Faixas de distância exibidas a terceiros. Nunca devolvemos a distância exata
+// entre dois pontos para quem pode escolher livremente a própria posição: com
+// 3 consultas daria para triangular o endereço da outra pessoa.
+const DISTANCE_BUCKETS_KM = [1, 3, 5, 10, 20, 50]
+
+export function distanceBucket(km: number): { distance_km: number; distance_label: string } {
+  let lower = 0
+  for (const upper of DISTANCE_BUCKETS_KM) {
+    if (km < upper) {
+      return {
+        distance_km: upper,
+        distance_label: lower === 0 ? `menos de ${upper} km` : `${lower}–${upper} km`,
+      }
+    }
+    lower = upper
+  }
+  return { distance_km: lower, distance_label: `mais de ${lower} km` }
+}
+
 function toRad(deg: number): number {
   return deg * (Math.PI / 180)
 }

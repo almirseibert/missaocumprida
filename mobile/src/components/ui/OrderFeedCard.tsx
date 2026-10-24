@@ -10,6 +10,7 @@ interface OrderLike {
   neighborhood?: string | null
   city?: string | null
   distance_km?: number | null
+  distance_label?: string | null
   desired_date?: string | null
   estimated_price_min?: number | null
   estimated_price_max?: number | null
@@ -89,7 +90,7 @@ export function OrderFeedCard({
         )}
         {order.distance_km != null && (
           <Text className="font-display-bold text-[11px] text-brand-600">
-            {order.distance_km.toFixed(1)} km
+            {order.distance_label ?? `${order.distance_km} km`}
           </Text>
         )}
         {order.desired_date && (

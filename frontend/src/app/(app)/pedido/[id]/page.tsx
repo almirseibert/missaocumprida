@@ -49,7 +49,7 @@ export default function OrderDetailPage() {
   const canPropose =
     user &&
     (user.role === 'PROVIDER' || user.role === 'BOTH') &&
-    order?.status === 'OPEN' &&
+    ['OPEN', 'IN_PROPOSAL'].includes(order?.status ?? '') &&
     user.id !== order?.client_id &&
     !proposals.find((p) => p.provider_id === user.id)
 

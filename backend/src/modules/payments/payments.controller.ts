@@ -260,6 +260,7 @@ function verifyMpSignature(req: Request): boolean {
 // POST /api/payments/mp-webhook — Mercado Pago webhook (PIX)
 // ---------------------------------------------------------------------------
 export async function handleMpWebhook(req: Request, res: Response) {
+  let failed = false
   try {
     if (!verifyMpSignature(req)) {
       console.warn('[MP Webhook] Assinatura inválida — ignorado')
@@ -282,17 +283,20 @@ export async function handleMpWebhook(req: Request, res: Response) {
           // Taxa de Conexão (Remap 2.0)
           await onFeePaidByExternalRef(ref, `mp_${mpId}`, Number(mpPay.transaction_amount ?? 0))
         } else if (ref) {
-          // Fluxo legado de escrow (deprecated)
-          await prisma.$transaction([
-            prisma.payment.update({
-              where: { stripe_payment_intent: `mp_${mpId}` },
+          // Fluxo legado de escrow (deprecated). Só avança estados — uma
+          // reentrega do webhook não pode voltar um pedido DONE para SCHEDULED.
+          await prisma.$transaction(async (tx) => {
+            const moved = await tx.payment.updateMany({
+              where: { stripe_payment_intent: `mp_${mpId}`, status: 'PENDING' },
               data: { status: 'PAID', paid_at: new Date() },
-            }),
-            prisma.order.update({
-              where: { id: ref },
-              data: { status: 'SCHEDULED' },
-            }),
-          ])
+            })
+            if (moved.count > 0) {
+              await tx.order.updateMany({
+                where: { id: ref, status: 'ACCEPTED' },
+                data: { status: 'SCHEDULED' },
+              })
+            }
+          })
         }
       } else if (mpPay.status === 'refunded' || mpPay.status === 'charged_back') {
         const ref = mpPay.external_reference as string | undefined
@@ -304,18 +308,20 @@ export async function handleMpWebhook(req: Request, res: Response) {
       }
     }
   } catch (err) {
+    failed = true
     console.error('[MP Webhook] Erro:', err)
   }
 
-  // MP exige resposta 200 imediata
-  return res.sendStatus(200)
+  // Erro de processamento → 500 para o Mercado Pago reenviar a notificação
+  // (o processamento é idempotente). Sucesso → 200.
+  return res.sendStatus(failed ? 500 : 200)
 }
 
 // ---------------------------------------------------------------------------
 // POST /api/payments/simulate — simula pagamento (apenas dev)
 // ---------------------------------------------------------------------------
 export async function simulatePayment(req: Request, res: Response) {
-  if (env.NODE_ENV === 'production') return R.forbidden(res, 'Disponível apenas em development')
+  if (!env.PAYMENT_SIMULATION_ENABLED) return R.forbidden(res, 'Simulação de pagamento desativada')
 
   const { order_id } = req.body
   if (!order_id) return R.badRequest(res, 'order_id obrigatório')

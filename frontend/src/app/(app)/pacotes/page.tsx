@@ -109,7 +109,7 @@ export default function PacotesPage() {
                   <div className="flex items-center gap-2 mt-2 text-xs text-slate2-500">
                     <Clock size={12} /> {p.duration_min} min
                     {p.distance_km != null && (
-                      <><MapPin size={12} className="ml-2" /> {p.distance_km.toFixed(1)} km</>
+                      <><MapPin size={12} className="ml-2" /> {p.distance_label ?? `${p.distance_km} km`}</>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate2-100">

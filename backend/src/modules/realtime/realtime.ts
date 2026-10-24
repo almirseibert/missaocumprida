@@ -8,6 +8,7 @@ import { prisma } from '../../config/database'
 import { sendToUser } from '../push/push.service'
 import { contactsUnlocked } from '../../utils/orderVisibility'
 import { env } from '../../config/env'
+import { isAccountActive } from '../../middlewares/auth'
 
 // Mesmas origens de navegador do CORS do Express (security.ts). Apps nativos
 // (mobile) não enviam Origin no handshake e são liberados pelo socket.io.
@@ -35,20 +36,27 @@ export function initRealtime(httpServer: HttpServer): IOServer {
   })
 
   // ---- Auth via JWT no handshake ----
-  io.use((socket: AuthedSocket, next) => {
+  io.use(async (socket: AuthedSocket, next) => {
+    let payload: { userId: string; role: string }
     try {
       const token =
         (socket.handshake.auth?.token as string | undefined) ||
         (socket.handshake.query?.token as string | undefined) ||
         (socket.handshake.headers?.authorization || '').toString().replace(/^Bearer\s+/i, '')
       if (!token) return next(new Error('UNAUTHENTICATED'))
-      const payload = verifyAccessToken(token)
-      socket.userId = payload.userId
-      socket.userRole = payload.role
-      return next()
+      payload = verifyAccessToken(token)
     } catch (err) {
       return next(new Error('INVALID_TOKEN'))
     }
+    try {
+      // Conta banida/suspensa não abre conexão (o token pode durar mais 15 min)
+      if (!(await isAccountActive(payload.userId))) return next(new Error('ACCOUNT_INACTIVE'))
+    } catch (err) {
+      return next(new Error('UNAVAILABLE'))
+    }
+    socket.userId = payload.userId
+    socket.userRole = payload.role
+    return next()
   })
 
   io.on('connection', (socket: AuthedSocket) => {
@@ -93,6 +101,10 @@ export function initRealtime(httpServer: HttpServer): IOServer {
           return ack?.({ ok: false, error: 'Dados inválidos' })
         }
         if (content.length > 2000) return ack?.({ ok: false, error: 'Mensagem muito longa' })
+        if (!(await isAccountActive(socket.userId!))) {
+          socket.disconnect(true)
+          return ack?.({ ok: false, error: 'Conta inativa' })
+        }
 
         const schedule = await prisma.schedule.findUnique({
           where: { id: scheduleId },

@@ -6,7 +6,7 @@ import path from 'path'
 import { env } from './config/env'
 import { errorHandler } from './middlewares/errorHandler'
 import { blockLegacySensitiveUploads } from './middlewares/legacyUploads'
-import { corsMiddleware, helmetMiddleware, apiLimiter, authLimiter } from './middlewares/security'
+import { corsMiddleware, helmetMiddleware, apiLimiter, apiIpLimiter } from './middlewares/security'
 
 // Routers
 import authRoutes from './modules/auth/auth.routes'
@@ -46,6 +46,7 @@ app.set('trust proxy', env.TRUST_PROXY_HOPS)
 // ---- Middlewares globais ----
 app.use(helmetMiddleware)
 app.use(corsMiddleware)
+app.use(apiIpLimiter)
 app.use(apiLimiter)
 app.use(express.json({ limit: '200kb' }))
 app.use(express.urlencoded({ extended: true, limit: '200kb' }))
@@ -65,7 +66,7 @@ app.get('/health', (_req, res) => {
 })
 
 // ---- Rotas da API ----
-app.use('/api/auth', authLimiter, authRoutes)
+app.use('/api/auth', authRoutes) // limites por rota em auth.routes.ts
 app.use('/api/users', usersRoutes)
 app.use('/api/users', ratingsRoutes)                              // GET /api/users/:userId/ratings
 app.use('/api/categories', categoriesRoutes)

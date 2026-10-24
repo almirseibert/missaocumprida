@@ -169,10 +169,10 @@ export default function FeedPage() {
                         {order.state && `/${order.state}`}
                       </span>
                     )}
-                    {order.distance_km != null && (
+                    {(order.distance_label || order.distance_km != null) && (
                       <span className="flex items-center gap-1 text-brand-600 font-medium">
                         <MapPin className="w-3.5 h-3.5" />
-                        {order.distance_km} km de você
+                        {order.distance_label ?? `${order.distance_km} km`} de você
                       </span>
                     )}
                     {order.desired_date && (

@@ -2,7 +2,7 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
-import { haversineDistance } from '../../utils/geo'
+import { haversineDistance, distanceBucket } from '../../utils/geo'
 import { env } from '../../config/env'
 import { getSettings } from '../settings/settings.service'
 import { acceptedOrderFields, createFeesOnAccept } from '../payments/connectionFees.service'
@@ -36,6 +36,14 @@ const packageSelect = {
   },
 }
 
+// latitude/longitude do prestador são usadas só no servidor (filtro de raio);
+// nunca saem na resposta — as rotas de pacote são públicas.
+function publicPackage<T extends { provider?: Record<string, unknown> | null }>(pkg: T): T {
+  if (!pkg.provider) return pkg
+  const { latitude: _lat, longitude: _lng, ...provider } = pkg.provider
+  return { ...pkg, provider }
+}
+
 // POST /api/packages — prestador cria pacote
 export async function createPackage(req: Request, res: Response) {
   const parsed = createSchema.safeParse(req.body)
@@ -53,7 +61,7 @@ export async function createPackage(req: Request, res: Response) {
     data: { ...parsed.data, provider_id: req.userId! },
     select: packageSelect,
   })
-  return R.created(res, pkg, 'Pacote criado')
+  return R.created(res, publicPackage(pkg), 'Pacote criado')
 }
 
 // GET /api/packages?category=&lat=&lng=&radius=&min=&max=&verified_only=1
@@ -102,20 +110,25 @@ export async function listPackages(req: Request, res: Response) {
   if (lat && lng) {
     const r = Number(radius || '50')
     const flat = parseFloat(lat), flng = parseFloat(lng)
-    packages = packages
+    const withDistance = packages
       .map((p) => {
         const plat = p.provider?.latitude
         const plng = p.provider?.longitude
-        if (plat == null || plng == null) return { ...p, distance_km: null }
-        const d = haversineDistance(flat, flng, plat, plng)
-        return { ...p, distance_km: Math.round(d * 10) / 10 }
+        const exact = plat == null || plng == null ? null : haversineDistance(flat, flng, plat, plng)
+        return { pkg: p, exact }
       })
-      .filter((p) => p.distance_km == null || p.distance_km <= r)
-      .sort((a, b) => (a.distance_km ?? 999) - (b.distance_km ?? 999))
-  } else {
-    packages = packages.sort((a, b) => score(b) - score(a))
+      .filter((x) => x.exact == null || x.exact <= r)
+      .sort((a, b) => (a.exact ?? 999) - (b.exact ?? 999))
+    return R.ok(
+      res,
+      withDistance.map(({ pkg, exact }) => ({
+        ...publicPackage(pkg),
+        ...(exact == null ? { distance_km: null, distance_label: null } : distanceBucket(exact)),
+      })),
+    )
   }
-  return R.ok(res, packages)
+  packages = packages.sort((a, b) => score(b) - score(a))
+  return R.ok(res, packages.map(publicPackage))
 }
 
 // GET /api/packages/:id
@@ -125,7 +138,7 @@ export async function getPackage(req: Request, res: Response) {
     select: packageSelect,
   })
   if (!pkg) return R.notFound(res, 'Pacote não encontrado')
-  return R.ok(res, pkg)
+  return R.ok(res, publicPackage(pkg))
 }
 
 // GET /api/users/:providerId/packages
@@ -139,7 +152,7 @@ export async function listProviderPackages(req: Request, res: Response) {
     orderBy: { created_at: 'desc' },
     select: packageSelect,
   })
-  return R.ok(res, pkgs)
+  return R.ok(res, pkgs.map(publicPackage))
 }
 
 // GET /api/packages/mine — pacotes do prestador autenticado (inclui inativos)
@@ -149,7 +162,7 @@ export async function listMyPackages(req: Request, res: Response) {
     orderBy: { created_at: 'desc' },
     select: packageSelect,
   })
-  return R.ok(res, pkgs)
+  return R.ok(res, pkgs.map(publicPackage))
 }
 
 // PATCH /api/packages/:id
@@ -166,7 +179,7 @@ export async function updatePackage(req: Request, res: Response) {
     data: parsed.data,
     select: packageSelect,
   })
-  return R.ok(res, updated)
+  return R.ok(res, publicPackage(updated))
 }
 
 // DELETE /api/packages/:id

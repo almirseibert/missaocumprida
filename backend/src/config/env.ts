@@ -51,6 +51,18 @@ export const env = {
   // RevenueCat (Google Play Billing). Segredo compartilhado exigido no header
   // Authorization do webhook da RevenueCat → autentica os eventos de assinatura.
   REVENUECAT_WEBHOOK_AUTH: process.env.REVENUECAT_WEBHOOK_AUTH || '',
+
+  // Rotas /payments/*/simulate (confirmam pagamento sem gateway). Só ligam com
+  // opt-in explícito, fora de produção e SEM token real do Mercado Pago —
+  // nunca dependem apenas de NODE_ENV estar configurado corretamente.
+  PAYMENT_SIMULATION_ENABLED:
+    process.env.ALLOW_PAYMENT_SIMULATION === 'true' &&
+    !process.env.MP_ACCESS_TOKEN &&
+    (process.env.NODE_ENV || 'development') !== 'production',
+
+  // Serviços recorrentes (assinatura cliente↔prestador). Desligado até o fluxo
+  // passar a cobrar a Taxa de Conexão em cada ocorrência.
+  RECURRING_ENABLED: process.env.RECURRING_ENABLED === 'true',
 }
 
 // ---- Guard de produção: recusa segredos fracos/conhecidos ----

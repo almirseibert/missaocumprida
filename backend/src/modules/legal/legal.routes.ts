@@ -29,10 +29,9 @@ router.get('/privacy', (_req: Request, res: Response) => {
 
 // Aceitação dos termos — autenticado
 router.post('/terms/accept', authenticate, async (req: Request, res: Response) => {
-  const ip =
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-    req.socket.remoteAddress ||
-    null
+  // req.ip respeita o "trust proxy" (app.ts): o X-Forwarded-For cru pode ser
+  // forjado pelo próprio cliente.
+  const ip = req.ip || req.socket.remoteAddress || null
 
   const user = await prisma.user.update({
     where: { id: req.userId },

@@ -2,7 +2,11 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
+import { env } from '../../config/env'
 import { computeNextOccurrence } from './subscriptions.service'
+
+const RECURRING_DISABLED_MSG =
+  'Serviços recorrentes estão temporariamente indisponíveis. Contrate cada serviço por um novo pedido.'
 
 const createSchema = z.object({
   provider_id: z.string().uuid(),
@@ -38,8 +42,19 @@ const subSelect = {
   category: { select: { id: true, name: true, slug: true, icon: true } },
 } as const
 
+// O endereço do cliente só é do prestador depois de uma conexão paga — nas
+// assinaturas recorrentes ele não vê rua/número nem coordenadas.
+function maskForViewer<T extends { client: { id: string }; address?: string | null }>(sub: T, viewerId?: string): T {
+  if (sub.client.id === viewerId) return sub
+  const masked: Record<string, unknown> = { ...sub, address: null }
+  if ('latitude' in masked) masked.latitude = null
+  if ('longitude' in masked) masked.longitude = null
+  return masked as T
+}
+
 // POST /api/subscriptions
 export async function createSubscription(req: Request, res: Response) {
+  if (!env.RECURRING_ENABLED) return res.status(503).json({ success: false, message: RECURRING_DISABLED_MSG })
   const parsed = createSchema.safeParse(req.body)
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
   const d = parsed.data
@@ -99,7 +114,7 @@ export async function listSubscriptions(req: Request, res: Response) {
     orderBy: [{ status: 'asc' }, { next_occurrence: 'asc' }],
     select: subSelect,
   })
-  return R.ok(res, subs)
+  return R.ok(res, subs.map((s) => maskForViewer(s, req.userId)))
 }
 
 // GET /api/subscriptions/:id
@@ -121,7 +136,7 @@ export async function getSubscription(req: Request, res: Response) {
   })
   if (!sub) return R.notFound(res, 'Assinatura não encontrada')
   if (sub.client.id !== req.userId && sub.provider.id !== req.userId) return R.forbidden(res)
-  return R.ok(res, sub)
+  return R.ok(res, maskForViewer(sub, req.userId))
 }
 
 // PATCH /api/subscriptions/:id
@@ -156,7 +171,7 @@ export async function updateSubscription(req: Request, res: Response) {
     data,
     select: subSelect,
   })
-  return R.ok(res, updated)
+  return R.ok(res, maskForViewer(updated, req.userId))
 }
 
 // DELETE /api/subscriptions/:id — cancela futuras

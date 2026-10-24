@@ -86,7 +86,7 @@ export default function PackageDetailPage() {
       <div className="text-sm text-slate2-600 flex items-center gap-3 mb-4 flex-wrap">
         <span className="flex items-center gap-1"><Clock size={14} /> {pkg.duration_min} min</span>
         {pkg.distance_km != null && (
-          <span className="flex items-center gap-1"><MapPin size={14} /> {pkg.distance_km.toFixed(1)} km</span>
+          <span className="flex items-center gap-1"><MapPin size={14} /> {pkg.distance_label ?? `${pkg.distance_km} km`}</span>
         )}
         <span>{pkg.purchases_count} contratações</span>
       </div>

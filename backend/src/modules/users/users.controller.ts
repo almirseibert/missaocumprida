@@ -31,6 +31,9 @@ export async function getMe(req: Request, res: Response) {
       document_photo_url: true, selfie_photo_url: true,
       document_submitted_at: true, document_verification_status: true,
       document_rejection_reason: true, document_reviewed_at: true,
+      // Selo Pro e saldo de crédito — sem eles o app sempre mostrava "não assinante"
+      is_verified_pro: true, verified_pro_since: true, verified_pro_expires: true,
+      credit_balance: true,
       provider_skills: {
         include: { category: { select: { id: true, name: true, icon: true } } },
       },

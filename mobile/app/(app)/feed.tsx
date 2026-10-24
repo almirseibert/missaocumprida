@@ -144,9 +144,9 @@ export default function FeedScreen() {
               >
                 {item.title}
               </Text>
-              {item.distance_km != null && (
+              {(item.distance_label || item.distance_km != null) && (
                 <Text className="font-sans-semibold text-xs text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full">
-                  {item.distance_km.toFixed(1)} km
+                  {item.distance_label ?? `${item.distance_km} km`}
                 </Text>
               )}
             </View>
@@ -168,19 +168,26 @@ export default function FeedScreen() {
               </Text>
             </View>
 
-            {item.address && (
+            {/* Endereço exato só depois da conexão paga: no feed vai bairro/cidade */}
+            {(item.neighborhood || item.city) && (
               <Text
                 className="font-sans text-xs text-slate2-400 mt-1.5"
                 numberOfLines={1}
               >
-                📍 {item.address}{item.city ? `, ${item.city}` : ''}
+                📍 {[item.neighborhood, item.city].filter(Boolean).join(', ')}
               </Text>
             )}
 
             <View className="mt-3">
-              <Button variant="primary" size="sm" fullWidth onPress={() => enviarProposta(item.id)}>
-                Enviar Proposta
-              </Button>
+              {item.proposals && item.proposals.length > 0 ? (
+                <Text className="font-sans-semibold text-xs text-center text-brand-700 bg-brand-50 py-2 rounded-xl">
+                  ✓ Proposta enviada
+                </Text>
+              ) : (
+                <Button variant="primary" size="sm" fullWidth onPress={() => enviarProposta(item.id)}>
+                  Enviar Proposta
+                </Button>
+              )}
             </View>
           </TouchableOpacity>
         )}

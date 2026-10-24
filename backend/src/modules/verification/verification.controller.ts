@@ -157,7 +157,9 @@ export async function handleRevenueCatWebhook(req: Request, res: Response) {
     }
     // CANCELLATION (auto-renovação desligada) mantém o selo até EXPIRATION.
   } catch (err) {
+    // 500 faz a RevenueCat reenviar o evento (o processamento é idempotente).
     console.error('[RevenueCat Webhook] erro:', err)
+    return res.sendStatus(500)
   }
   return res.sendStatus(200)
 }

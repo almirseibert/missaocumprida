@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
-import { haversineDistance } from '../../utils/geo'
+import { haversineDistance, distanceBucket } from '../../utils/geo'
 
 // GET /api/recommendations/recent-providers — prestadores que o cliente já contratou (top 3)
 export async function recentProviders(req: Request, res: Response) {
@@ -78,29 +78,30 @@ export async function afterOrder(req: Request, res: Response) {
         take: 30,
       })
 
-      let providers = skills
+      // Coordenadas do prestador ficam no servidor: a resposta leva só a faixa
+      // de distância (ex.: "1–3 km").
+      const candidates = skills
         .map((s) => s.provider)
         .filter((p) => p != null)
-      if (order.latitude && order.longitude) {
-        providers = providers
-          .map((p) => ({
-            ...p,
-            distance_km: p.latitude != null && p.longitude != null
-              ? Math.round(haversineDistance(order.latitude!, order.longitude!, p.latitude, p.longitude) * 10) / 10
+        .map(({ latitude, longitude, ...p }) => ({
+          ...p,
+          exact:
+            order.latitude && order.longitude && latitude != null && longitude != null
+              ? haversineDistance(order.latitude, order.longitude, latitude, longitude)
               : null,
-          }))
-          .sort((a: any, b: any) => {
-            const da = a.distance_km ?? 999
-            const db = b.distance_km ?? 999
+        }))
+      const ranked = order.latitude && order.longitude
+        ? candidates.sort((a, b) => {
+            const da = a.exact ?? 999
+            const db = b.exact ?? 999
             if (da !== db) return da - db
             return (b.rating_avg ?? 0) - (a.rating_avg ?? 0)
           })
-          .slice(0, 3)
-      } else {
-        providers = providers
-          .sort((a, b) => (b.rating_avg ?? 0) - (a.rating_avg ?? 0))
-          .slice(0, 3)
-      }
+        : candidates.sort((a, b) => (b.rating_avg ?? 0) - (a.rating_avg ?? 0))
+      const providers = ranked.slice(0, 3).map(({ exact, ...p }) => ({
+        ...p,
+        ...(exact == null ? { distance_km: null, distance_label: null } : distanceBucket(exact)),
+      }))
 
       return {
         category: cat,

@@ -80,7 +80,7 @@ export default function PackageDetailScreen() {
             {pkg.distance_km != null && (
               <View className="flex-row items-center gap-1">
                 <MapPin size={14} color="#64748B" />
-                <Text className="text-xs text-slate2-500">{pkg.distance_km.toFixed(1)} km</Text>
+                <Text className="text-xs text-slate2-500">{pkg.distance_label ?? `${pkg.distance_km} km`}</Text>
               </View>
             )}
             <Text className="text-xs text-slate2-500">{pkg.purchases_count} contratações</Text>

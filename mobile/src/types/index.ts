@@ -80,6 +80,7 @@ export interface ServicePackage {
     is_verified_pro?: boolean
   }
   distance_km?: number | null
+  distance_label?: string | null
   is_pro_highlighted?: boolean
 }
 
@@ -133,7 +134,13 @@ export interface Order {
   created_at: string
   category?: Category
   client?: User
-  distance_km?: number
+  distance_km?: number | null
+  /** Faixa de distância exibida ao prestador (ex.: "1–3 km") */
+  distance_label?: string | null
+  /** Coordenadas aproximadas (antes da conexão paga) */
+  location_blurred?: boolean
+  /** No feed: propostas do próprio prestador neste pedido */
+  proposals?: { id: string; status: string }[]
   is_urgent?: boolean
   urgency_fee_pct?: number | null
   urgency_fee_value?: number | null

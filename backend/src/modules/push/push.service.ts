@@ -41,8 +41,19 @@ function isChannelEnabled(prefs: any, channel: PushChannel): boolean {
 /**
  * Envia push para um usuário em todos os seus dispositivos registrados.
  * Respeita preferências por canal e remove tokens inválidos automaticamente.
+ * Nunca lança: push é efeito colateral — uma falha aqui não pode transformar
+ * em erro 500 uma operação que já foi gravada (o cliente re-tentaria e
+ * receberia 409).
  */
 export async function sendToUser(userId: string, opts: SendPushOptions): Promise<void> {
+  try {
+    await sendToUserUnsafe(userId, opts)
+  } catch (err) {
+    console.error('[push] sendToUser error:', err)
+  }
+}
+
+async function sendToUserUnsafe(userId: string, opts: SendPushOptions): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { notification_preferences: true },

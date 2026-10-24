@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authenticate, requireRole } from '../../middlewares/auth'
 import { upload } from '../../middlewares/upload'
-import { authLimiter } from '../../middlewares/security'
+import { sensitiveActionLimiter } from '../../middlewares/security'
 import {
   getMe, getPublicProfile, updateMe, uploadAvatar, changePassword, deleteMe,
   addSkill, listSkills, removeSkill,
@@ -14,14 +14,14 @@ import {
 const router = Router()
 
 // Público — página web de cancelamento de assinatura + exclusão (LGPD/CDC)
-router.post('/cancel-subscription-and-delete', authLimiter, requestCancellationAndDeletion)
-router.post('/undo-deletion', authLimiter, undoDeletionRequest)
+router.post('/cancel-subscription-and-delete', sensitiveActionLimiter, requestCancellationAndDeletion)
+router.post('/undo-deletion', sensitiveActionLimiter, undoDeletionRequest)
 
 router.get('/me', authenticate, getMe)
 router.put('/me', authenticate, updateMe)
-router.delete('/me', authenticate, authLimiter, deleteMe)
+router.delete('/me', authenticate, sensitiveActionLimiter, deleteMe)
 router.post('/me/avatar', authenticate, upload.single('avatar'), uploadAvatar)
-router.put('/me/password', authenticate, authLimiter, changePassword)
+router.put('/me/password', authenticate, sensitiveActionLimiter, changePassword)
 router.post('/me/skills', authenticate, addSkill)
 router.get('/me/skills', authenticate, listSkills)
 router.delete('/me/skills/:id', authenticate, removeSkill)

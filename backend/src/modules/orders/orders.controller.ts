@@ -2,7 +2,7 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import { estimatePriceDynamic } from '../../utils/priceEstimator'
-import { haversineDistance } from '../../utils/geo'
+import { haversineDistance, distanceBucket } from '../../utils/geo'
 import * as R from '../../utils/response'
 import { sendToUsers } from '../push/push.service'
 import { persistUpload } from '../files/files.service'
@@ -244,8 +244,10 @@ export async function getProviderFeed(req: Request, res: Response) {
   // Mapa de raio por categoria
   const radiusByCategory = new Map(skills.map(s => [s.category_id, s.service_radius_km]))
 
+  // OPEN e IN_PROPOSAL: o pedido continua visível para os demais prestadores
+  // depois da primeira proposta (antes sumia do feed de todo mundo).
   const where: Record<string, unknown> = {
-    status: 'OPEN',
+    status: { in: PRE_ACCEPTANCE_STATUSES },
     category_id: { in: categoryIds },
     client_id: { not: req.userId },
   }
@@ -300,10 +302,17 @@ export async function getProviderFeed(req: Request, res: Response) {
   })
 
   const total = filtered.length
-  // Feed always shows pre-acceptance orders — always mask sensitive location
+  // Feed always shows pre-acceptance orders — always mask sensitive location.
+  // A distância sai em faixas ("1–3 km"): o prestador pode mudar a própria
+  // posição à vontade, e com a distância exata triangularia o endereço.
   const paginated = filtered
     .slice((pageNum - 1) * limitNum, pageNum * limitNum)
-    .map(maskLocationForProvider)
+    .map((order) => ({
+      ...maskLocationForProvider(order),
+      ...(order.distance_km == null
+        ? { distance_km: null, distance_label: null }
+        : distanceBucket(order.distance_km)),
+    }))
 
   return R.ok(res, {
     orders: paginated,

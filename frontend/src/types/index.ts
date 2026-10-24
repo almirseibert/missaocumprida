@@ -105,6 +105,7 @@ export interface ServicePackage {
     longitude?: number | null
   }
   distance_km?: number | null
+  distance_label?: string | null
   is_pro_highlighted?: boolean
 }
 
@@ -184,6 +185,7 @@ export interface Order {
   client_total?: number
   stripe_payment_intent_id?: string
   distance_km?: number | null
+  distance_label?: string | null
   is_urgent?: boolean
   urgency_fee_pct?: number | null
   urgency_fee_value?: number | null

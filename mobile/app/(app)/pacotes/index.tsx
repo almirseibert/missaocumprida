@@ -110,7 +110,7 @@ export default function PacotesIndexScreen() {
                   {p.distance_km != null && (
                     <View className="flex-row items-center gap-1">
                       <MapPin size={12} color="#64748B" />
-                      <Text className="text-xs text-slate2-500">{p.distance_km.toFixed(1)} km</Text>
+                      <Text className="text-xs text-slate2-500">{p.distance_label ?? `${p.distance_km} km`}</Text>
                     </View>
                   )}
                 </View>

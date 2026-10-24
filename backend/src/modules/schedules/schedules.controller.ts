@@ -24,6 +24,9 @@ const scheduleInclude = {
   ratings: { select: { id: true, score: true, reviewer_role: true, reviewer_id: true } },
 }
 
+// Sinaliza, dentro de uma transação, que o estado mudou entre a leitura e a escrita.
+class ScheduleStateChanged extends Error {}
+
 // Helper: create in-app notification + send push
 async function notify(
   userId: string,
@@ -104,10 +107,22 @@ export async function getSchedule(req: Request, res: Response) {
 }
 
 export async function checkin(req: Request, res: Response) {
-  const schedule = await prisma.schedule.findUnique({ where: { id: req.params.id } })
+  const schedule = await prisma.schedule.findUnique({
+    where: { id: req.params.id },
+    include: { order: { select: { status: true, provider_fee_paid_at: true } } },
+  })
   if (!schedule) return R.notFound(res, 'Agendamento não encontrado')
   if (schedule.provider_id !== req.userId) return R.forbidden(res)
   if (schedule.status !== 'CONFIRMED') return R.badRequest(res, 'Check-in não permitido neste estágio')
+  // Taxa de Conexão: o serviço só pode começar depois que as DUAS taxas foram
+  // pagas (pedido SCHEDULED). Sem isso, o check-in levaria o pedido a
+  // IN_PROGRESS e liberaria endereço/telefone/chat sem pagamento.
+  if (
+    schedule.order.status !== 'SCHEDULED' ||
+    !contactsUnlocked(schedule.order.status, schedule.order.provider_fee_paid_at)
+  ) {
+    return R.forbidden(res, 'O check-in só é liberado depois que as taxas de conexão forem pagas.')
+  }
 
   if (!req.file) return R.badRequest(res, 'Foto de check-in é obrigatória')
 
@@ -117,18 +132,33 @@ export async function checkin(req: Request, res: Response) {
 
   const photoUrl = await persistUpload(req, req.file)
 
-  const updated = await prisma.schedule.update({
-    where: { id: schedule.id },
-    data: {
-      status: 'IN_PROGRESS',
-      checkin_at: new Date(),
-      checkin_photo_url: photoUrl,
-      checkin_lat: lat,
-      checkin_lng: lng,
-      checkin_address: address,
-    },
+  // Transição condicional: evita corrida entre dois check-ins e garante que o
+  // pedido ainda está SCHEDULED no momento da escrita.
+  const updated = await prisma.$transaction(async (tx) => {
+    const orderMoved = await tx.order.updateMany({
+      where: { id: schedule.order_id, status: 'SCHEDULED' },
+      data: { status: 'IN_PROGRESS' },
+    })
+    const scheduleMoved = await tx.schedule.updateMany({
+      where: { id: schedule.id, status: 'CONFIRMED' },
+      data: {
+        status: 'IN_PROGRESS',
+        checkin_at: new Date(),
+        checkin_photo_url: photoUrl,
+        checkin_lat: lat,
+        checkin_lng: lng,
+        checkin_address: address,
+      },
+    })
+    if (orderMoved.count === 0 || scheduleMoved.count === 0) {
+      throw new ScheduleStateChanged()
+    }
+    return tx.schedule.findUnique({ where: { id: schedule.id } })
+  }).catch((err) => {
+    if (err instanceof ScheduleStateChanged) return null
+    throw err
   })
-  await prisma.order.update({ where: { id: schedule.order_id }, data: { status: 'IN_PROGRESS' } })
+  if (!updated) return R.conflict(res, 'O agendamento mudou de estado. Atualize a tela e tente novamente.')
 
   // Notify client
   await notify(
@@ -145,11 +175,17 @@ export async function checkin(req: Request, res: Response) {
 export async function completeByProvider(req: Request, res: Response) {
   const schedule = await prisma.schedule.findUnique({
     where: { id: req.params.id },
-    include: { provider: { select: { hourly_rate: true } } },
+    include: {
+      provider: { select: { hourly_rate: true } },
+      order: { select: { status: true, provider_fee_paid_at: true } },
+    },
   })
   if (!schedule) return R.notFound(res, 'Agendamento não encontrado')
   if (schedule.provider_id !== req.userId) return R.forbidden(res)
   if (schedule.status !== 'IN_PROGRESS') return R.badRequest(res, 'Serviço ainda não foi iniciado (check-in)')
+  if (!contactsUnlocked(schedule.order.status, schedule.order.provider_fee_paid_at)) {
+    return R.forbidden(res, 'As taxas de conexão deste pedido ainda não foram pagas.')
+  }
 
   if (!req.file) return R.badRequest(res, 'Foto de conclusão é obrigatória')
 
@@ -327,6 +363,9 @@ export async function confirmByClient(req: Request, res: Response) {
   if (schedule.client_id !== req.userId) return R.forbidden(res)
   if (!schedule.done_at) return R.badRequest(res, 'O prestador ainda não marcou o serviço como concluído')
   if (schedule.status !== 'IN_PROGRESS') return R.badRequest(res, 'Confirmação não permitida neste estágio')
+  if (!contactsUnlocked(schedule.order.status, schedule.order.provider_fee_paid_at)) {
+    return R.forbidden(res, 'As taxas de conexão deste pedido ainda não foram pagas.')
+  }
 
   const payment = schedule.order.payment
 

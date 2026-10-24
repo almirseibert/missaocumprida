@@ -1,6 +1,16 @@
 import { prisma } from '../../config/database'
 import { notify } from '../push/push.service'
 import { invalidateAccountState } from '../../middlewares/auth'
+import { getIO } from '../realtime/realtime'
+
+/** Derruba as conexões de socket abertas do usuário (chat em tempo real). */
+function disconnectUserSockets(userId: string) {
+  try {
+    getIO()?.in(`user:${userId}`).disconnectSockets(true)
+  } catch (err) {
+    console.error('[moderation] erro ao desconectar sockets:', err)
+  }
+}
 
 /**
  * Moderação de contas (Remap 2.0 — regras da Taxa de Conexão).
@@ -19,6 +29,7 @@ export async function banUser(userId: string, reason: string): Promise<void> {
     prisma.refreshToken.deleteMany({ where: { user_id: userId } }),
   ])
   invalidateAccountState(userId)
+  disconnectUserSockets(userId)
   await notify(userId, {
     type: 'GENERAL',
     title: 'Conta banida',
@@ -37,6 +48,7 @@ export async function suspendUserForReview(userId: string, reason: string): Prom
     prisma.refreshToken.deleteMany({ where: { user_id: userId } }),
   ])
   invalidateAccountState(userId)
+  disconnectUserSockets(userId)
   await notify(userId, {
     type: 'GENERAL',
     title: 'Conta suspensa para análise',

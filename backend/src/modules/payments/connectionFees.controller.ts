@@ -100,7 +100,7 @@ export async function getOrderFees(req: Request, res: Response) {
 // POST /api/payments/fees/simulate — confirma taxa sem gateway (apenas dev)
 // ---------------------------------------------------------------------------
 export async function simulateFeePayment(req: Request, res: Response) {
-  if (env.NODE_ENV === 'production') return R.forbidden(res, 'Disponível apenas em development')
+  if (!env.PAYMENT_SIMULATION_ENABLED) return R.forbidden(res, 'Simulação de pagamento desativada')
 
   const { order_id, side } = req.body as { order_id?: string; side?: 'CLIENT' | 'PROVIDER' }
   if (!order_id) return R.badRequest(res, 'order_id é obrigatório')
@@ -115,6 +115,8 @@ export async function simulateFeePayment(req: Request, res: Response) {
     side ?? (order.client_id === req.userId ? 'CLIENT' : 'PROVIDER')
   const fee = order.connection_fees.find((f) => f.side === targetSide)
   if (!fee) return R.notFound(res, 'Taxa não encontrada')
+  // Cada um só simula a própria taxa
+  if (fee.user_id !== req.userId) return R.forbidden(res)
   if (fee.status !== 'PENDING') return R.ok(res, { status: fee.status }, 'Taxa já processada')
   if (targetSide === 'PROVIDER' && !order.client_fee_paid_at) {
     return R.badRequest(res, 'Simule primeiro o pagamento do cliente')
@@ -156,8 +158,10 @@ export async function adminRefundFee(req: Request, res: Response) {
   const fee = await prisma.connectionFee.findUnique({ where: { id: req.params.id } })
   if (!fee) return R.notFound(res, 'Taxa não encontrada')
 
+  // CREDITED não entra: a taxa já voltou como crédito/saldo para o usuário —
+  // estornar no banco também devolveria o valor duas vezes.
   const updated = await prisma.connectionFee.updateMany({
-    where: { id: fee.id, status: { in: ['PAID', 'COVERED', 'CREDITED'] } },
+    where: { id: fee.id, status: { in: ['PAID', 'COVERED'] } },
     data: {
       status: 'REFUNDED',
       notes: (req.body?.notes as string) ?? undefined,
@@ -165,7 +169,8 @@ export async function adminRefundFee(req: Request, res: Response) {
     },
   })
   if (updated.count === 0) {
-    return R.badRequest(res, `Taxa não pode ser estornada (status: ${fee.status})`)
+    const hint = fee.status === 'CREDITED' ? ' — ela já foi devolvida como crédito ao usuário' : ''
+    return R.badRequest(res, `Taxa não pode ser estornada (status: ${fee.status})${hint}`)
   }
   return R.ok(
     res,
