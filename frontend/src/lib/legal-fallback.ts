@@ -10,7 +10,7 @@
 
 export const TERMS_FALLBACK = {
   title: 'Termos de Uso e Política de Responsabilidade',
-  effective_date: '2026-07-10',
+  effective_date: '2026-10-24',
   body: `
 ## 1. Aceitação e Natureza da Plataforma
 
@@ -40,6 +40,8 @@ O cadastro na plataforma exige fornecimento de dados pessoais completos, incluin
 A Missão Cumprida poderá, a qualquer momento e a seu exclusivo critério, solicitar documentos comprobatórios, realizar verificações de antecedentes criminais, consultas a bureaus de crédito, verificação de telefone e endereço, validação biométrica, validação de documentos com OCR e demais conferências necessárias à integridade da base de usuários. **Você autoriza expressamente a Missão Cumprida a realizar tais consultas e a tratar os dados resultantes**, observados os limites da LGPD (Lei nº 13.709/2018).
 
 Contas com dados falsos, inconsistentes ou identidade não confirmada serão suspensas ou removidas, podendo a Missão Cumprida comunicar autoridades competentes em caso de indícios de fraude ou crime.
+
+**Uma conta por CPF.** Cada pessoa pode ter **apenas uma conta**, vinculada ao seu CPF. Não é permitido abrir outra conta com o mesmo CPF — nem com outro e-mail, nem depois de excluir a conta ou de ter sido banido. O CPF é exigido e validado antes do primeiro pedido ou da primeira proposta (na verificação de identidade). Se o seu CPF estiver vinculado a uma conta que você não reconhece, fale com o suporte para análise.
 
 ## 3.1. Verificação Obrigatória de Identidade (KYC)
 
@@ -136,9 +138,9 @@ Ao marcar a caixa "Li e aceito" e clicar em "Aceitar", você declara que leu int
 
 export const PRIVACY_FALLBACK = {
   title: 'Política de Privacidade',
-  effective_date: '2026-07-16',
+  effective_date: '2026-10-24',
   body: `
-_Última atualização: 16/07/2026._
+_Última atualização: 24/10/2026._
 
 Esta Política de Privacidade descreve como a **Missão Cumprida** ("nós", "plataforma") coleta, usa, compartilha e protege os dados pessoais dos usuários ("você"), em conformidade com a **Lei Geral de Proteção de Dados — LGPD (Lei nº 13.709/2018)**.
 
@@ -152,11 +154,13 @@ O controlador dos dados é **[RAZÃO SOCIAL]**, inscrita no CNPJ nº **[CNPJ]**,
 
 **a) Dados de cadastro:** nome, e-mail, telefone, senha (armazenada de forma criptografada), papel (cliente/prestador).
 
-**b) Dados de perfil e cobrança:** CPF/CNPJ (necessário para pagamento via PIX), endereço, chave PIX, foto de avatar, biografia.
+**b) Dados de perfil e cobrança:** CPF (identifica a conta — cada CPF pode ter apenas uma conta), endereço, chave PIX, foto de avatar, biografia.
 
 **c) Verificação de identidade (KYC):** foto de documento oficial e **selfie** (dado biométrico), utilizados para conferência de identidade e prevenção a fraudes. Trata-se de **dado pessoal sensível** (LGPD art. 11).
 
-**d) Dados de localização:** localização aproximada e/ou precisa (GPS), usada para encontrar prestadores/pedidos por região e para o **check-in e a conclusão do serviço com foto e geolocalização**.
+**d) Dados de localização:** localização aproximada e/ou precisa (GPS), usada para encontrar prestadores/pedidos por região e para o **check-in e a conclusão do serviço com foto e geolocalização**. O **local exato do serviço** é informado por você no pedido — pelo GPS, quando você confirma que está no local, ou pelo endereço digitado convertido em coordenadas — e só é revelado ao prestador depois que as duas taxas de conexão forem pagas; antes disso ele vê apenas o bairro, a cidade e um ponto aproximado.
+
+**d.1) Fotos:** as fotos enviadas nos pedidos, no check-in e na conclusão do serviço têm os metadados do arquivo (inclusive a localização gravada pelo celular) removidos antes de serem guardadas.
 
 **e) Conteúdo gerado:** pedidos, propostas, mensagens de chat, avaliações, fotos do serviço.
 
@@ -194,6 +198,10 @@ Alguns provedores (ex.: RevenueCat, serviços de push) podem processar dados **f
 ## 6. Retenção
 
 Mantemos os dados pelo tempo necessário às finalidades e ao cumprimento de obrigações legais. As **imagens de KYC** são mantidas por até **5 (cinco) anos** após o encerramento da conta, ressalvadas obrigações legais de retenção. Dados financeiros seguem os prazos fiscais aplicáveis.
+
+**CPF após a exclusão ou banimento:** guardamos apenas um **código irreversível (hash criptográfico) do CPF**, sem nome nem contato, com a única finalidade de impedir um novo cadastro com o mesmo CPF (prevenção a fraudes e proteção da comunidade — LGPD art. 7º, IX, e art. 10). O titular pode pedir a revisão desse bloqueio pelo suporte.
+
+**Registros de atividade:** os registros de acesso (data, hora e IP) são guardados por no mínimo 6 (seis) meses (Marco Civil da Internet, art. 15). Os registros de pedidos, pagamentos, estornos, cancelamentos, conversas e atendimentos são mantidos por até 5 (cinco) anos, para responder reclamações, apurar fraudes e cumprir obrigações legais (Código de Defesa do Consumidor e legislação fiscal).
 
 ## 7. Seus direitos (LGPD art. 18)
 

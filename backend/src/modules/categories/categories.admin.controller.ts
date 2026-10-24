@@ -2,6 +2,15 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
+import { fieldKey } from '../../utils/fieldKey'
+import {
+  CANONICAL_MERGES,
+  SKILL_EXPANSIONS,
+  MergeError,
+  canonicalMergeStatus,
+  expandSkills,
+  mergeCategory,
+} from './catalogMerge.service'
 
 // Gera um slug único a partir de um texto, verificando colisão na tabela dada.
 function slugifyBase(s: string): string {
@@ -96,6 +105,9 @@ const categorySchema = z.object({
   order: z.number().int().optional(),
   archetype: z.string().optional().nullable(),
   pricing_unit: z.string().optional().nullable(),
+  description_hint: z.string().max(500).optional().nullable(),
+  description_required: z.boolean().optional(),
+  photo_hint: z.string().max(300).optional().nullable(),
 })
 
 export async function adminCreateCategory(req: Request, res: Response) {
@@ -150,6 +162,7 @@ const fieldSchema = z.object({
   affects_price: z.boolean().optional(),
   key: z.string().optional().nullable(),
   help_text: z.string().optional().nullable(),
+  is_active: z.boolean().optional(),
 })
 
 export async function adminCreateField(req: Request, res: Response) {
@@ -157,10 +170,23 @@ export async function adminCreateField(req: Request, res: Response) {
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
   const category = await prisma.category.findUnique({ where: { id: req.params.categoryId } })
   if (!category) return R.notFound(res, 'Categoria não encontrada')
+  if (parsed.data.field_type === 'PHOTO') {
+    return R.badRequest(res, 'Fotos não são pergunta: todo pedido já tem o bloco de fotos (opcional). Use a "dica de fotos" da categoria.')
+  }
 
   const { options, ...rest } = parsed.data
+  const key = rest.key || fieldKey(rest.question)
+  const clash = await prisma.questionnaireField.findFirst({ where: { category_id: req.params.categoryId, key } })
+  if (clash) return R.conflict(res, 'Já existe uma pergunta igual nesta categoria')
   const field = await prisma.questionnaireField.create({
-    data: { ...rest, category_id: req.params.categoryId, options: options ?? undefined },
+    data: {
+      ...rest,
+      key,
+      // Sim/Não nunca é obrigatório (desmarcado = "Não")
+      is_required: rest.field_type === 'BOOLEAN' ? false : rest.is_required,
+      category_id: req.params.categoryId,
+      options: options ?? undefined,
+    },
   })
   return R.created(res, field, 'Pergunta adicionada')
 }
@@ -178,9 +204,65 @@ export async function adminUpdateField(req: Request, res: Response) {
   return R.ok(res, field, 'Pergunta atualizada')
 }
 
+// "Excluir" pergunta = arquivar: pedidos antigos guardam respostas pelo id dela.
 export async function adminDeleteField(req: Request, res: Response) {
   const exists = await prisma.questionnaireField.findUnique({ where: { id: req.params.id } })
   if (!exists) return R.notFound(res, 'Pergunta não encontrada')
-  await prisma.questionnaireField.delete({ where: { id: req.params.id } })
-  return R.ok(res, null, 'Pergunta removida')
+  await prisma.questionnaireField.update({ where: { id: req.params.id }, data: { is_active: false, is_required: false } })
+  return R.ok(res, null, 'Pergunta arquivada (sai do formulário; respostas antigas continuam nos pedidos)')
+}
+
+// ===========================================================================
+// MESCLA DE CATEGORIAS DUPLICADAS
+// ===========================================================================
+// GET /api/categories/admin/merges — mesclas propostas + situação de cada uma
+export async function adminListMerges(_req: Request, res: Response) {
+  return R.ok(res, { merges: await canonicalMergeStatus(), skill_expansions: SKILL_EXPANSIONS })
+}
+
+const mergeSchema = z.object({
+  from_slug: z.string().min(2),
+  into_slug: z.string().min(2),
+  dry_run: z.boolean().optional().default(true),
+  rename: z.string().min(3).max(120).optional().nullable(),
+})
+
+// POST /api/categories/admin/merge { from_slug, into_slug, dry_run, rename? }
+// dry_run=true (padrão) só mostra o que seria movido.
+export async function adminMergeCategories(req: Request, res: Response) {
+  const parsed = mergeSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+  const canonical = CANONICAL_MERGES.find((m) => m.from === parsed.data.from_slug && m.into === parsed.data.into_slug)
+  try {
+    const result = await mergeCategory({
+      fromSlug: parsed.data.from_slug,
+      intoSlug: parsed.data.into_slug,
+      dryRun: parsed.data.dry_run,
+      rename: parsed.data.rename ?? canonical?.rename ?? null,
+    })
+    let expansion = null
+    if (result.applied) {
+      for (const e of SKILL_EXPANSIONS.filter((x) => x.from === parsed.data.into_slug)) {
+        expansion = await expandSkills(e.from, e.also, false)
+      }
+    }
+    return R.ok(res, { ...result, expansion }, result.applied ? 'Categorias mescladas' : 'Simulação (nada foi alterado)')
+  } catch (err) {
+    if (err instanceof MergeError) return R.badRequest(res, err.message)
+    throw err
+  }
+}
+
+// POST /api/categories/admin/expand-skills { from_slug, dry_run }
+export async function adminExpandSkills(req: Request, res: Response) {
+  const from = String(req.body?.from_slug ?? '')
+  const dryRun = req.body?.dry_run !== false
+  const exp = SKILL_EXPANSIONS.find((e) => e.from === from)
+  if (!exp) return R.badRequest(res, 'Expansão não prevista para esta categoria')
+  try {
+    return R.ok(res, await expandSkills(exp.from, exp.also, dryRun), dryRun ? 'Simulação' : 'Habilidades adicionadas')
+  } catch (err) {
+    if (err instanceof MergeError) return R.badRequest(res, err.message)
+    throw err
+  }
 }

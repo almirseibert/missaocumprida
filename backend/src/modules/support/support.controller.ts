@@ -169,11 +169,12 @@ export async function adminListTickets(req: Request, res: Response) {
   const [tickets, total, counts] = await Promise.all([
     prisma.supportTicket.findMany({
       where,
-      orderBy: [{ unread_for_admin: 'desc' }, { updated_at: 'desc' }],
+      // Assinantes Pro primeiro (benefício: atendimento prioritário)
+      orderBy: [{ unread_for_admin: 'desc' }, { user: { is_verified_pro: 'desc' } }, { updated_at: 'desc' }],
       skip: (page - 1) * limit,
       take: limit,
       include: {
-        user: { select: { id: true, name: true, email: true, avatar: true, role: true } },
+        user: { select: { id: true, name: true, email: true, avatar: true, role: true, is_verified_pro: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
         _count: { select: { messages: true } },
       },

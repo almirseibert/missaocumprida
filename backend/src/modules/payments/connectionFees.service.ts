@@ -92,6 +92,17 @@ export async function createFeesOnAccept(
     value: number
   },
 ) {
+  // Benefício do cliente Pro: desconto na taxa de conexão dele
+  const client = await tx.user.findUnique({ where: { id: args.client_id }, select: { is_verified_pro: true } })
+  const discount = client?.is_verified_pro ? Math.min(Math.max(s.pro_client_fee_discount_pct, 0), 1) : 0
+  const clientBase = round2(computeFeeBase(args.value, s.fee_client_pct, s.fee_min) * (1 - discount))
+  const clientPct = Math.round(s.fee_client_pct * (1 - discount) * 10000) / 10000
+  if (discount > 0) {
+    await tx.order.update({
+      where: { id: args.order_id },
+      data: { client_fee_pct: clientPct, client_fee_value: clientBase, client_total: round2(args.value + clientBase) },
+    })
+  }
   await tx.connectionFee.createMany({
     data: [
       {
@@ -99,9 +110,10 @@ export async function createFeesOnAccept(
         proposal_id: args.proposal_id,
         user_id: args.client_id,
         side: 'CLIENT',
-        pct_applied: s.fee_client_pct,
+        pct_applied: clientPct,
         regular_pct: s.fee_regular_pct,
-        base_amount: computeFeeBase(args.value, s.fee_client_pct, s.fee_min),
+        base_amount: clientBase,
+        notes: discount > 0 ? `Desconto Pro de ${Math.round(discount * 100)}%` : undefined,
       },
       {
         order_id: args.order_id,

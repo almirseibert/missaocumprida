@@ -10,6 +10,14 @@ import { banUser } from './moderation.service'
 import { anonymizeUser, DELETION_GRACE_DAYS } from './deletion.service'
 import { findUserByEmail } from '../auth/auth.controller'
 import { invalidateAccountState } from '../../middlewares/auth'
+import { isValidCpf, normalizeCpf } from '../../utils/cpf'
+import {
+  CpfInUseError,
+  claimCpf,
+  releaseOwnCpf,
+  releaseCpfByAdmin,
+  lookupCpf,
+} from './cpfRegistry.service'
 
 export async function getMe(req: Request, res: Response) {
   const user = await prisma.user.findUnique({
@@ -179,7 +187,7 @@ export async function getPublicProfile(req: Request, res: Response) {
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
   phone: z.string().optional(),
-  cpf: z.string().min(11).max(18).optional(),
+  cpf: z.string().min(11).max(18).optional(), // validado (dígitos verificadores) em updateMe
   rg: z.string().min(5).max(20).optional(),
   birth_date: z.string().datetime().optional().nullable(),
   mother_name: z.string().min(2).max(120).optional(),
@@ -202,45 +210,80 @@ export async function updateMe(req: Request, res: Response) {
   const parsed = updateSchema.safeParse(req.body)
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
 
+  // CPF: só dígitos, dígitos verificadores válidos (CNPJ não identifica a pessoa)
+  if (parsed.data.cpf !== undefined) {
+    if (!isValidCpf(parsed.data.cpf)) return R.badRequest(res, 'CPF inválido. Confira os números digitados.')
+    parsed.data.cpf = normalizeCpf(parsed.data.cpf)
+  }
+
+  const current = await prisma.user.findUnique({
+    where: { id: req.userId },
+    select: {
+      document_verification_status: true, cpf: true, rg: true, birth_date: true, mother_name: true,
+      latitude: true, longitude: true,
+    },
+  })
+  if (!current) return R.notFound(res, 'Usuário não encontrado')
+
   // Depois que os documentos foram aprovados, os dados de identidade não
   // podem mudar pelo app (senão uma conta verificada assumiria outro CPF).
+  // Campo vazio (ou CPF inválido gravado antes da validação) pode ser preenchido.
   const IDENTITY_FIELDS = ['cpf', 'rg', 'birth_date', 'mother_name'] as const
-  const touchesIdentity = IDENTITY_FIELDS.some((f) => parsed.data[f] !== undefined)
-  if (touchesIdentity) {
-    const current = await prisma.user.findUnique({
-      where: { id: req.userId },
-      select: { document_verification_status: true, cpf: true, rg: true, birth_date: true, mother_name: true },
+  if (current.document_verification_status === 'APPROVED' || current.document_verification_status === 'PENDING') {
+    const changed = IDENTITY_FIELDS.some((f) => {
+      const next = parsed.data[f]
+      if (next === undefined) return false
+      const prev = current[f]
+      if (prev === null || prev === undefined || prev === '') return false
+      if (f === 'cpf' && !isValidCpf(prev)) return false
+      if (f === 'birth_date') return (prev as Date).toISOString().slice(0, 10) !== (next ? String(next).slice(0, 10) : null)
+      if (f === 'cpf') return normalizeCpf(prev) !== next
+      return prev !== next
     })
-    if (current?.document_verification_status === 'APPROVED' || current?.document_verification_status === 'PENDING') {
-      const changed = IDENTITY_FIELDS.some((f) => {
-        const next = parsed.data[f]
-        if (next === undefined) return false
-        const prev = current[f]
-        if (f === 'birth_date') return (prev ? (prev as Date).toISOString().slice(0, 10) : null) !== (next ? String(next).slice(0, 10) : null)
-        return (prev ?? null) !== (next ?? null)
-      })
-      if (changed) {
-        return R.badRequest(res, 'Seus documentos já foram enviados/aprovados. Para alterar CPF, RG, nascimento ou nome da mãe, fale com o suporte.')
-      }
+    if (changed) {
+      return R.badRequest(res, 'Seus documentos já foram enviados/aprovados. Para alterar CPF, RG, nascimento ou nome da mãe, fale com o suporte.')
     }
   }
 
   const data: Record<string, unknown> = { ...parsed.data }
   if (parsed.data.birth_date) data.birth_date = new Date(parsed.data.birth_date)
+  if (
+    (parsed.data.latitude !== undefined && parsed.data.latitude !== current.latitude) ||
+    (parsed.data.longitude !== undefined && parsed.data.longitude !== current.longitude)
+  ) {
+    data.location_updated_at = new Date()
+  }
 
-  const user = await prisma.user.update({
-    where: { id: req.userId },
-    data,
-    select: {
-      id: true, name: true, email: true, phone: true, cpf: true, rg: true,
-      birth_date: true, mother_name: true, role: true, avatar: true, bio: true,
-      latitude: true, longitude: true,
-      address_zip: true, address_street: true, address_number: true,
-      address_complement: true, address_neighborhood: true,
-      address_city: true, address_state: true,
-      emergency_contact_name: true, emergency_contact_phone: true,
-    },
-  })
+  const cpfChanged = parsed.data.cpf !== undefined && parsed.data.cpf !== normalizeCpf(current.cpf)
+  let user
+  try {
+    user = await prisma.$transaction(async (tx) => {
+      if (cpfChanged) {
+        // 1 conta por CPF: falha se o CPF é (ou foi) de outra conta, mesmo excluída/banida
+        await claimCpf(tx, req.userId, parsed.data.cpf!)
+        if (current.cpf && isValidCpf(current.cpf)) await releaseOwnCpf(tx, req.userId, current.cpf)
+      }
+      return tx.user.update({
+        where: { id: req.userId },
+        data,
+        select: {
+          id: true, name: true, email: true, phone: true, cpf: true, rg: true,
+          birth_date: true, mother_name: true, role: true, avatar: true, bio: true,
+          latitude: true, longitude: true,
+          address_zip: true, address_street: true, address_number: true,
+          address_complement: true, address_neighborhood: true,
+          address_city: true, address_state: true,
+          emergency_contact_name: true, emergency_contact_phone: true,
+        },
+      })
+    })
+  } catch (err) {
+    if (err instanceof CpfInUseError) return R.conflict(res, err.message)
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return R.conflict(res, new CpfInUseError().message)
+    }
+    throw err
+  }
   if (parsed.data.role) invalidateAccountState(req.userId)
   return R.ok(res, user, 'Perfil atualizado com sucesso')
 }
@@ -317,6 +360,16 @@ export async function submitVerification(req: Request, res: Response) {
       `Complete seu cadastro antes de enviar documentos. Campos faltando: ${missing.map((f) => FIELD_LABELS[f]).join(', ')}.`,
       { missing_fields: missing },
     )
+  }
+  // 1 conta por CPF: a verificação só segue com CPF válido e exclusivo desta conta
+  if (!isValidCpf(current.cpf)) {
+    return R.badRequest(res, 'CPF inválido. Corrija o CPF no seu cadastro antes de enviar os documentos.', { missing_fields: ['cpf'] })
+  }
+  try {
+    await claimCpf(prisma, req.userId, current.cpf!)
+  } catch (err) {
+    if (err instanceof CpfInUseError) return R.conflict(res, err.message)
+    throw err
   }
 
   const data: Record<string, unknown> = {
@@ -402,7 +455,7 @@ export async function adminListVerifications(req: Request, res: Response) {
           OR: [
             { name: { contains: q, mode: 'insensitive' as const } },
             { email: { contains: q, mode: 'insensitive' as const } },
-            { cpf: { contains: q } },
+            ...(q.replace(/\D/g, '').length >= 3 ? [{ cpf: { contains: q.replace(/\D/g, '') } }] : []),
           ],
         }
       : {}),
@@ -596,7 +649,7 @@ export async function adminListUsers(req: Request, res: Response) {
     where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
       { email: { contains: search, mode: 'insensitive' } },
-      { cpf: { contains: search } },
+      ...(String(search).replace(/\D/g, '').length >= 3 ? [{ cpf: { contains: String(search).replace(/\D/g, '') } }] : []),
     ]
   }
   if (['CLIENT', 'PROVIDER', 'BOTH', 'ADMIN'].includes(role)) where.role = role
@@ -668,13 +721,60 @@ export async function adminSuspendUser(req: Request, res: Response) {
 export async function adminReactivateUser(req: Request, res: Response) {
   const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } })
   if (!target) return R.notFound(res, 'Usuário não encontrado')
-  const user = await prisma.user.update({
-    where: { id: req.params.id },
-    data: { is_active: true, suspended_until: null, banned_at: null, ban_reason: null },
-    select: { id: true, is_active: true, suspended_until: true },
-  })
+  const [user] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: req.params.id },
+      data: { is_active: true, suspended_until: null, banned_at: null, ban_reason: null },
+      select: { id: true, is_active: true, suspended_until: true },
+    }),
+    // banimento revertido: o CPF volta a ser desta conta (ativa)
+    prisma.cpfRegistry.updateMany({ where: { user_id: req.params.id, status: 'BANNED' }, data: { status: 'ACTIVE' } }),
+  ])
   invalidateAccountState(req.params.id)
   return R.ok(res, user, 'Usuário reativado')
+}
+
+// GET /api/users/admin/cpf?cpf= — situação de um CPF (sem expor o número)
+export async function adminLookupCpf(req: Request, res: Response) {
+  const cpf = normalizeCpf(req.query.cpf)
+  if (!isValidCpf(cpf)) return R.badRequest(res, 'CPF inválido')
+  const [registry, active, conflicts] = await Promise.all([
+    lookupCpf(cpf),
+    prisma.user.findMany({
+      where: { cpf },
+      select: { id: true, name: true, email: true, is_active: true, banned_at: true, created_at: true },
+    }),
+    prisma.cpfConflict.findMany({ where: { resolved_at: null }, orderBy: { created_at: 'desc' }, take: 50 }),
+  ])
+  const ids = new Set(registry.map((r) => r.user_id))
+  const owners = await prisma.user.findMany({
+    where: { id: { in: Array.from(ids) } },
+    select: { id: true, name: true, email: true, is_active: true, banned_at: true, created_at: true },
+  })
+  return R.ok(res, {
+    registry: registry.map((r) => ({ ...r, user: owners.find((o) => o.id === r.user_id) ?? null })),
+    accounts: active,
+    pending_conflicts: conflicts.filter((c) => ids.has(c.kept_user_id) || ids.has(c.user_id)),
+  })
+}
+
+// POST /api/users/admin/cpf/release { cpf, reason } — libera um CPF bloqueado
+// (ex.: alguém usou o CPF de outra pessoa). O motivo fica registrado.
+const releaseSchema = z.object({ cpf: z.string().min(11).max(18), reason: z.string().min(5).max(500) })
+export async function adminReleaseCpf(req: Request, res: Response) {
+  const parsed = releaseSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Informe o CPF e o motivo (mín. 5 caracteres)')
+  if (!isValidCpf(parsed.data.cpf)) return R.badRequest(res, 'CPF inválido')
+  const cpf = normalizeCpf(parsed.data.cpf)
+  const holder = await prisma.user.findFirst({ where: { cpf, is_active: true }, select: { id: true } })
+  if (holder) {
+    return R.conflict(res, 'Este CPF está em uma conta ativa. Remova o CPF dessa conta (ou suspenda-a) antes de liberá-lo.')
+  }
+  const count = await releaseCpfByAdmin(cpf, req.userId, parsed.data.reason)
+  if (count === 0) return R.notFound(res, 'CPF não está bloqueado')
+  // contas inativas que ainda guardam o número deixam de bloqueá-lo
+  await prisma.user.updateMany({ where: { cpf, is_active: false }, data: { cpf: null } })
+  return R.ok(res, { released: count }, 'CPF liberado para um novo cadastro')
 }
 
 // POST /api/users/admin/users/:id/ban  body: { reason } — banimento definitivo

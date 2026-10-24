@@ -1,6 +1,11 @@
 // ============================================================
 // SEED DE EXPANSÃO — categorias GetNinjas + precificação dinâmica
 // ============================================================
+// ⚠️ DESATIVADO (revisão do catálogo, 24/10/2026): cria ~248 categorias gn-*
+// que repetem serviços do catálogo oficial (seed.ts + seed-remap2.ts +
+// seed-catalog-v3.ts). Não rode. Se já foi rodado em algum banco, mescle os
+// gn-* duplicados pelo painel (Admin → Categorias → Mesclar).
+// Para forçar mesmo assim: SEED_EXPANSION_FORCE=true.
 // Roda DEPOIS do seed.ts existente.
 // É idempotente: upsert nos grupos e categorias por slug.
 // Cria/atualiza os arquétipos e calibra as 10 categorias top
@@ -442,6 +447,11 @@ function guessBaseMax(f: any): number {
     return Math.max(...f.tiers.map((t: any) => t.max ?? t.base_rate_max ?? 400))
   }
   return 400
+}
+
+if (process.env.SEED_EXPANSION_FORCE !== 'true') {
+  console.error('seed-expansion está desativado: duplica o catálogo oficial. Veja o cabeçalho do arquivo.')
+  process.exit(1)
 }
 
 main()

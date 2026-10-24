@@ -20,6 +20,8 @@ export type PlatformSettings = {
   gateway_surcharge_pix: number // repasse do meio de pagamento (Pix)
   max_order_photos: number // fotos por pedido (todas as categorias, opcionais)
   max_service_photos: number // fotos por etapa do serviço (check-in / conclusão)
+  pro_monthly_price: number // preço exibido da assinatura Pro (o cobrado é o da loja)
+  pro_client_fee_discount_pct: number // desconto na taxa de conexão do cliente Pro (0–1)
 }
 
 const DEFAULTS: PlatformSettings = {
@@ -34,6 +36,8 @@ const DEFAULTS: PlatformSettings = {
   gateway_surcharge_pix: 0.01,
   max_order_photos: 10,
   max_service_photos: 10,
+  pro_monthly_price: 29.9,
+  pro_client_fee_discount_pct: 0.5,
 }
 
 export const SETTING_KEYS = Object.keys(DEFAULTS) as Array<keyof PlatformSettings>

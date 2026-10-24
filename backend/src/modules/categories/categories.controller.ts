@@ -34,9 +34,18 @@ export async function listCategories(req: Request, res: Response) {
   return R.ok(res, categories)
 }
 
+/** Slug de categoria mesclada redireciona para a categoria mantida. */
+async function resolveSlug(slug: string): Promise<string> {
+  let current = await prisma.category.findUnique({ where: { slug }, select: { slug: true, merged_into_id: true } })
+  for (let i = 0; i < 3 && current?.merged_into_id; i++) {
+    current = await prisma.category.findUnique({ where: { id: current.merged_into_id }, select: { slug: true, merged_into_id: true } })
+  }
+  return current?.slug ?? slug
+}
+
 export async function getCategoryBySlug(req: Request, res: Response) {
   const category = await prisma.category.findUnique({
-    where: { slug: req.params.slug },
+    where: { slug: await resolveSlug(req.params.slug) },
     include: {
       group: { select: { id: true, name: true, slug: true, icon: true, is_active: true } },
     },
@@ -49,9 +58,9 @@ export async function getCategoryBySlug(req: Request, res: Response) {
 
 export async function getQuestionnaire(req: Request, res: Response) {
   const category = await prisma.category.findUnique({
-    where: { slug: req.params.slug },
+    where: { slug: await resolveSlug(req.params.slug) },
     select: {
-      id: true, name: true, icon: true, description: true, requires_photos: true,
+      id: true, slug: true, name: true, icon: true, description: true, requires_photos: true,
       base_price_min: true, base_price_max: true, estimated_hours: true,
       archetype: true, pricing_formula: true, pricing_unit: true,
       description_hint: true, description_required: true, photo_hint: true,

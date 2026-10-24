@@ -1,7 +1,9 @@
-import { PrismaClient, FieldType } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { seedRemap2 } from './seed-remap2'
+import { seedCatalogV3 } from './seed-catalog-v3'
+import { syncQuestionnaire, reorderCategories, SeedField } from './catalogSync'
 
 const prisma = new PrismaClient()
 
@@ -1501,6 +1503,10 @@ async function main() {
   // ============================================================
   await seedRemap2(prisma)
 
+  // Categorias novas (revisão pós-Play) e ordem alfabética dentro dos grupos
+  await seedCatalogV3(prisma)
+  await reorderCategories(prisma)
+
   // ============================================================
   // USUÁRIO ADMIN E DE TESTE
   // ============================================================
@@ -1589,47 +1595,21 @@ async function upsertCategory(data: {
 }) {
   return prisma.category.upsert({
     where: { slug: data.slug },
+    // Categoria existente não é sobrescrita (o admin pode ter editado no painel)
     update: {},
     create: {
       ...data,
-      requires_photos: data.requires_photos ?? true,
+      requires_photos: false, // fotos são sempre opcionais
     },
   })
 }
 
-async function createQuestionnaire(
-  category_id: string,
-  fields: Array<{
-    question: string
-    field_type: string
-    options?: string[]
-    is_required?: boolean
-    affects_price?: boolean
-    price_modifier?: Record<string, number>
-    help_text?: string
-    placeholder?: string
-  }>
-) {
-  // Remove campos antigos e recria (para idempotência no seed)
-  await prisma.questionnaireField.deleteMany({ where: { category_id } })
-
-  for (let i = 0; i < fields.length; i++) {
-    const f = fields[i]
-    await prisma.questionnaireField.create({
-      data: {
-        category_id,
-        question: f.question,
-        field_type: f.field_type as FieldType,
-        options: f.options ? f.options : undefined,
-        is_required: f.is_required ?? true,
-        order: i + 1,
-        affects_price: f.affects_price ?? false,
-        price_modifier: f.price_modifier ? f.price_modifier : undefined,
-        help_text: f.help_text,
-        placeholder: f.placeholder,
-      },
-    })
-  }
+// Sincroniza o questionário por chave estável — não apaga nem recria perguntas
+// (ver prisma/catalogSync.ts). Seguro para rodar de novo, inclusive em produção.
+async function createQuestionnaire(category_id: string, fields: SeedField[]) {
+  const cat = await prisma.category.findUnique({ where: { id: category_id }, select: { slug: true } })
+  if (!cat) return
+  await syncQuestionnaire(prisma, category_id, cat.slug, fields)
 }
 
 main()

@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/database'
+import { markCpfStatus } from './cpfRegistry.service'
 
 /**
  * Exclusão de conta com prazo de arrependimento (Remap 2.0 / LGPD / CDC).
@@ -48,7 +49,10 @@ export async function anonymizeUser(userId: string): Promise<void> {
   const randomPassword = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10)
 
   await prisma.$transaction(async (tx) => {
+    // O CPF sai da conta, mas o hash fica (DELETED) para barrar um novo cadastro
+    await markCpfStatus(tx, userId, 'DELETED')
     await tx.refreshToken.deleteMany({ where: { user_id: userId } })
+    await tx.pushToken.deleteMany({ where: { user_id: userId } })
     await tx.fileAsset.deleteMany({ where: { owner_id: userId, sensitive: true } })
     await tx.verifiedProSubscription.updateMany({
       where: { user_id: userId, status: 'ACTIVE' },
@@ -67,6 +71,8 @@ export async function anonymizeUser(userId: string): Promise<void> {
         address_city: null, address_state: null,
         emergency_contact_name: null, emergency_contact_phone: null,
         pix_key: null, pix_key_type: null,
+        latitude: null, longitude: null,
+        notification_preferences: {},
         document_photo_url: null, selfie_photo_url: null,
         verification_data: Prisma.DbNull,
         is_active: false,

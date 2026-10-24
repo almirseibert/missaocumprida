@@ -357,6 +357,9 @@ model Category {
   description_required Boolean  @default(false)
   // Dica do bloco de fotos (ex.: "Foto do local · Foto do aparelho")
   photo_hint           String?
+  // Categoria duplicada que foi mesclada em outra (fica inativa; o slug antigo
+  // redireciona para a categoria mantida)
+  merged_into_id       String?
   estimated_hours      Float?
   is_active            Boolean  @default(true)
   order                Int      @default(0)
@@ -407,6 +410,7 @@ model QuestionnaireField {
 
   category Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
 
+  @@unique([category_id, key])
   @@map("questionnaire_fields")
 }
 

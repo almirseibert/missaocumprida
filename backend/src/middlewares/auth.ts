@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { verifyAccessToken } from '../utils/jwt'
 import { unauthorized, forbidden } from '../utils/response'
 import { prisma } from '../config/database'
+import { isValidCpf } from '../utils/cpf'
 
 declare global {
   namespace Express {
@@ -80,11 +81,16 @@ export async function requireVerified(req: Request, res: Response, next: NextFun
     select: {
       terms_accepted_at: true,
       document_verification_status: true,
+      cpf: true,
     },
   })
   if (!user) return unauthorized(res, 'Usuário não encontrado')
   if (!user.terms_accepted_at) {
     return forbidden(res, 'Aceite os termos de uso antes de continuar.')
+  }
+  // 1 conta por CPF: pedir/propor exige CPF válido vinculado a esta conta
+  if (!isValidCpf(user.cpf)) {
+    return forbidden(res, 'Informe um CPF válido no seu perfil para continuar. Cada CPF pode ter apenas uma conta.')
   }
   if (user.document_verification_status !== 'APPROVED') {
     return forbidden(res, 'Sua conta ainda não foi verificada. Envie seus documentos para análise.')

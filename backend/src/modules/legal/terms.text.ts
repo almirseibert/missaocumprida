@@ -4,11 +4,11 @@
 // Versão semântica: bump a CADA mudança de texto.
 // Quando a versão muda, todos os usuários precisam aceitar novamente.
 
-export const TERMS_VERSION = '1.3.0'
+export const TERMS_VERSION = '1.4.0'
 
 export const TERMS_TITLE = 'Termos de Uso e Política de Responsabilidade'
 
-export const TERMS_EFFECTIVE_DATE = '2026-07-10'
+export const TERMS_EFFECTIVE_DATE = '2026-10-24'
 
 export const TERMS_BODY_MARKDOWN = `
 ## 1. Aceitação e Natureza da Plataforma
@@ -39,6 +39,8 @@ O cadastro na plataforma exige fornecimento de dados pessoais completos, incluin
 A Missão Cumprida poderá, a qualquer momento e a seu exclusivo critério, solicitar documentos comprobatórios, realizar verificações de antecedentes criminais, consultas a bureaus de crédito, verificação de telefone e endereço, validação biométrica, validação de documentos com OCR e demais conferências necessárias à integridade da base de usuários. **Você autoriza expressamente a Missão Cumprida a realizar tais consultas e a tratar os dados resultantes**, observados os limites da LGPD (Lei nº 13.709/2018).
 
 Contas com dados falsos, inconsistentes ou identidade não confirmada serão suspensas ou removidas, podendo a Missão Cumprida comunicar autoridades competentes em caso de indícios de fraude ou crime.
+
+**Uma conta por CPF.** Cada pessoa pode ter **apenas uma conta**, vinculada ao seu CPF. Não é permitido abrir outra conta com o mesmo CPF — nem com outro e-mail, nem depois de excluir a conta ou de ter sido banido. O CPF é exigido e validado antes do primeiro pedido ou da primeira proposta (na verificação de identidade). Se o seu CPF estiver vinculado a uma conta que você não reconhece, fale com o suporte para análise.
 
 ## 3.1. Verificação Obrigatória de Identidade (KYC)
 

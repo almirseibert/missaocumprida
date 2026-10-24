@@ -2,6 +2,7 @@ import { prisma } from '../../config/database'
 import { notify } from '../push/push.service'
 import { invalidateAccountState } from '../../middlewares/auth'
 import { getIO } from '../realtime/realtime'
+import { markCpfStatus } from './cpfRegistry.service'
 
 /** Derruba as conexões de socket abertas do usuário (chat em tempo real). */
 function disconnectUserSockets(userId: string) {
@@ -28,6 +29,8 @@ export async function banUser(userId: string, reason: string): Promise<void> {
     }),
     prisma.refreshToken.deleteMany({ where: { user_id: userId } }),
   ])
+  // CPF banido não abre outra conta
+  await markCpfStatus(prisma, userId, 'BANNED').catch((err) => console.error('[moderation] cpf registry:', err))
   invalidateAccountState(userId)
   disconnectUserSockets(userId)
   await notify(userId, {

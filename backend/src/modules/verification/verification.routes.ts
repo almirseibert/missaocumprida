@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authenticate, requireRole } from '../../middlewares/auth'
 import {
-  startVerification, subscribe, cancelSubscription, getMyStatus,
+  startVerification, subscribe, cancelSubscription, getMyStatus, syncMyStatus,
   adminApprove, adminReject, handleRevenueCatWebhook,
 } from './verification.controller'
 
@@ -14,6 +14,7 @@ const router = Router()
 router.use(authenticate)
 
 router.get('/me', getMyStatus)
+router.post('/sync', syncMyStatus)
 router.post('/start', startVerification)
 router.post('/subscribe', subscribe)
 router.post('/cancel', cancelSubscription)

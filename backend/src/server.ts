@@ -11,6 +11,8 @@ import { releaseEligiblePayments } from './modules/payments/payments.service'
 import { expireOverdueProviderFees } from './modules/payments/connectionFees.service'
 import { purgeExpiredDeletionRequests } from './modules/users/deletion.service'
 import { withCronLock } from './utils/cronLock'
+import { backfillCpfRegistry } from './modules/users/cpfRegistry.service'
+import { expireOverduePro } from './modules/verification/pro.service'
 
 async function start() {
   try {
@@ -19,6 +21,12 @@ async function start() {
 
     const httpServer = createServer(app)
     initRealtime(httpServer)
+
+    // Registro de CPFs (1 conta por CPF): completa com os CPFs que já
+    // existiam. Idempotente; roda em segundo plano para não atrasar o boot.
+    withCronLock('cpf-registry-backfill', backfillCpfRegistry)
+      .then((n) => { if (n) console.log(`[cpf-registry] ${n} CPF(s) registrados`) })
+      .catch((err) => console.error('[cpf-registry] backfill falhou:', err))
 
     // Cron diário às 02h: gera ocorrências de assinaturas dos próximos 7 dias.
     // Desligado (RECURRING_ENABLED) até as ocorrências cobrarem a Taxa de Conexão.
@@ -89,6 +97,19 @@ async function start() {
         })
       } catch (err) {
         console.error('[cron][exclusao] erro:', err)
+      }
+    })
+
+    // Cron de hora em hora: encerra selos Pro vencidos (webhook perdido ou
+    // concessão do admin expirada)
+    cron.schedule('17 * * * *', async () => {
+      try {
+        await withCronLock('pro-expiry', async () => {
+          const result = await expireOverduePro()
+          if (result.expired > 0) console.log(`[cron][pro] ${result.expired} selo(s) expirado(s)`)
+        })
+      } catch (err) {
+        console.error('[cron][pro] erro:', err)
       }
     })
 

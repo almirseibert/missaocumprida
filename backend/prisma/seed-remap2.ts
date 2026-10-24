@@ -1,4 +1,5 @@
-import { PrismaClient, FieldType } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
+import { syncQuestionnaire } from './catalogSync'
 
 /**
  * Remap 2.0 — Catálogo expandido (ver REMAP_2.0.md §3)
@@ -9,8 +10,8 @@ import { PrismaClient, FieldType } from '@prisma/client'
  * 4. Cria ~80 categorias novas com questionários, inspiradas em
  *    Thumbtack / TaskRabbit / GetNinjas / Craigslist.
  *
- * Idempotente: upsert por slug + questionários recriados (delete+create),
- * seguindo o padrão do seed principal.
+ * Idempotente: upsert por slug + questionários sincronizados por chave
+ * estável (catalogSync.ts) — perguntas nunca são apagadas.
  */
 
 type QField = {
@@ -939,31 +940,21 @@ export async function seedRemap2(prisma: PrismaClient) {
         base_price_min: cat.min,
         base_price_max: cat.max,
         estimated_hours: cat.hours,
-        requires_photos: true,
+        requires_photos: false,
       },
     })
 
-    // Recria o questionário (mesmo padrão idempotente do seed principal)
-    await prisma.questionnaireField.deleteMany({ where: { category_id: registro.id } })
-    for (let i = 0; i < cat.questions.length; i++) {
-      const f = cat.questions[i]
-      await prisma.questionnaireField.create({
-        data: {
-          category_id: registro.id,
-          question: f.question,
-          field_type: f.field_type as FieldType,
-          options: f.options ? f.options : undefined,
-          is_required: f.is_required ?? true,
-          order: i + 1,
-          affects_price: f.affects_price ?? false,
-          price_modifier: f.price_modifier ? f.price_modifier : undefined,
-          help_text: f.help_text,
-          placeholder: f.placeholder,
-        },
-      })
-    }
+    await syncQuestionnaire(prisma, registro.id, cat.slug, cat.questions)
     criadas++
   }
 
   console.log(`✅ Remap 2.0: ${criadas} categorias novas garantidas no catálogo`)
+}
+
+// Execução avulsa: `npx ts-node prisma/seed-remap2.ts`
+if (require.main === module) {
+  const prisma = new PrismaClient()
+  seedRemap2(prisma)
+    .catch((e) => { console.error(e); process.exit(1) })
+    .finally(() => prisma.$disconnect())
 }

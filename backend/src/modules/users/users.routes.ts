@@ -8,6 +8,7 @@ import {
   submitVerification, getVerificationStatus, reviewVerification,
   adminListVerifications, updateOnboarding,
   adminListUsers, adminGetUser, adminSuspendUser, adminReactivateUser, adminBanUser,
+  adminLookupCpf, adminReleaseCpf,
   requestCancellationAndDeletion, undoDeletionRequest,
 } from './users.controller'
 
@@ -42,6 +43,8 @@ router.get('/admin/users/:id', authenticate, requireRole('ADMIN'), adminGetUser)
 router.patch('/admin/users/:id/suspend', authenticate, requireRole('ADMIN'), adminSuspendUser)
 router.patch('/admin/users/:id/reactivate', authenticate, requireRole('ADMIN'), adminReactivateUser)
 router.post('/admin/users/:id/ban', authenticate, requireRole('ADMIN'), adminBanUser)
+router.get('/admin/cpf', authenticate, requireRole('ADMIN'), adminLookupCpf)
+router.post('/admin/cpf/release', authenticate, requireRole('ADMIN'), adminReleaseCpf)
 router.put('/:id/verification/review', authenticate, requireRole('ADMIN'), reviewVerification)
 router.get('/:id', getPublicProfile)
 

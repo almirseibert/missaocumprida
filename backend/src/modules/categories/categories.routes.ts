@@ -8,6 +8,7 @@ import {
   adminListGroups, adminCreateGroup, adminUpdateGroup, adminDeleteGroup,
   adminListCategories, adminCreateCategory, adminUpdateCategory, adminDeleteCategory,
   adminListFields, adminCreateField, adminUpdateField, adminDeleteField,
+  adminListMerges, adminMergeCategories, adminExpandSkills,
 } from './categories.admin.controller'
 
 const router = Router()
@@ -27,6 +28,10 @@ router.get('/admin/categories/:categoryId/fields', authenticate, requireRole('AD
 router.post('/admin/categories/:categoryId/fields', authenticate, requireRole('ADMIN'), adminCreateField)
 router.put('/admin/fields/:id', authenticate, requireRole('ADMIN'), adminUpdateField)
 router.delete('/admin/fields/:id', authenticate, requireRole('ADMIN'), adminDeleteField)
+
+router.get('/admin/merges', authenticate, requireRole('ADMIN'), adminListMerges)
+router.post('/admin/merge', authenticate, requireRole('ADMIN'), adminMergeCategories)
+router.post('/admin/expand-skills', authenticate, requireRole('ADMIN'), adminExpandSkills)
 
 // ---- Público ----
 router.get('/groups', listGroups)

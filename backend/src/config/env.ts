@@ -51,6 +51,13 @@ export const env = {
   // RevenueCat (Google Play Billing). Segredo compartilhado exigido no header
   // Authorization do webhook da RevenueCat → autentica os eventos de assinatura.
   REVENUECAT_WEBHOOK_AUTH: process.env.REVENUECAT_WEBHOOK_AUTH || '',
+  // Chave SECRETA da API REST da RevenueCat (sk_...) — usada só no servidor
+  // para confirmar a assinatura (POST /verification/sync). Nunca vai para o app.
+  REVENUECAT_SECRET_API_KEY: process.env.REVENUECAT_SECRET_API_KEY || '',
+  REVENUECAT_ENTITLEMENT: process.env.REVENUECAT_ENTITLEMENT || 'pro',
+  // Compras de teste (licença de teste da Play) chegam como SANDBOX. Deixe
+  // true durante o teste fechado; false em produção aberta.
+  RC_ALLOW_SANDBOX: (process.env.RC_ALLOW_SANDBOX ?? 'true') === 'true',
 
   // Rotas /payments/*/simulate (confirmam pagamento sem gateway). Só ligam com
   // opt-in explícito, fora de produção e SEM token real do Mercado Pago —

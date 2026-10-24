@@ -27,6 +27,10 @@ export async function getPublicConfig(_req: Request, res: Response) {
     max_order_photos: s.max_order_photos,
     max_service_photos: s.max_service_photos,
     recurring_enabled: env.RECURRING_ENABLED,
+    pro: {
+      monthly_price: s.pro_monthly_price,
+      client_fee_discount_pct: s.pro_client_fee_discount_pct,
+    },
   })
 }
 
@@ -52,6 +56,8 @@ const updateSchema = z
     gateway_surcharge_pix: z.number().min(0).max(0.2),
     max_order_photos: z.number().int().min(1).max(20),
     max_service_photos: z.number().int().min(1).max(20),
+    pro_monthly_price: z.number().min(0).max(1000),
+    pro_client_fee_discount_pct: z.number().min(0).max(1),
   })
   .partial()
 
