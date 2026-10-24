@@ -94,12 +94,14 @@ export async function listMySchedules(req: Request, res: Response) {
   }
   if (status) where.status = status
 
+  // Os 300 mais recentes, em ordem cronológica (sem limite a lista crescia para sempre)
   const schedules = await prisma.schedule.findMany({
     where,
-    orderBy: { scheduled_at: 'asc' },
+    orderBy: { scheduled_at: 'desc' },
+    take: 300,
     include: scheduleInclude,
   })
-  return R.ok(res, schedules.map(maskScheduleContacts))
+  return R.ok(res, schedules.reverse().map(maskScheduleContacts))
 }
 
 export async function getSchedule(req: Request, res: Response) {

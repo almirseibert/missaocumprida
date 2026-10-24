@@ -28,6 +28,8 @@ function periodFromQuery(req: Request): { from: Date; days: number; key: string 
     else if (m[2].toLowerCase() === 'm') days = n * 30
   }
   if (period === '12m') days = 365
+  // Período limitado (1 dia a 2 anos): '99999d' varreria a tabela inteira
+  days = Math.min(Math.max(days, 1), 730)
   const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
   return { from, days, key: period }
 }

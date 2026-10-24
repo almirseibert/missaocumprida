@@ -1,11 +1,19 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { io } from 'socket.io-client'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/store/auth'
 import { Notification } from '@/types'
 import toast from 'react-hot-toast'
 
-export function useNotifications(pollIntervalMs = 20000) {
+const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
+const USE_SOCKET = process.env.NEXT_PUBLIC_USE_SOCKET !== 'false'
+
+// Notificações chegam pelo socket ("notification:new"); a consulta a cada
+// 60 s fica só como reserva (antes eram 20 s para todo usuário logado).
+export function useNotifications(pollIntervalMs = 60000) {
+  const { accessToken } = useAuthStore()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unread, setUnread] = useState(0)
   const prevUnreadRef = useRef(0)
@@ -38,6 +46,21 @@ export function useNotifications(pollIntervalMs = 20000) {
     const interval = setInterval(fetchNotifications, pollIntervalMs)
     return () => clearInterval(interval)
   }, [fetchNotifications, pollIntervalMs])
+
+  useEffect(() => {
+    if (!USE_SOCKET || !accessToken) return
+    const socket = io(SOCKET_URL, { auth: { token: accessToken }, transports: ['websocket', 'polling'], reconnection: true })
+    let timer: ReturnType<typeof setTimeout> | null = null
+    // Junta rajadas (vários avisos no mesmo segundo) numa consulta só
+    socket.on('notification:new', () => {
+      if (timer) return
+      timer = setTimeout(() => { timer = null; fetchNotifications() }, 800)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      socket.disconnect()
+    }
+  }, [accessToken, fetchNotifications])
 
   const markRead = useCallback(async (id: string) => {
     await api.patch(`/notifications/${id}/read`)

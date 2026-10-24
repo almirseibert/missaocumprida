@@ -26,18 +26,18 @@ async function deleteInBatches(run: () => Promise<number>): Promise<number> {
 export async function purgeExpiredAuditData(): Promise<{ access: number; events: number; webhooks: number }> {
   const access = await deleteInBatches(() => prisma.$executeRaw`
     DELETE FROM access_logs WHERE id IN (
-      SELECT id FROM access_logs WHERE created_at < now() - interval '12 months' LIMIT ${BATCH})`)
+      SELECT id FROM access_logs WHERE created_at < (now() AT TIME ZONE 'utc') - interval '12 months' LIMIT ${BATCH})`)
   const short = await deleteInBatches(() => prisma.$executeRaw`
     DELETE FROM audit_events WHERE id IN (
       SELECT id FROM audit_events
-      WHERE created_at < now() - interval '2 years' AND amount IS NULL AND type !~ ${LONG_KEEP}
+      WHERE created_at < (now() AT TIME ZONE 'utc') - interval '2 years' AND amount IS NULL AND type !~ ${LONG_KEEP}
       LIMIT ${BATCH})`)
   const long = await deleteInBatches(() => prisma.$executeRaw`
     DELETE FROM audit_events WHERE id IN (
-      SELECT id FROM audit_events WHERE created_at < now() - interval '5 years' LIMIT ${BATCH})`)
+      SELECT id FROM audit_events WHERE created_at < (now() AT TIME ZONE 'utc') - interval '5 years' LIMIT ${BATCH})`)
   const webhooks = await deleteInBatches(() => prisma.$executeRaw`
     DELETE FROM webhook_events WHERE id IN (
-      SELECT id FROM webhook_events WHERE received_at < now() - interval '5 years' LIMIT ${BATCH})`)
+      SELECT id FROM webhook_events WHERE received_at < (now() AT TIME ZONE 'utc') - interval '5 years' LIMIT ${BATCH})`)
   return { access, events: short + long, webhooks }
 }
 

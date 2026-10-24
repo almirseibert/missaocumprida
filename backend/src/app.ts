@@ -8,6 +8,7 @@ import { errorHandler } from './middlewares/errorHandler'
 import { blockLegacySensitiveUploads } from './middlewares/legacyUploads'
 import { corsMiddleware, helmetMiddleware, apiLimiter, apiIpLimiter } from './middlewares/security'
 import { requestContextMiddleware } from './utils/requestContext'
+import compression from 'compression'
 
 // Routers
 import authRoutes from './modules/auth/auth.routes'
@@ -50,6 +51,8 @@ app.set('trust proxy', env.TRUST_PROXY_HOPS)
 // Contexto da requisição (id, IP, aparelho, autor) para a auditoria
 app.use(requestContextMiddleware)
 app.use(helmetMiddleware)
+// gzip/br das respostas JSON (imagens já vêm comprimidas e ficam de fora)
+app.use(compression({ threshold: 1024 }))
 app.use(corsMiddleware)
 app.use(apiIpLimiter)
 app.use(apiLimiter)

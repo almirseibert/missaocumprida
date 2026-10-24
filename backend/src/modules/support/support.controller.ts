@@ -71,6 +71,7 @@ export async function listMyTickets(req: Request, res: Response) {
   const tickets = await prisma.supportTicket.findMany({
     where: { user_id: req.userId },
     orderBy: { updated_at: 'desc' },
+    take: 100,
     select: {
       id: true, subject: true, category: true, status: true,
       unread_for_user: true, created_at: true, updated_at: true,

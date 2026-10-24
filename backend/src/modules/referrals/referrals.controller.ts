@@ -50,6 +50,7 @@ export async function listEvents(req: Request, res: Response) {
   const events = await prisma.referralEvent.findMany({
     where: { referrer_id: req.userId },
     orderBy: { created_at: 'desc' },
+    take: 200,
     select: {
       id: true, status: true, created_at: true, completed_at: true,
       referrer_reward: true, referred_reward: true,

@@ -189,6 +189,40 @@ aditiva e reexecutável) → back → front. Nenhuma env nova.
 - Retenção (cron 03h30): acessos 12 meses; eventos com dinheiro, contato, moderação e documentos 5 anos;
   demais 2 anos; webhooks 5 anos. O mesmo cron confere saldo × extrato e avisa no log.
 
+### 3.2.5 Rodada pós-Play — Fase 5 (escala para ~100 mil usuários)
+**Antes do redeploy do back:** backup → `npm run db:migrate:prod` (aplica `20261025000000_scale_jobs_leases`,
+aditiva) → `npm ci` (pacote novo `compression`) → back → front. Nenhuma env obrigatória nova.
+- **Feed do prestador calculado no banco** (faixa de latitude + distância + `LIMIT`). Teste com 50 mil
+  pedidos abertos: ~6 ms no banco, ~25 ms a resposta inteira. Antes carregava todos os pedidos na memória.
+- **Fila de tarefas em banco** (`jobs`): o aviso de pedido novo aos prestadores, os comunicados do admin e o
+  push de avisos saem da requisição e são enviados em lotes. Várias instâncias podem consumir ao mesmo tempo.
+  Falha → nova tentativa (30 s, 2 min, 8 min…, até 5 vezes); tarefas presas voltam à fila a cada 10 min.
+- **Push em lote**: preferências e tokens em uma consulta por bloco de 500 usuários (antes 2 consultas e
+  1 chamada à Expo por usuário).
+- **Crons**: trava por *lease* em `cron_leases` (a trava antiga podia ficar presa para sempre com o pool de
+  conexões); horários agora em **Brasília** (antes seguiam o relógio do servidor, normalmente UTC — ex.:
+  o push de cross-sell das 10h saía às 7h).
+- **Notificações em tempo real** pelo socket (`notification:new`); app e site consultam a cada 60 s só
+  como reserva (antes 20 s). O app instalado só passa a usar isso após o próximo build/OTA.
+- Respostas JSON comprimidas (gzip); listas pessoais com limite (agenda: 300 mais recentes; saques e
+  indicações: 200; chamados: 100); período do analytics limitado a 2 anos.
+
+**Ajustes recomendados no EasyPanel (sem código):**
+- `DATABASE_URL` com pool explícito: `...?connection_limit=15&pool_timeout=10` (por instância; some todas as
+  instâncias e mantenha abaixo do `max_connections` do Postgres).
+- Limite de consulta no banco: `ALTER ROLE <usuario_app> SET statement_timeout = '15s';`
+- Fuso do Postgres em UTC (`timezone = 'UTC'`); o código já compara datas em UTC.
+
+**Próximos passos de infraestrutura (quando passar de 1 instância ou ~20 mil ativos):**
+1. Backup gerenciado diário do Postgres com teste de restauração.
+2. PgBouncer (modo transaction) na frente do Postgres.
+3. Redis para: rate limit compartilhado entre instâncias e adaptador do Socket.io (sem ele, com 2+
+   instâncias o aviso em tempo real só chega a quem está conectado na mesma instância — o polling de 60 s
+   cobre o resto).
+4. Fotos fora do banco (armazenamento de objetos tipo Cloudflare R2/Backblaze B2 + CDN). Hoje ficam em
+   `file_assets` no Postgres; é o que mais vai pesar no backup. Também é pré-requisito para vídeos.
+5. 2+ instâncias do backend atrás do balanceador; Sentry para erros.
+
 ### 3.3 Rotacionar a senha do admin (crítico — S1)
 No shell do container do backend (ou local apontando para o banco de prod), com `ADMIN_EMAIL` e `ADMIN_PASSWORD` definidos:
 ```

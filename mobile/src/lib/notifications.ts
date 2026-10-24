@@ -1,6 +1,8 @@
 import { Platform, NativeModules } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { io, Socket } from 'socket.io-client'
 import { api } from './api'
+import { getAccessToken } from './secureStore'
 import { Notification as AppNotification } from '../types'
 
 const CUSTOM_SOUND = 'notification.wav'
@@ -139,17 +141,40 @@ export async function showLocalNotification(
 }
 
 let pollingHandle: ReturnType<typeof setInterval> | null = null
+let signalSocket: Socket | null = null
+let signalTimer: ReturnType<typeof setTimeout> | null = null
 
-export async function startNotificationPolling(intervalMs = 20000) {
+const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3333'
+const USE_SOCKET = process.env.EXPO_PUBLIC_USE_SOCKET !== 'false'
+
+// Notificações chegam pelo socket ("notification:new"); a consulta periódica
+// (60 s) fica só como reserva — antes eram 20 s para todo usuário com o app aberto.
+export async function startNotificationPolling(intervalMs = 60000) {
   if (pollingHandle) return
   await checkNewNotifications()
   pollingHandle = setInterval(() => { checkNewNotifications().catch(() => {}) }, intervalMs)
+  if (!USE_SOCKET || signalSocket) return
+  const token = await getAccessToken()
+  if (!token || !pollingHandle) return
+  signalSocket = io(SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'], reconnection: true })
+  signalSocket.on('notification:new', () => {
+    if (signalTimer) return
+    signalTimer = setTimeout(() => { signalTimer = null; checkNewNotifications().catch(() => {}) }, 800)
+  })
 }
 
 export function stopNotificationPolling() {
   if (pollingHandle) {
     clearInterval(pollingHandle)
     pollingHandle = null
+  }
+  if (signalTimer) {
+    clearTimeout(signalTimer)
+    signalTimer = null
+  }
+  if (signalSocket) {
+    signalSocket.disconnect()
+    signalSocket = null
   }
 }
 

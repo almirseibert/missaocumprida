@@ -14,6 +14,11 @@ import { withCronLock } from './utils/cronLock'
 import { backfillCpfRegistry } from './modules/users/cpfRegistry.service'
 import { expireOverduePro } from './modules/verification/pro.service'
 import { purgeExpiredAuditData, dailyReconciliation } from './modules/audit/retention.service'
+import { startJobWorker, maintainJobs } from './modules/jobs/jobs.service'
+import './modules/jobs/jobs.handlers'
+
+// Crons no horário de Brasília (o servidor costuma rodar em UTC)
+const schedule = (expr: string, fn: () => Promise<void>) => cron.schedule(expr, fn, { timezone: 'America/Sao_Paulo' })
 
 async function start() {
   try {
@@ -23,6 +28,17 @@ async function start() {
     const httpServer = createServer(app)
     initRealtime(httpServer)
 
+    // Fila de tarefas (avisos de pedido novo, comunicados): cada instância consome
+    startJobWorker()
+    schedule('*/10 * * * *', async () => {
+      try {
+        const r = await maintainJobs()
+        if (r.requeued > 0) console.warn(`[jobs] ${r.requeued} tarefa(s) presa(s) devolvida(s) à fila`)
+      } catch (err) {
+        console.error('[jobs] manutenção falhou:', err)
+      }
+    })
+
     // Registro de CPFs (1 conta por CPF): completa com os CPFs que já
     // existiam. Idempotente; roda em segundo plano para não atrasar o boot.
     withCronLock('cpf-registry-backfill', backfillCpfRegistry)
@@ -31,7 +47,7 @@ async function start() {
 
     // Cron diário às 02h: gera ocorrências de assinaturas dos próximos 7 dias.
     // Desligado (RECURRING_ENABLED) até as ocorrências cobrarem a Taxa de Conexão.
-    if (env.RECURRING_ENABLED) cron.schedule('0 2 * * *', async () => {
+    if (env.RECURRING_ENABLED) schedule('0 2 * * *', async () => {
       try {
         await withCronLock('subscriptions-occurrences', async () => {
           const result = await generateUpcomingOccurrences(7)
@@ -43,7 +59,7 @@ async function start() {
     })
 
     // Cron a cada 5min: SLA do modo urgência (expande raio, cancela após deadline)
-    cron.schedule('*/5 * * * *', async () => {
+    schedule('*/5 * * * *', async () => {
       try {
         await withCronLock('urgency-sla', async () => {
           const result = await runUrgencySla()
@@ -58,7 +74,7 @@ async function start() {
 
     // Cron a cada 15min: Taxa de Conexão — expira taxa de prestador vencida,
     // recredita o cliente e devolve o pedido para a fila.
-    cron.schedule('*/15 * * * *', async () => {
+    schedule('*/15 * * * *', async () => {
       try {
         await withCronLock('connection-fee-timeout', async () => {
           const result = await expireOverdueProviderFees()
@@ -73,7 +89,7 @@ async function start() {
 
     // Cron diário às 03h: (LEGADO) Segurança de Transação — libera pagamentos
     // antigos em HELD já aprovados pelo admin. Remover quando zerar o escrow.
-    cron.schedule('0 3 * * *', async () => {
+    schedule('0 3 * * *', async () => {
       try {
         await withCronLock('release-held-payments', async () => {
           const result = await releaseEligiblePayments()
@@ -88,7 +104,7 @@ async function start() {
 
     // Cron diário às 04h: purga contas com exclusão agendada e prazo de
     // arrependimento vencido (página /cancelar-assinatura).
-    cron.schedule('0 4 * * *', async () => {
+    schedule('0 4 * * *', async () => {
       try {
         await withCronLock('purge-deletion-requests', async () => {
           const result = await purgeExpiredDeletionRequests()
@@ -103,7 +119,7 @@ async function start() {
 
     // Cron de hora em hora: encerra selos Pro vencidos (webhook perdido ou
     // concessão do admin expirada)
-    cron.schedule('17 * * * *', async () => {
+    schedule('17 * * * *', async () => {
       try {
         await withCronLock('pro-expiry', async () => {
           const result = await expireOverduePro()
@@ -116,7 +132,7 @@ async function start() {
 
     // Cron diário às 03h30: retenção dos registros de auditoria/acesso e
     // conferência saldo do prestador x extrato
-    cron.schedule('30 3 * * *', async () => {
+    schedule('30 3 * * *', async () => {
       try {
         await withCronLock('audit-retention', async () => {
           const r = await purgeExpiredAuditData()
@@ -131,7 +147,7 @@ async function start() {
     })
 
     // Cron diário às 10h: dispara push de cross-sell respeitando delay_days das afinidades
-    cron.schedule('0 10 * * *', async () => {
+    schedule('0 10 * * *', async () => {
       try {
         await withCronLock('cross-sell-push', async () => {
           const result = await runCrossSellPushSweep()

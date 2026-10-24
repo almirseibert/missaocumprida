@@ -46,7 +46,7 @@ export function TopNav() {
       } catch { /* silencia — rede/auth */ }
     }
     fetchUnread()
-    const t = setInterval(fetchUnread, 30000)
+    const t = setInterval(fetchUnread, 60000)
     return () => { active = false; clearInterval(t) }
   }, [])
 

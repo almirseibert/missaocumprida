@@ -35,7 +35,7 @@ export default function AppLayout() {
     ;(async () => {
       const granted = await configureNotifications()
       if (cancelled) return
-      if (granted) startNotificationPolling(20000)
+      if (granted) startNotificationPolling()
     })()
     return () => {
       cancelled = true

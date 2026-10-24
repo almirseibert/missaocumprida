@@ -2,8 +2,9 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
-import { sendToUsers } from '../push/push.service'
 import { audit } from '../audit/audit.service'
+import { enqueueJob } from '../jobs/jobs.service'
+import { audienceSize } from '../jobs/jobs.handlers'
 
 /**
  * Avisos do admin (Remap 2.0): pop-ups e banners exibidos nos apps
@@ -105,33 +106,12 @@ export async function adminDeleteAnnouncement(req: Request, res: Response) {
   return R.ok(res, null, 'Aviso desativado')
 }
 
+/** Push do aviso para a audiência: vai para a fila (envio em lotes). */
 async function sendAnnouncementPush(announcementId: string): Promise<number> {
   const announcement = await prisma.announcement.findUnique({ where: { id: announcementId } })
   if (!announcement) return 0
-
-  const roles = AUDIENCE_ROLES[announcement.audience] ?? AUDIENCE_ROLES.ALL
-  const users = await prisma.user.findMany({
-    where: { role: { in: roles as never[] }, is_active: true },
-    select: { id: true },
-  })
-
-  // Envio em lotes para não estourar memória/rate do Expo
-  const BATCH = 100
-  for (let i = 0; i < users.length; i += BATCH) {
-    const batch = users.slice(i, i + BATCH).map((u) => u.id)
-    await sendToUsers(batch, {
-      title: announcement.title,
-      body: announcement.body,
-      data: { type: 'ANNOUNCEMENT', announcement_id: announcement.id },
-      channel: 'general',
-    }).catch((err) => console.error('[announcements] push batch error:', err))
-  }
-
-  await prisma.announcement.update({
-    where: { id: announcementId },
-    data: { push_sent_at: new Date() },
-  })
-  return users.length
+  await enqueueJob('ANNOUNCEMENT_PUSH', { announcement_id: announcement.id })
+  return audienceSize(announcement.audience)
 }
 
 export async function adminSendAnnouncementPush(req: Request, res: Response) {
@@ -142,5 +122,5 @@ export async function adminSendAnnouncementPush(req: Request, res: Response) {
     type: 'ANNOUNCEMENT_PUSH_SENT', entityType: 'Announcement', entityId: announcement.id,
     metadata: { title: announcement.title, audience: announcement.audience, recipients: sent },
   })
-  return R.ok(res, { recipients: sent }, `Push enviado para ${sent} usuário(s)`)
+  return R.ok(res, { recipients: sent }, `Push na fila de envio para ${sent} usuário(s)`)
 }

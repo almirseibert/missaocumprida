@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/database'
 import { estimatePriceDynamic } from '../../utils/priceEstimator'
-import { haversineDistance, distanceBucket } from '../../utils/geo'
+import { distanceBucket } from '../../utils/geo'
 import * as R from '../../utils/response'
 import { sendToUsers, notify } from '../push/push.service'
 import { persistUpload } from '../files/files.service'
@@ -26,6 +26,7 @@ import { cancelBeforeConnectionByClient } from '../schedules/scheduleCancel.serv
 import { creditProviderBalance } from '../audit/ledger.service'
 import { audit } from '../audit/audit.service'
 import { creditFee } from '../payments/connectionFees.service'
+import { enqueueJob } from '../jobs/jobs.service'
 
 const answerValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()])
 const orderContentSchema = z.object({
@@ -232,63 +233,11 @@ export async function createOrder(req: Request, res: Response) {
     },
   })
 
-  // Notify providers who have this category skill and are active
-  try {
-    const skills = await prisma.providerSkill.findMany({
-      where: { category_id: category_id, is_active: true },
-      select: {
-        provider_id: true,
-        service_radius_km: true,
-        provider: { select: { id: true, latitude: true, longitude: true } },
-      },
-    })
-    // Filtra por raio. Urgente usa raio especial (urgency_radius_km),
-    // pedidos normais respeitam o raio individual de cada prestador.
-    let targets: string[]
-    if (latitude != null && longitude != null) {
-      const urgentRadius = urgency_radius_km ?? URGENCY_DEFAULT_RADIUS_KM
-      targets = skills
-        .filter((s) => {
-          const plat = s.provider?.latitude
-          const plng = s.provider?.longitude
-          if (plat == null || plng == null) return false
-          const dist = haversineDistance(latitude, longitude, plat!, plng!)
-          const radius = is_urgent ? urgentRadius : (s.service_radius_km ?? 20)
-          return dist <= radius
-        })
-        .map((s) => s.provider_id)
-    } else {
-      // Pedido sem coordenadas: notifica todos da categoria como fallback (não dá pra calcular distância)
-      targets = skills.map((s) => s.provider_id)
-    }
-    targets = targets.filter((id) => id !== req.userId)
-    if (targets.length > 0) {
-      const title = is_urgent
-        ? `🚨 URGENTE: ${category.name} perto de você!`
-        : 'Novo pedido na sua área!'
-      const body = is_urgent
-        ? `Cliente precisa em até ${URGENCY_DEADLINE_HOURS}h. Atendimento prioritário em ${city}.`
-        : `Um novo pedido de ${category.name} foi publicado em ${city}.`
-      await prisma.notification.createMany({
-        data: targets.map((id) => ({
-          user_id: id,
-          type: 'NEW_ORDER_NEARBY' as never,
-          title,
-          body,
-          data: { order_id: order.id, urgent: is_urgent } as never,
-        })),
-        skipDuplicates: true,
-      })
-      await sendToUsers(targets, {
-        title,
-        body,
-        data: { order_id: order.id, type: 'NEW_ORDER_NEARBY', urgent: is_urgent },
-        channel: is_urgent ? 'urgent_orders' : 'general',
-      })
-    }
-  } catch {
-    // Non-fatal — don't fail the order creation
-  }
+  // Aviso aos prestadores da área: vai para a fila (não segura a resposta e
+  // não depende de quantos prestadores existem)
+  await enqueueJob('NEW_ORDER_FANOUT', { order_id: order.id }).catch((err) =>
+    console.error('[orders] falha ao enfileirar aviso de pedido novo:', err?.message ?? err),
+  )
 
   audit({ type: 'ORDER_CREATED', userId: req.userId, orderId: order.id, entityType: 'Order', entityId: order.id, after: { category: category.slug, city, is_urgent, location_source: content.location_source, photos: (content.photos as string[]).length } })
   return R.created(res, order, 'Pedido criado com sucesso')
@@ -572,77 +521,84 @@ export async function getProviderFeed(req: Request, res: Response) {
     return R.ok(res, { orders: [], total: 0, message: 'Cadastre suas habilidades para ver pedidos disponíveis' })
   }
 
-  // Mapa de raio por categoria
-  const radiusByCategory = new Map(skills.map(s => [s.category_id, s.service_radius_km]))
-
-  // OPEN e IN_PROPOSAL: o pedido continua visível para os demais prestadores
-  // depois da primeira proposta (antes sumia do feed de todo mundo).
-  const where: Record<string, unknown> = {
-    status: { in: PRE_ACCEPTANCE_STATUSES },
-    category_id: { in: categoryIds },
-    client_id: { not: req.userId },
-  }
-  if (typeof city === 'string' && city) where.city = { contains: city, mode: 'insensitive' }
-
-  // Busca todos os pedidos candidatos para filtrar por distância em memória
-  // Urgentes primeiro (com deadline ainda vigente), depois por data
-  const allOrders = await prisma.order.findMany({
-    where,
-    orderBy: [{ is_urgent: 'desc' }, { created_at: 'desc' }],
-    include: {
-      category: { select: { id: true, name: true, icon: true } },
-      client: { select: { id: true, name: true, avatar: true, rating_avg: true } },
-      proposals: { where: { provider_id: req.userId }, select: { id: true, status: true } },
-    },
-  })
-
-  // Filtro e enriquecimento por distância
   const providerHasLocation = provider?.latitude != null && provider?.longitude != null
+  const cityLike = typeof city === 'string' && city ? `%${city.slice(0, 80)}%` : null
+  const offset = (pageNum - 1) * limitNum
 
-  type OrderWithDistance = typeof allOrders[0] & { distance_km: number | null }
-
-  const enriched: OrderWithDistance[] = allOrders.map(order => {
-    if (!providerHasLocation || order.latitude == null || order.longitude == null) {
-      return { ...order, distance_km: null }
-    }
-    const dist = haversineDistance(
-      provider!.latitude!,
-      provider!.longitude!,
-      order.latitude,
-      order.longitude,
-    )
-    return { ...order, distance_km: Math.round(dist * 10) / 10 }
-  })
-
-  const filtered = enriched.filter(order => {
+  // Seleção e paginação no banco (antes carregava todos os pedidos abertos
+  // das categorias e media a distância em memória a cada abertura do feed).
+  let page: Array<{ id: string; dist: number | null }>
+  let total: number
+  if (providerHasLocation) {
+    const lat = provider!.latitude!
+    const lng = provider!.longitude!
+    const maxRadius = Math.min(Math.max(...skills.map((s) => s.service_radius_km ?? 20)), 300)
+    const dLat = maxRadius / 111 + 0.01
+    // Pedido sem coordenadas fica de fora quando o prestador tem localização
+    // (evita mostrar pedido a 50 km para quem atende só 5 km).
+    const rows = await prisma.$queryRaw<Array<{ id: string; dist: number; total: number }>>`
+      WITH c AS (
+        SELECT o.id, o.is_urgent, o.created_at,
+          2 * 6371 * asin(sqrt(least(1,
+            power(sin(radians(o.latitude - ${lat}) / 2), 2) +
+            cos(radians(${lat})) * cos(radians(o.latitude)) * power(sin(radians(o.longitude - ${lng}) / 2), 2)))) AS dist,
+          COALESCE(ps.service_radius_km, 20) AS radius
+        FROM orders o
+        JOIN provider_skills ps ON ps.category_id = o.category_id AND ps.provider_id = ${req.userId} AND ps.is_active
+        WHERE o.status IN ('OPEN', 'IN_PROPOSAL')
+          AND o.client_id <> ${req.userId}
+          AND o.latitude BETWEEN ${lat - dLat} AND ${lat + dLat}
+          AND o.longitude IS NOT NULL
+          AND (${cityLike}::text IS NULL OR o.city ILIKE ${cityLike}::text)
+      )
+      SELECT id, dist::float AS dist, (COUNT(*) OVER())::int AS total
+      FROM c WHERE dist <= radius
+      ORDER BY dist ASC, is_urgent DESC, created_at DESC
+      LIMIT ${limitNum} OFFSET ${offset}`
+    page = rows.map((r) => ({ id: r.id, dist: Math.round(r.dist * 10) / 10 }))
+    total = rows[0]?.total ?? 0
+  } else {
     // Prestador sem localização cadastrada: mostra tudo (não dá pra filtrar)
-    if (!providerHasLocation) return true
-    const radius = radiusByCategory.get(order.category_id) ?? 20
-    // Pedido sem coordenadas é excluído quando o prestador tem localização —
-    // evita mostrar pedido potencialmente a 50 km pra quem atende só 5 km.
-    if (order.distance_km == null) return false
-    return order.distance_km <= radius
-  })
+    const where: Prisma.OrderWhereInput = {
+      status: { in: PRE_ACCEPTANCE_STATUSES as never },
+      category_id: { in: categoryIds },
+      client_id: { not: req.userId },
+      ...(typeof city === 'string' && city ? { city: { contains: city, mode: 'insensitive' } } : {}),
+    }
+    const [rows, count] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        orderBy: [{ is_urgent: 'desc' }, { created_at: 'desc' }],
+        skip: offset,
+        take: limitNum,
+        select: { id: true },
+      }),
+      prisma.order.count({ where }),
+    ])
+    page = rows.map((r) => ({ id: r.id, dist: null }))
+    total = count
+  }
 
-  // Ordenar: com distância primeiro (mais próximo), depois sem localização
-  filtered.sort((a, b) => {
-    if (a.distance_km == null && b.distance_km == null) return 0
-    if (a.distance_km == null) return 1
-    if (b.distance_km == null) return -1
-    return a.distance_km - b.distance_km
-  })
+  const full = page.length
+    ? await prisma.order.findMany({
+        where: { id: { in: page.map((p) => p.id) } },
+        include: {
+          category: { select: { id: true, name: true, icon: true } },
+          client: { select: { id: true, name: true, avatar: true, rating_avg: true } },
+          proposals: { where: { provider_id: req.userId }, select: { id: true, status: true } },
+        },
+      })
+    : []
+  const byId = new Map(full.map((o) => [o.id, o]))
 
-  const total = filtered.length
   // Feed always shows pre-acceptance orders — always mask sensitive location.
   // A distância sai em faixas ("1–3 km"): o prestador pode mudar a própria
   // posição à vontade, e com a distância exata triangularia o endereço.
-  const paginated = filtered
-    .slice((pageNum - 1) * limitNum, pageNum * limitNum)
-    .map((order) => ({
-      ...maskLocationForProvider(order),
-      ...(order.distance_km == null
-        ? { distance_km: null, distance_label: null }
-        : distanceBucket(order.distance_km)),
+  const paginated = page
+    .filter((p) => byId.has(p.id))
+    .map((p) => ({
+      ...maskLocationForProvider(byId.get(p.id)!),
+      ...(p.dist == null ? { distance_km: null, distance_label: null } : distanceBucket(p.dist)),
     }))
 
   return R.ok(res, {

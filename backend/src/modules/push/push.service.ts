@@ -2,6 +2,24 @@ import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk'
 import webpush from 'web-push'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
+import { getIO } from '../realtime/realtime'
+
+/**
+ * Avisa os apps abertos que chegou notificação (sala `user:<id>` do socket),
+ * para buscarem na hora em vez de consultar a cada poucos segundos.
+ * Sem Socket.io (ou com várias instâncias sem adaptador), o polling de 60 s cobre.
+ */
+export function emitNotificationSignal(userIds: string[], type?: string): void {
+  const io = getIO()
+  if (!io || userIds.length === 0) return
+  try {
+    for (let i = 0; i < userIds.length; i += 500) {
+      io.to(userIds.slice(i, i + 500).map((id) => `user:${id}`)).emit('notification:new', { type: type ?? null })
+    }
+  } catch (err) {
+    console.error('[realtime] notification signal error:', err)
+  }
+}
 
 const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN })
 
@@ -75,8 +93,32 @@ async function sendToUserUnsafe(userId: string, opts: SendPushOptions): Promise<
   ])
 }
 
+/**
+ * Envio para muitos usuários em lote: preferências e tokens em uma consulta
+ * por bloco de 500, e push agrupado (a Expo recebe até 100 por chamada).
+ * Antes eram 2 consultas + 1 chamada HTTP por usuário. Nunca lança.
+ */
 export async function sendToUsers(userIds: string[], opts: SendPushOptions): Promise<void> {
-  await Promise.allSettled(userIds.map((id) => sendToUser(id, opts)))
+  const unique = Array.from(new Set(userIds))
+  const channel = opts.channel || 'general'
+  for (let i = 0; i < unique.length; i += 500) {
+    try {
+      const slice = unique.slice(i, i + 500)
+      const users = await prisma.user.findMany({
+        where: { id: { in: slice } },
+        select: { id: true, notification_preferences: true },
+      })
+      const allowed = users.filter((u) => isChannelEnabled(u.notification_preferences, channel)).map((u) => u.id)
+      if (allowed.length === 0) continue
+      const tokens = await prisma.pushToken.findMany({ where: { user_id: { in: allowed } } })
+      await Promise.allSettled([
+        sendExpoBatch(tokens.filter((t) => t.platform === 'EXPO'), opts),
+        sendWebBatch(tokens.filter((t) => t.platform === 'WEB'), opts),
+      ])
+    } catch (err) {
+      console.error('[push] sendToUsers error:', err)
+    }
+  }
 }
 
 async function sendExpoBatch(
@@ -185,6 +227,7 @@ export async function notify(
   } catch (err) {
     console.error('[notify] db error:', err)
   }
+  emitNotificationSignal([userId], String(args.type))
   await sendToUser(userId, {
     title: args.title,
     body: args.body,

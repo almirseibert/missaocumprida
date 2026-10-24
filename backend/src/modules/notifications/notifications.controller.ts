@@ -2,7 +2,9 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
-import { sendToUsers } from '../push/push.service'
+import { enqueueJob } from '../jobs/jobs.service'
+import { audienceSize } from '../jobs/jobs.handlers'
+import { audit } from '../audit/audit.service'
 
 // GET /api/notifications — lista notificações do usuário
 export async function listNotifications(req: Request, res: Response) {
@@ -48,19 +50,12 @@ export async function adminBroadcast(req: Request, res: Response) {
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
   const { title, body, audience } = parsed.data
 
-  const where: Record<string, unknown> = { is_active: true }
-  if (audience === 'CLIENT') where.role = { in: ['CLIENT', 'BOTH'] }
-  else if (audience === 'PROVIDER') where.role = { in: ['PROVIDER', 'BOTH'] }
+  const recipients = await audienceSize(audience)
+  if (recipients === 0) return R.ok(res, { recipients: 0 }, 'Nenhum destinatário para este público.')
 
-  const users = await prisma.user.findMany({ where, select: { id: true } })
-  const ids = users.map((u) => u.id)
-  if (ids.length === 0) return R.ok(res, { recipients: 0 }, 'Nenhum destinatário para este público.')
+  // Notificação + push para toda a base vão pela fila, em lotes
+  await enqueueJob('BROADCAST', { title, body, audience })
+  audit({ type: 'BROADCAST_SENT', metadata: { title, body, audience, recipients } })
 
-  // Registra a notificação in-app para todos e dispara push (best-effort)
-  await prisma.notification.createMany({
-    data: ids.map((id) => ({ user_id: id, type: 'GENERAL' as const, title, body })),
-  })
-  await sendToUsers(ids, { title, body, channel: 'general', data: { broadcast: true } }).catch(() => {})
-
-  return R.ok(res, { recipients: ids.length }, `Comunicado enviado para ${ids.length} usuário(s).`)
+  return R.ok(res, { recipients }, `Comunicado na fila de envio para ${recipients} usuário(s). Chega em alguns minutos.`)
 }

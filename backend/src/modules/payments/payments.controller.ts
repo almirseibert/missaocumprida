@@ -503,6 +503,7 @@ export async function listWithdrawals(req: Request, res: Response) {
   const withdrawals = await prisma.providerWithdrawal.findMany({
     where: { provider_id: req.userId },
     orderBy: { created_at: 'desc' },
+    take: 200,
   })
   return R.ok(res, withdrawals)
 }
