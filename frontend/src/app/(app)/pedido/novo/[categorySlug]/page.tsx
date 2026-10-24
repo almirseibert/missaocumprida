@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { PageSpinner } from '@/components/ui/Spinner'
 import { formatCurrency } from '@/lib/utils'
 import { PriceEstimator } from '@/components/PriceEstimator'
+import { usePublicConfig } from '@/hooks/usePublicConfig'
 
 interface CategoryWithQuestionnaire extends Category {
   questionnaire_fields: QuestionnaireField[]
@@ -37,6 +38,14 @@ export default function NovoOrderPage() {
   const [gpsCoords, setGpsCoords] = useState<{ latitude: number; longitude: number } | null>(null)
   const [gettingGps, setGettingGps] = useState(false)
   const [isUrgent, setIsUrgent] = useState(false)
+  const { max_order_photos: maxPhotos } = usePublicConfig()
+  // Id deste formulário: se a rede cair e o pedido for reenviado, o servidor
+  // devolve o mesmo pedido em vez de criar outro.
+  const [clientRequestId] = useState(() =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(16)}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`,
+  )
 
   const { register, handleSubmit, formState: { errors }, watch } = useForm<{
     description: string
@@ -72,11 +81,12 @@ export default function NovoOrderPage() {
 
   const handlePhotoAdd = useCallback((files: FileList | null) => {
     if (!files) return
-    const newFiles = Array.from(files).slice(0, 5 - photos.length)
+    const newFiles = Array.from(files).slice(0, Math.max(0, maxPhotos - photos.length))
+    if (files.length > newFiles.length) toast(`Máximo de ${maxPhotos} fotos por pedido`)
     const newPreviews = newFiles.map((f) => URL.createObjectURL(f))
     setPhotos((p) => [...p, ...newFiles])
     setPhotoPreviews((p) => [...p, ...newPreviews])
-  }, [photos.length])
+  }, [photos.length, maxPhotos])
 
   const removePhoto = (idx: number) => {
     setPhotos((p) => p.filter((_, i) => i !== idx))
@@ -102,14 +112,32 @@ export default function NovoOrderPage() {
     setSubmitting(true)
 
     try {
-      // Validate required fields
-      const requiredFields = (category.questionnaire_fields ?? []).filter((f) => f.is_required && f.field_type !== 'PHOTO')
+      // Validate required fields (Sim/Não e fotos nunca são obrigatórios)
+      const requiredFields = (category.questionnaire_fields ?? []).filter(
+        (f) => f.is_required && f.field_type !== 'PHOTO' && f.field_type !== 'BOOLEAN',
+      )
       for (const field of requiredFields) {
         if (!answers[field.id]) {
           toast.error(`Campo obrigatório: ${field.question}`)
           setSubmitting(false)
           return
         }
+      }
+      if (category.description_required && (formData.description ?? '').trim().length < 5) {
+        toast.error('Descreva o serviço que você precisa')
+        setSubmitting(false)
+        return
+      }
+
+      // Fotos vão ANTES do pedido: se o upload falhar, nada é criado pela metade
+      let photoUrls: string[] = []
+      if (photos.length > 0) {
+        const fd = new FormData()
+        photos.forEach((f) => fd.append('photos', f))
+        const up = await api.post('/orders/photos', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        photoUrls = up.data.data.urls
       }
 
       // Create order
@@ -127,21 +155,14 @@ export default function NovoOrderPage() {
         city: formData.city,
         state: formData.state,
         is_urgent: isUrgent,
+        photos: photoUrls,
+        client_request_id: clientRequestId,
         ...(gpsCoords ?? {}),
       }
 
       const res = await api.post('/orders', payload)
       const order = res.data.data
       const orderId = order.id
-
-      // Upload photos if any
-      if (photos.length > 0) {
-        const fd = new FormData()
-        photos.forEach((f) => fd.append('photos', f))
-        await api.post(`/orders/${orderId}/photos`, fd, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        })
-      }
 
       toast.success('Pedido criado! Aguarde propostas dos prestadores.')
       router.push(`/pedido/${orderId}`)
@@ -297,7 +318,6 @@ export default function NovoOrderPage() {
   if (loading) return <PageSpinner />
   if (!category) return null
 
-  const photoRequired = (category.questionnaire_fields ?? []).some((f) => f.field_type === 'PHOTO' && f.is_required)
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -367,20 +387,31 @@ export default function NovoOrderPage() {
 
         {/* Description */}
         <div className="bg-white rounded-2xl border border-slate2-200 p-6">
-          <h2 className="font-semibold text-slate2-900 mb-4">Descrição adicional</h2>
+          <h2 className="font-semibold text-slate2-900 mb-4">
+            {category.description_required ? 'Descreva o serviço' : 'Descrição adicional'}
+            {category.description_required && <span className="text-red-500 ml-1">*</span>}
+          </h2>
           <Textarea
-            placeholder="Descreva detalhes importantes sobre o serviço que precisar..."
+            placeholder={category.description_hint || 'Descreva detalhes importantes sobre o serviço que precisar...'}
             {...register('description')}
           />
+          <p className="text-xs text-slate2-400 mt-2">
+            Não informe telefone, e-mail ou redes sociais — o contato é liberado após a confirmação das taxas de conexão.
+          </p>
         </div>
 
-        {/* Photos */}
+        {/* Photos — opcionais em todos os serviços */}
         <div className="bg-white rounded-2xl border border-slate2-200 p-6">
           <h2 className="font-semibold text-slate2-900 mb-1">
-            Fotos do local / serviço
-            {photoRequired && <span className="text-red-500 ml-1">*</span>}
+            Fotos do serviço <span className="text-xs font-normal text-slate2-400">(opcional)</span>
           </h2>
-          <p className="text-xs text-slate2-500 mb-4">Até 5 fotos. Ajuda os prestadores a fazer uma proposta mais precisa.</p>
+          <p className="text-xs text-slate2-500 mb-1">
+            Até {maxPhotos} fotos. Ajudam o prestador a entender o que você precisa e a fazer uma proposta mais precisa.
+          </p>
+          {category.photo_hint && (
+            <p className="text-xs text-brand-700 mb-4">Sugestão: {category.photo_hint}</p>
+          )}
+          {!category.photo_hint && <div className="mb-4" />}
 
           <div className="flex flex-wrap gap-3">
             {photoPreviews.map((src, i) => (
@@ -397,7 +428,7 @@ export default function NovoOrderPage() {
               </div>
             ))}
 
-            {photos.length < 5 && (
+            {photos.length < maxPhotos && (
               <label className="w-24 h-24 rounded-xl border-2 border-dashed border-slate2-300 flex flex-col items-center justify-center cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition-colors">
                 <Upload className="w-5 h-5 text-slate2-400" />
                 <span className="text-xs text-slate2-400 mt-1">Adicionar</span>
@@ -480,7 +511,7 @@ export default function NovoOrderPage() {
                 {...register('address')}
               />
               <p className="text-xs text-slate2-400">
-                Endereço exato só é revelado ao prestador após aceite da proposta
+                O endereço exato só é revelado ao prestador depois que as taxas de conexão forem pagas
               </p>
             </div>
 

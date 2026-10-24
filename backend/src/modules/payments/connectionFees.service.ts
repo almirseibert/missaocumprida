@@ -1,4 +1,5 @@
 import QRCode from 'qrcode'
+import { archiveScheduleTx } from '../schedules/scheduleArchive.service'
 import { Prisma, ConnectionFee, OrderStatus } from '@prisma/client'
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
@@ -729,10 +730,13 @@ export async function cancelPendingFeesForProposal(proposalId: string): Promise<
 export async function reopenOrderFromBrokenMatch(
   orderId: string,
   acceptedProposalId: string,
+  reason = 'BROKEN_MATCH',
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const schedule = await tx.schedule.findUnique({ where: { order_id: orderId } })
     if (schedule) {
+      // Guarda agendamento + chat + avaliações antes de apagar (prova para o suporte)
+      await archiveScheduleTx(tx, schedule.id, reason)
       await tx.message.deleteMany({ where: { schedule_id: schedule.id } })
       await tx.rating.deleteMany({ where: { schedule_id: schedule.id } })
       await tx.schedule.delete({ where: { id: schedule.id } })
@@ -791,7 +795,7 @@ export async function expireOverdueProviderFees(): Promise<{ expired: number }> 
         data: { no_show_count: { increment: 1 } },
       })
 
-      await reopenOrderFromBrokenMatch(order.id, providerFee.proposal_id)
+      await reopenOrderFromBrokenMatch(order.id, providerFee.proposal_id, 'PROVIDER_FEE_TIMEOUT')
 
       if (clientFee) await creditFee(clientFee, 'PROVIDER_TIMEOUT')
 

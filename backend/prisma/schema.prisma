@@ -201,6 +201,8 @@ model User {
   support_messages        SupportTicketMessage[]
   connection_fees         ConnectionFee[]
 
+  @@index([referred_by_id])
+  @@index([deletion_requested_at])
   @@map("users")
 }
 
@@ -313,6 +315,8 @@ model RefreshToken {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
+  @@index([user_id])
+  @@index([expires_at])
   @@map("refresh_tokens")
 }
 
@@ -336,29 +340,35 @@ model ServiceGroup {
 }
 
 model Category {
-  id                String   @id @default(uuid())
-  group_id          String
-  name              String
-  slug              String   @unique
-  icon              String
-  description       String?
-  base_price_min    Float    @default(50)
-  base_price_max    Float    @default(200)
-  requires_photos   Boolean  @default(true)
-  estimated_hours   Float?
-  is_active         Boolean  @default(true)
-  order             Int      @default(0)
+  id                   String   @id @default(uuid())
+  group_id             String
+  name                 String
+  slug                 String   @unique
+  icon                 String
+  description          String?
+  base_price_min       Float    @default(50)
+  base_price_max       Float    @default(200)
+  requires_photos      Boolean  @default(true) // LEGADO: fotos são sempre opcionais
+  // Dica do campo "Descrição" do pedido (ex.: "Descreva o problema com detalhes")
+  description_hint     String?
+  // Descrição obrigatória nesta categoria (substitui as perguntas "Descreva…")
+  description_required Boolean  @default(false)
+  // Dica do bloco de fotos (ex.: "Foto do local · Foto do aparelho")
+  photo_hint           String?
+  estimated_hours      Float?
+  is_active            Boolean  @default(true)
+  order                Int      @default(0)
   // ---- Precificação dinâmica (feature #15) ----
   // Arquétipo do questionário (REPAIR, AREA_CLEANING, AREA_SERVICE,
   // TRANSPORT, LESSON, EVENT, HEALTH_BEAUTY, CONSULTING, GENERIC)
-  archetype         String?
+  archetype            String?
   // Formula estruturada — ver utils/priceEstimator.ts
-  pricing_formula   Json?
+  pricing_formula      Json?
   // Unidade exibida (m², hora, ponto, evento, sessão, km)
-  pricing_unit      String?
+  pricing_unit         String?
   // Multiplicador regional por UF/região ({ "SP": 1.4, "RJ": 1.3 })
-  region_multiplier Json?
-  created_at        DateTime @default(now())
+  region_multiplier    Json?
+  created_at           DateTime @default(now())
 
   // Relações
   group                ServiceGroup         @relation(fields: [group_id], references: [id])
@@ -388,6 +398,9 @@ model QuestionnaireField {
   // Efeito da resposta no preço (ver utils/priceEstimator.ts)
   pricing_effect Json?
   help_text      String? // Texto de ajuda abaixo do campo
+  // Perguntas nunca são apagadas (respostas de pedidos antigos apontam para o id):
+  // as retiradas do formulário ficam arquivadas.
+  is_active      Boolean   @default(true)
   created_at     DateTime  @default(now())
 
   category Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
@@ -414,6 +427,7 @@ model ProviderSkill {
   category Category @relation(fields: [category_id], references: [id])
 
   @@unique([provider_id, category_id])
+  @@index([category_id, is_active])
   @@map("provider_skills")
 }
 
@@ -469,6 +483,10 @@ model Order {
   client_fee_paid_at         DateTime? // cliente pagou a taxa dele
   provider_fee_paid_at       DateTime? // prestador pagou a taxa dele → contatos liberados
   provider_fee_due_at        DateTime? // prazo do prestador (timeout → recredita cliente)
+  // Idempotência da criação: o app reenvia o mesmo id se a rede cair no meio
+  client_request_id          String?
+  // Link público mostra as fotos só se o cliente permitir (podem envolver a pessoa)
+  public_share_photos        Boolean     @default(false)
   created_at                 DateTime    @default(now())
   updated_at                 DateTime    @updatedAt
 
@@ -482,8 +500,42 @@ model Order {
   subscription            Subscription?           @relation(fields: [subscription_id], references: [id])
   subscription_occurrence SubscriptionOccurrence? @relation(fields: [subscription_occurrence_id], references: [id])
   connection_fees         ConnectionFee[]
+  service_photos          OrderPhoto[]
 
+  @@unique([client_id, client_request_id])
+  @@index([client_id, created_at])
+  @@index([status, category_id, created_at])
+  @@index([status, provider_fee_due_at])
   @@map("orders")
+}
+
+// ============================================================
+// FOTOS DO SERVIÇO (check-in / conclusão — várias por etapa)
+// As fotos do pedido em si continuam em Order.photos.
+// ============================================================
+
+enum OrderPhotoStage {
+  ORDER
+  CHECKIN
+  COMPLETION
+}
+
+model OrderPhoto {
+  id          String          @id @default(uuid())
+  order_id    String
+  schedule_id String?
+  stage       OrderPhotoStage
+  media_type  String          @default("IMAGE") // VIDEO no futuro
+  url         String
+  uploaded_by String
+  latitude    Float?
+  longitude   Float?
+  created_at  DateTime        @default(now())
+
+  order Order @relation(fields: [order_id], references: [id])
+
+  @@index([order_id, stage, created_at])
+  @@map("order_photos")
 }
 
 // ============================================================
@@ -511,6 +563,8 @@ model Proposal {
   connection_fees ConnectionFee[]
 
   @@unique([order_id, provider_id])
+  @@index([provider_id, created_at])
+  @@index([order_id, status])
   @@map("proposals")
 }
 
@@ -527,6 +581,7 @@ model BoostPurchase {
   proposal Proposal @relation(fields: [proposal_id], references: [id], onDelete: Cascade)
 
   @@index([provider_id])
+  @@index([proposal_id])
   @@map("boost_purchases")
 }
 
@@ -564,7 +619,34 @@ model Schedule {
   ratings  Rating[]
   messages Message[]
 
+  @@index([client_id, scheduled_at])
+  @@index([provider_id, scheduled_at])
   @@map("schedules")
+}
+
+// ============================================================
+// ARQUIVO DE AGENDAMENTOS DESFEITOS
+// Quando uma conexão é desfeita (desistência, no-show, prazo da taxa) o
+// agendamento é apagado para o pedido poder reabrir — antes disso, uma cópia
+// (agendamento + mensagens do chat + avaliações) fica guardada aqui como prova.
+// ============================================================
+
+model ScheduleArchive {
+  id          String   @id @default(uuid())
+  schedule_id String
+  order_id    String
+  proposal_id String
+  provider_id String
+  client_id   String
+  reason      String
+  snapshot    Json
+  archived_at DateTime @default(now())
+  archived_by String? // usuário/admin que disparou (null = sistema)
+
+  @@index([order_id])
+  @@index([provider_id])
+  @@index([client_id])
+  @@map("schedule_archives")
 }
 
 // ============================================================
@@ -586,6 +668,8 @@ model Rating {
   reviewed User     @relation("RatingsReceived", fields: [reviewed_id], references: [id])
 
   @@unique([schedule_id, reviewer_id])
+  @@index([reviewed_id, created_at])
+  @@index([reviewer_id])
   @@map("ratings")
 }
 
@@ -605,6 +689,7 @@ model Message {
   schedule Schedule @relation(fields: [schedule_id], references: [id])
   sender   User     @relation(fields: [sender_id], references: [id])
 
+  @@index([schedule_id, created_at])
   @@map("messages")
 }
 
@@ -643,6 +728,9 @@ model Payment {
   client   User  @relation("ClientPayments", fields: [client_id], references: [id])
   provider User  @relation("ProviderPayments", fields: [provider_id], references: [id])
 
+  @@index([client_id])
+  @@index([provider_id])
+  @@index([status, hold_until])
   @@map("payments")
 }
 
@@ -684,6 +772,7 @@ model ConnectionFee {
   @@unique([proposal_id, side])
   @@index([order_id])
   @@index([user_id, status])
+  @@index([status, expires_at])
   @@map("connection_fees")
 }
 
@@ -751,6 +840,8 @@ model ProviderWithdrawal {
 
   provider User @relation(fields: [provider_id], references: [id])
 
+  @@index([provider_id, created_at])
+  @@index([status])
   @@map("provider_withdrawals")
 }
 
@@ -771,6 +862,9 @@ enum NotificationType {
   CONTACT_UNLOCKED // ambas as taxas pagas — contatos liberados
   FEE_CREDITED // taxa devolvida como crédito (no-show/timeout)
   ANNOUNCEMENT // aviso enviado pelo admin
+  VERIFIED_PRO // assinatura Pro confirmada
+  ORDER_UPDATED // cliente editou um pedido com proposta pendente
+  ORDER_CANCELLED // cliente cancelou/excluiu um pedido com proposta pendente
   GENERAL
 }
 
@@ -786,6 +880,7 @@ model Notification {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
+  @@index([user_id, read, created_at])
   @@map("notifications")
 }
 
@@ -1013,6 +1108,7 @@ model FileAsset {
   owner_id   String? // dono do arquivo, para autorização de itens sensíveis
   created_at DateTime @default(now())
 
+  @@index([owner_id])
   @@map("file_assets")
 }
 

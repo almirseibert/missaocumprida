@@ -21,6 +21,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
 import { ShareOrderButton } from '@/components/ShareOrderButton'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
+import { ServicePhotoGallery } from '@/components/ServicePhotoGallery'
+import { usePublicConfig, estimateFee } from '@/hooks/usePublicConfig'
 import {
   formatCurrency,
   formatDateTime,
@@ -44,6 +46,7 @@ export default function OrderDetailPage() {
   const [proposalMsg, setProposalMsg] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [cancelConfirm, setCancelConfirm] = useState(false)
+  const { connection_fee: feeCfg } = usePublicConfig()
 
   const isClient = user?.id === order?.client_id
   const canPropose =
@@ -177,7 +180,22 @@ export default function OrderDetailPage() {
         {order.description && (
           <div>
             <p className="text-sm font-medium text-slate2-500 mb-1">Descrição</p>
-            <p className="text-slate2-800">{order.description}</p>
+            <p className="text-slate2-800 whitespace-pre-line">{order.description}</p>
+          </div>
+        )}
+
+        {/* Respostas do questionário — o prestador usa para orçar */}
+        {(order.answers_display?.length ?? 0) > 0 && (
+          <div>
+            <p className="text-sm font-medium text-slate2-500 mb-2">Detalhes informados</p>
+            <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+              {order.answers_display!.map((a) => (
+                <div key={a.field_id} className="text-sm">
+                  <dt className="text-slate2-500">{a.question}</dt>
+                  <dd className="font-medium text-slate2-900 whitespace-pre-line">{a.value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         )}
 
@@ -217,19 +235,20 @@ export default function OrderDetailPage() {
             </div>
             {isClient ? (
               <div className="flex justify-between text-slate2-500">
-                <span>Taxa de serviço ({Math.round((order.client_fee_pct ?? 0.10) * 100)}%)</span>
-                <span>+ {formatCurrency(order.client_fee_value ?? 0)}</span>
+                <span>Sua taxa de conexão ({Math.round((order.client_fee_pct ?? feeCfg.client_pct) * 1000) / 10}%)</span>
+                <span>{formatCurrency(order.client_fee_value ?? 0)}</span>
               </div>
             ) : (
               <div className="flex justify-between text-slate2-500">
-                <span>Taxa da plataforma ({Math.round((order.platform_fee_pct ?? 0.10) * 100)}%)</span>
-                <span>− {formatCurrency(order.platform_fee_value)}</span>
+                <span>Sua taxa de conexão ({Math.round((order.platform_fee_pct ?? feeCfg.provider_pct) * 1000) / 10}%)</span>
+                <span>{formatCurrency(order.platform_fee_value)}</span>
               </div>
             )}
-            <div className="flex justify-between text-green-700 font-bold border-t border-green-200 pt-2">
-              <span>{isClient ? 'Total cobrado de você' : 'Você recebe'}</span>
-              <span>{isClient ? formatCurrency(order.client_total ?? order.final_price ?? 0) : formatCurrency(order.provider_amount)}</span>
-            </div>
+            <p className="text-xs text-green-800 border-t border-green-200 pt-2">
+              {isClient
+                ? 'O valor do serviço é pago direto ao profissional. A taxa de conexão libera o contato e o endereço.'
+                : 'O cliente paga o serviço direto a você. A taxa de conexão libera o contato e o endereço do cliente.'}
+            </p>
           </div>
         )}
 
@@ -255,9 +274,31 @@ export default function OrderDetailPage() {
                     {order.state && `/${order.state}`}
                   </p>
                 ) : (
-                  <p className="font-medium text-slate2-900">
-                    {order.address || ''}{order.neighborhood && `, ${order.neighborhood}`}{order.city && `, ${order.city}`}{order.state && `/${order.state}`}
-                  </p>
+                  <>
+                    <p className="font-medium text-slate2-900">
+                      {order.address || ''}{order.neighborhood && `, ${order.neighborhood}`}{order.city && `, ${order.city}`}{order.state && `/${order.state}`}
+                    </p>
+                    {!isClient && order.latitude != null && order.longitude != null && (
+                      <div className="flex gap-3 mt-1">
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${order.latitude},${order.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-brand-700 hover:underline"
+                        >
+                          Abrir no Google Maps
+                        </a>
+                        <a
+                          href={`https://waze.com/ul?ll=${order.latitude},${order.longitude}&navigate=yes`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-brand-700 hover:underline"
+                        >
+                          Abrir no Waze
+                        </a>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -270,11 +311,16 @@ export default function OrderDetailPage() {
             <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
               <EyeOff className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>
-                <strong>Localização aproximada.</strong> O mapa abaixo é apenas informativo — indica a região geral (cidade e bairro) onde o serviço será realizado, mas <strong>não revela o endereço exato</strong>. O endereço completo é liberado somente após o aceite da proposta, evitando que o serviço seja contratado fora da plataforma.
+                <strong>Localização aproximada.</strong> O mapa abaixo é apenas informativo — indica a região geral (cidade e bairro) onde o serviço será realizado, mas <strong>não revela o endereço exato</strong>. O endereço completo é liberado somente depois que cliente e prestador pagam as taxas de conexão, evitando que o serviço seja contratado fora da plataforma.
               </span>
             </div>
             <BlurredMapView lat={order.latitude} lng={order.longitude} radiusMeters={500} />
           </div>
+        )}
+
+        {/* Fotos de check-in e conclusão (partes da conexão paga) */}
+        {(order.service_photos?.length ?? 0) > 0 && (
+          <ServicePhotoGallery photos={order.service_photos!} />
         )}
 
         {/* Photos */}
@@ -325,8 +371,7 @@ export default function OrderDetailPage() {
             <div className="space-y-4">
               {proposals.map((prop) => {
                 const highlighted = prop.id === bestId
-                const clientFee = 0.12
-                const clientTotal = prop.value * (1 + clientFee)
+                const connectionFee = estimateFee(prop.value, feeCfg.client_pct, feeCfg.min)
                 const boostLevel = prop.boost_level ?? 0
                 return (
                   <div
@@ -372,11 +417,9 @@ export default function OrderDetailPage() {
                         <p className={`font-display text-[22px] font-extrabold ${highlighted ? 'text-brand-700' : 'text-slate2-900'} leading-none`}>
                           {formatCurrency(prop.value)}
                         </p>
-                        {highlighted && (
-                          <p className="text-[11px] font-semibold text-accent-600 mt-1">
-                            Você paga {formatCurrency(clientTotal)}
-                          </p>
-                        )}
+                        <p className="text-[11px] font-semibold text-accent-600 mt-1">
+                          Taxa de conexão {formatCurrency(connectionFee)}
+                        </p>
                       </div>
                     </div>
                     {prop.message && (
@@ -500,26 +543,32 @@ export default function OrderDetailPage() {
             />
           </div>
 
-          {/* Preview de taxa da plataforma */}
+          {/* Prévia da taxa de conexão do prestador (valores do admin) */}
           {proposalValue && parseFloat(proposalValue) > 0 && (() => {
             const gross = parseFloat(proposalValue)
-            const providerFee = Math.round(gross * 0.10 * 100) / 100
-            const net = Math.round((gross - providerFee) * 100) / 100
+            const providerFee = estimateFee(gross, feeCfg.provider_pct, feeCfg.min)
+            const pctLabel = `${Math.round(feeCfg.provider_pct * 1000) / 10}%`
+            const regularLabel = `${Math.round(feeCfg.regular_pct * 1000) / 10}%`
             return (
               <div className="bg-slate2-50 rounded-xl p-4 space-y-2 text-sm">
                 <p className="font-medium text-slate2-700">Resumo financeiro</p>
                 <div className="flex justify-between text-slate2-600">
-                  <span>Valor da proposta</span>
-                  <span className="font-medium">R$ {gross.toFixed(2)}</span>
+                  <span>Valor do serviço (pago direto pelo cliente)</span>
+                  <span className="font-medium">{formatCurrency(gross)}</span>
                 </div>
                 <div className="flex justify-between text-slate2-500">
-                  <span>Taxa da plataforma (10%)</span>
-                  <span>− R$ {providerFee.toFixed(2)}</span>
+                  <span>
+                    Sua taxa de conexão (
+                    {feeCfg.promo_active && feeCfg.regular_pct > feeCfg.provider_pct && (
+                      <s className="mr-1">{regularLabel}</s>
+                    )}
+                    {pctLabel})
+                  </span>
+                  <span>{formatCurrency(providerFee)}</span>
                 </div>
-                <div className="flex justify-between text-green-700 font-semibold border-t border-slate2-200 pt-2">
-                  <span>Você recebe</span>
-                  <span>R$ {net.toFixed(2)}</span>
-                </div>
+                <p className="text-xs text-slate2-500 border-t border-slate2-200 pt-2">
+                  A taxa só é cobrada se o cliente aceitar a sua proposta e libera o contato e o endereço dele.
+                </p>
               </div>
             )
           })()}

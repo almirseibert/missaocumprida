@@ -112,6 +112,30 @@ Confirme que já existem (auditoria de junho): `JWT_SECRET`/`JWT_REFRESH_SECRET`
 - **Senha:** novos cadastros exigem 8+ caracteres (contas antigas continuam entrando).
 - ⚠️ **Migrações do Prisma:** o histórico em `prisma/migrations` não cria tabelas como `referral_events` (parte do schema foi aplicada com `db push`). `migrate deploy` num banco **novo** falha. Antes de criar um ambiente novo, gere um baseline a partir do banco de produção (`prisma migrate diff` + `prisma migrate resolve`).
 
+### 3.2.2 Rodada pós-Play (24/10/2026) — ⚠️ migração OBRIGATÓRIA antes do redeploy do back
+O código novo do backend lê colunas/tabelas novas. **Ordem do deploy:**
+1. Backup do banco (`pg_dump -Fc`).
+2. No container do backend (ou local com `DATABASE_URL` de produção): `npm run db:migrate:prod`.
+   Aplica `20261024000000_notification_types_v2` e `20261024000100_photos_catalog_archives_indexes`
+   (aditivas e reexecutáveis — `IF NOT EXISTS`). A segunda também ajusta o catálogo:
+   perguntas de foto viram dica do bloco de fotos (fotos opcionais em **todos** os serviços),
+   Sim/Não deixa de ser obrigatório, perguntas que repetiam o formulário ("É urgente?",
+   "Descreva…", "Data prevista do evento") são arquivadas — nada é apagado.
+3. Redeploy do back, depois do front.
+4. **Não rode `npm run db:seed` em produção** enquanto o seed não for reescrito (ele recria as
+   perguntas com IDs novos e desfaz os ajustes acima).
+
+Envs novas (todas opcionais; padrões seguros):
+| Env | Padrão | Para quê |
+|---|---|---|
+| `ALLOW_PAYMENT_SIMULATION` | desligado | Rotas `/payments/*/simulate` só em teste local (nunca em produção) |
+| `RECURRING_ENABLED` | `false` | Serviços recorrentes ficam ocultos até cobrarem a Taxa de Conexão |
+
+O que mudou para quem usa: bypass da taxa pelo check-in fechado; feed mostra pedidos com
+proposta; distâncias em faixa ("1–3 km"); fotos opcionais em todos os serviços (até 10, ajustável
+em Configurações), várias fotos no check-in/conclusão; prestador vê as respostas do questionário;
+chat mostra as mensagens mais recentes; agendamento desfeito fica arquivado como prova.
+
 ### 3.3 Rotacionar a senha do admin (crítico — S1)
 No shell do container do backend (ou local apontando para o banco de prod), com `ADMIN_EMAIL` e `ADMIN_PASSWORD` definidos:
 ```

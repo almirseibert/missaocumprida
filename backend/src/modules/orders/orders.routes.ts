@@ -3,7 +3,7 @@ import { authenticate, requireVerified, requireRole } from '../../middlewares/au
 import { upload } from '../../middlewares/upload'
 import {
   createOrder, listMyOrders, getProviderFeed,
-  getOrder, uploadOrderPhotos, cancelOrder,
+  getOrder, uploadOrderPhotos, preUploadOrderPhotos, cancelOrder,
   adminListOrders, adminGetOrder, adminCancelOrder,
 } from './orders.controller'
 
@@ -17,10 +17,12 @@ router.get('/admin/orders/:id', requireRole('ADMIN'), adminGetOrder)
 router.patch('/admin/orders/:id/cancel', requireRole('ADMIN'), adminCancelOrder)
 
 router.post('/', requireVerified, createOrder)
+// Fotos antes do pedido existir (antes de '/:id' para não colidir)
+router.post('/photos', upload.array('photos', 20), preUploadOrderPhotos)
 router.get('/', listMyOrders)
 router.get('/feed', getProviderFeed)
 router.get('/:id', getOrder)
-router.post('/:id/photos', upload.array('photos', 5), uploadOrderPhotos)
+router.post('/:id/photos', upload.array('photos', 20), uploadOrderPhotos)
 router.patch('/:id/cancel', cancelOrder)
 
 export default router

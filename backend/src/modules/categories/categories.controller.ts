@@ -38,10 +38,12 @@ export async function getCategoryBySlug(req: Request, res: Response) {
   const category = await prisma.category.findUnique({
     where: { slug: req.params.slug },
     include: {
-      group: { select: { id: true, name: true, slug: true, icon: true } },
+      group: { select: { id: true, name: true, slug: true, icon: true, is_active: true } },
     },
   })
-  if (!category) return R.notFound(res, 'Categoria não encontrada')
+  if (!category || !category.is_active || !category.group?.is_active) {
+    return R.notFound(res, 'Categoria não encontrada')
+  }
   return R.ok(res, category)
 }
 
@@ -52,7 +54,12 @@ export async function getQuestionnaire(req: Request, res: Response) {
       id: true, name: true, icon: true, description: true, requires_photos: true,
       base_price_min: true, base_price_max: true, estimated_hours: true,
       archetype: true, pricing_formula: true, pricing_unit: true,
+      description_hint: true, description_required: true, photo_hint: true,
+      is_active: true,
+      group: { select: { is_active: true } },
       questionnaire_fields: {
+        // Perguntas arquivadas saem do formulário (respostas antigas continuam no pedido)
+        where: { is_active: true },
         orderBy: { order: 'asc' },
         select: {
           id: true, question: true, field_type: true, options: true,
@@ -62,9 +69,13 @@ export async function getQuestionnaire(req: Request, res: Response) {
       },
     },
   })
-  if (!category) return R.notFound(res, 'Categoria não encontrada')
+  if (!category || !category.is_active || !category.group?.is_active) {
+    return R.notFound(res, 'Categoria não encontrada')
+  }
 
-  return R.ok(res, category)
+  const { group: _group, ...rest } = category
+  // Fotos são sempre opcionais e disponíveis em todas as categorias
+  return R.ok(res, { ...rest, requires_photos: false })
 }
 
 const estimateSchema = z.object({
@@ -86,6 +97,7 @@ export async function estimateCategoryPrice(req: Request, res: Response) {
       base_price_min: true, base_price_max: true,
       pricing_formula: true, pricing_unit: true,
       questionnaire_fields: {
+        where: { is_active: true },
         select: {
           id: true, field_type: true, affects_price: true,
           price_modifier: true, key: true, pricing_effect: true,

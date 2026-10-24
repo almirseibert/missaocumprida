@@ -29,12 +29,21 @@ export async function listMessages(req: Request, res: Response) {
     return forbidden(res, CHAT_LOCKED_MSG)
   }
 
-  const messages = await prisma.message.findMany({
-    where: { schedule_id: scheduleId },
+  // Paginação do mais novo para o mais antigo: ?before=<ISO>&limit=50.
+  // A resposta continua em ordem cronológica (o app antigo espera assim) —
+  // antes vinham as 100 mais ANTIGAS e as novas não apareciam.
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '100'), 10) || 100, 1), 200)
+  const before = typeof req.query.before === 'string' ? new Date(req.query.before) : null
+  const newestFirst = await prisma.message.findMany({
+    where: {
+      schedule_id: scheduleId,
+      ...(before && !Number.isNaN(before.getTime()) ? { created_at: { lt: before } } : {}),
+    },
     include: { sender: { select: { id: true, name: true, avatar: true } } },
-    orderBy: { created_at: 'asc' },
-    take: 100,
+    orderBy: { created_at: 'desc' },
+    take: limit,
   })
+  const messages = newestFirst.reverse()
 
   // Mark received messages as read
   await prisma.message.updateMany({

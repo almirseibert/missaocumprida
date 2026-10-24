@@ -7,20 +7,37 @@ import * as R from '../../utils/response'
 import { sendToUsers } from '../push/push.service'
 import { persistUpload } from '../files/files.service'
 import { contactsUnlocked } from '../../utils/orderVisibility'
+import { sanitizeContactInfo } from '../../utils/contactSanitizer'
+import { getSettings } from '../settings/settings.service'
+import {
+  RawAnswer,
+  buildAnswersDisplay,
+  normalizeAnswers,
+  normalizeCityState,
+  parseFlexibleDate,
+  validateOwnedPhotoUrls,
+} from './orders.service'
 
+// Aceita os formatos do app antigo (booleano cru, data DD/MM/AAAA, sem UF) e
+// normaliza no servidor — ver orders.service.ts.
+const answerValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()])
 const createOrderSchema = z.object({
   category_id: z.string().uuid(),
-  description: z.string().optional(),
-  answers: z.record(z.string()),
-  desired_date: z.string().datetime().optional(),
-  address: z.string().optional().default(''),
-  neighborhood: z.string().optional().default(''),
-  city: z.string().optional().default(''),
-  state: z.string().length(2).default('SP'),
+  description: z.string().max(4000).optional().nullable(),
+  answers: z.record(answerValue).optional().default({}),
+  desired_date: z.union([z.string(), z.null()]).optional(),
+  address: z.string().max(300).optional().nullable(),
+  neighborhood: z.string().max(120).optional().nullable(),
+  city: z.string().max(120).optional().nullable(),
+  state: z.string().max(40).optional().nullable(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   is_urgent: z.boolean().optional().default(false),
   urgency_radius_km: z.number().int().min(1).max(50).optional(),
+  // Fotos já enviadas por POST /orders/photos (opcionais, em qualquer categoria)
+  photos: z.array(z.string().url()).optional().default([]),
+  // Id gerado pelo app ao abrir o formulário: reenvio não duplica o pedido
+  client_request_id: z.string().uuid().optional(),
 })
 
 const URGENCY_FEE_PCT = 0.25 // 25% sobre o preço estimado
@@ -31,34 +48,74 @@ export async function createOrder(req: Request, res: Response) {
   const parsed = createOrderSchema.safeParse(req.body)
   if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
 
-  const { category_id, description, answers, desired_date, address, neighborhood, city, state, is_urgent, urgency_radius_km } = parsed.data
-  let { latitude, longitude } = parsed.data
+  const d = parsed.data
+  const { category_id, is_urgent, urgency_radius_km, client_request_id } = d
+  let { latitude, longitude } = d
+
+  // Idempotência: o mesmo formulário reenviado (rede caiu) devolve o pedido já criado
+  if (client_request_id) {
+    const existing = await prisma.order.findUnique({
+      where: { client_id_client_request_id: { client_id: req.userId, client_request_id } },
+      include: {
+        category: { select: { id: true, name: true, icon: true } },
+        client: { select: { id: true, name: true, avatar: true } },
+      },
+    })
+    if (existing) return R.ok(res, existing, 'Pedido já registrado')
+  }
 
   const category = await prisma.category.findUnique({
     where: { id: category_id },
-    include: { questionnaire_fields: true },
+    include: { questionnaire_fields: true, group: { select: { is_active: true } } },
   })
   if (!category) return R.notFound(res, 'Categoria não encontrada')
+  if (!category.is_active || !category.group?.is_active) {
+    return R.badRequest(res, 'Esta categoria foi atualizada. Volte e abra o formulário novamente.')
+  }
+
+  const client = await prisma.user.findUnique({
+    where: { id: req.userId },
+    select: { latitude: true, longitude: true, address_state: true },
+  })
 
   // Fallback: se o cliente não enviou coordenadas no formulário, herda do perfil
   if (latitude == null || longitude == null) {
-    const client = await prisma.user.findUnique({
-      where: { id: req.userId },
-      select: { latitude: true, longitude: true },
-    })
     if (client?.latitude != null && client?.longitude != null) {
       latitude = client.latitude
       longitude = client.longitude
     }
   }
 
-  // Validar campos obrigatórios
-  const requiredFields = category.questionnaire_fields.filter(f => f.is_required && f.field_type !== 'PHOTO')
-  for (const field of requiredFields) {
-    if (!answers[field.id]) {
-      return R.badRequest(res, `Campo obrigatório não preenchido: ${field.question}`)
-    }
+  const { city, state } = normalizeCityState(d.city ?? undefined, d.state ?? undefined, client?.address_state)
+  const address = (d.address ?? '').trim()
+  const neighborhood = (d.neighborhood ?? '').trim()
+
+  const parsedDate = parseFlexibleDate(d.desired_date)
+  if (parsedDate === 'invalid') return R.badRequest(res, 'Data desejada inválida. Use o formato DD/MM/AAAA.')
+  if (parsedDate && parsedDate.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+    return R.badRequest(res, 'A data desejada já passou. Escolha uma data a partir de hoje.')
   }
+
+  // Respostas: normaliza formatos, valida opções e obrigatórias
+  const { answers, missing, invalid } = normalizeAnswers(category.questionnaire_fields, d.answers as Record<string, RawAnswer>)
+  if (missing.length) return R.badRequest(res, `Campo obrigatório não preenchido: ${missing.join(', ')}`)
+  if (invalid.length) return R.badRequest(res, `Resposta inválida em: ${invalid.join(', ')}`)
+
+  // Descrição: obrigatória nas categorias que antes tinham a pergunta "Descreva…"
+  const description = d.description ? sanitizeContactInfo(d.description.trim()) : ''
+  if (category.description_required && description.length < 5) {
+    return R.badRequest(res, category.description_hint
+      ? `Descreva o serviço: ${category.description_hint}`
+      : 'Descreva o serviço que você precisa.')
+  }
+
+  // Fotos (opcionais em todas as categorias)
+  const s = await getSettings()
+  if (d.photos.length > s.max_order_photos) {
+    return R.badRequest(res, `Envie no máximo ${s.max_order_photos} fotos.`)
+  }
+  const photos = await validateOwnedPhotoUrls(d.photos, req.userId)
+  if (photos === null) return R.badRequest(res, 'Uma das fotos não foi encontrada. Envie as fotos novamente.')
 
   // Estimar preço (engine dinâmico — usa pricing_formula se existir, senão fallback legado)
   const price = estimatePriceDynamic(
@@ -91,9 +148,11 @@ export async function createOrder(req: Request, res: Response) {
       client_id: req.userId,
       category_id,
       title,
-      description,
+      description: description || undefined,
       answers,
-      desired_date: desired_date ? new Date(desired_date) : undefined,
+      photos,
+      client_request_id,
+      desired_date: parsedDate ?? undefined,
       address: address || undefined,
       neighborhood: neighborhood || undefined,
       city,
@@ -356,11 +415,26 @@ export async function getOrder(req: Request, res: Response) {
   const isProposalProvider = order.proposals.some(p => p.provider_id === req.userId)
   const unlocked = contactsUnlocked(order.status, order.provider_fee_paid_at)
 
-  if (isClient) return R.ok(res, order)
+  // Respostas do questionário em formato legível — o prestador precisa delas
+  // para orçar. Contatos digitados nas respostas só aparecem após a conexão.
+  const fullAccess = isClient || (isAcceptedProvider && unlocked)
+  const answers_display = buildAnswersDisplay(order.category?.questionnaire_fields ?? [], order.answers, {
+    maskContacts: !fullAccess,
+  })
+  const withDisplay = { ...order, answers_display }
 
-  if (isAcceptedProvider && unlocked) {
-    // Both connection fees paid — full contact for the accepted provider
-    return R.ok(res, order)
+  if (fullAccess) {
+    // Fotos do check-in/conclusão (com GPS) só para as partes da conexão paga
+    const service_photos = await prisma.orderPhoto.findMany({
+      where: { order_id: order.id },
+      orderBy: { created_at: 'asc' },
+      select: { id: true, stage: true, url: true, latitude: true, longitude: true, created_at: true },
+    })
+    return R.ok(res, { ...withDisplay, service_photos })
+  }
+  const order_ = {
+    ...withDisplay,
+    description: order.description ? sanitizeContactInfo(order.description) : order.description,
   }
 
   // O agendamento guarda endereço/GPS de check-in e conclusão: fora da
@@ -371,26 +445,48 @@ export async function getOrder(req: Request, res: Response) {
 
   if (!isProposalProvider) {
     // Unknown visitor — minimal public view, always masked (location + phone)
-    const { proposals: _, ...publicOrder } = stripClientPhone(order)
+    const { proposals: _, ...publicOrder } = stripClientPhone(order_)
     return R.ok(res, maskLocationForProvider({ ...publicOrder, schedule: safeSchedule }))
   }
 
   // Provider with proposal (accepted or not) BEFORE the fees are paid:
   // keeps only their own proposal visible (others' values are competitors'
   // data) and masks address/coords and client phone.
-  const { proposals, ...rest } = stripClientPhone(order)
+  const { proposals, ...rest } = stripClientPhone(order_)
   const ownProposals = proposals.filter((p) => p.provider_id === req.userId)
   return R.ok(res, { ...maskLocationForProvider({ ...rest, schedule: safeSchedule }), proposals: ownProposals })
 }
 
+// POST /api/orders/photos — envia fotos ANTES de criar o pedido (o formulário
+// manda as URLs junto com o pedido; assim, falha de rede no upload não deixa
+// pedido criado pela metade). Fotos opcionais, em qualquer categoria.
+export async function preUploadOrderPhotos(req: Request, res: Response) {
+  const files = Array.isArray(req.files) ? (req.files as Express.Multer.File[]) : []
+  if (files.length === 0) return R.badRequest(res, 'Nenhuma foto enviada')
+  const s = await getSettings()
+  if (files.length > s.max_order_photos) return R.badRequest(res, `Envie no máximo ${s.max_order_photos} fotos.`)
+  const urls: string[] = []
+  for (const f of files) urls.push(await persistUpload(req, f, { ownerId: req.userId }))
+  return R.created(res, { urls }, 'Fotos enviadas')
+}
+
+// POST /api/orders/:id/photos — adiciona fotos a um pedido já criado
 export async function uploadOrderPhotos(req: Request, res: Response) {
   const order = await prisma.order.findUnique({ where: { id: req.params.id } })
   if (!order) return R.notFound(res, 'Pedido não encontrado')
   if (order.client_id !== req.userId) return R.forbidden(res)
-  if (!req.files || !Array.isArray(req.files)) return R.badRequest(res, 'Nenhuma foto enviada')
+  if (['CANCELLED', 'DONE', 'RATED'].includes(order.status)) {
+    return R.badRequest(res, 'Não é possível adicionar fotos a este pedido')
+  }
+  if (!req.files || !Array.isArray(req.files) || req.files.length === 0) return R.badRequest(res, 'Nenhuma foto enviada')
 
   const files = req.files as Express.Multer.File[]
-  const urls = await Promise.all(files.map((f) => persistUpload(req, f)))
+  const s = await getSettings()
+  if (order.photos.length + files.length > s.max_order_photos) {
+    return R.badRequest(res, `Cada pedido aceita no máximo ${s.max_order_photos} fotos.`)
+  }
+  const urls: string[] = []
+  for (const f of files) urls.push(await persistUpload(req, f, { ownerId: req.userId }))
   const updated = await prisma.order.update({
     where: { id: req.params.id },
     data: { photos: { push: urls } },

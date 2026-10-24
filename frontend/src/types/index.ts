@@ -130,6 +130,30 @@ export interface Category {
   requires_photos: boolean
   estimated_hours?: number
   is_active: boolean
+  /** Dica/placeholder do campo Descrição do pedido */
+  description_hint?: string | null
+  /** Descrição obrigatória nesta categoria */
+  description_required?: boolean
+  /** Dica do bloco de fotos (ex.: "Foto do local · Foto do aparelho") */
+  photo_hint?: string | null
+}
+
+/** Pergunta → resposta legível, devolvida em GET /orders/:id */
+export interface AnswerDisplay {
+  field_id: string
+  question: string
+  field_type: FieldType
+  value: string
+}
+
+/** Foto de check-in / conclusão do serviço */
+export interface ServicePhoto {
+  id: string
+  stage: 'ORDER' | 'CHECKIN' | 'COMPLETION'
+  url: string
+  latitude?: number | null
+  longitude?: number | null
+  created_at: string
 }
 
 export interface QuestionnaireField {
@@ -174,6 +198,10 @@ export interface Order {
   latitude?: number | null
   longitude?: number | null
   location_blurred?: boolean
+  /** Perguntas do questionário com as respostas, já formatadas */
+  answers_display?: AnswerDisplay[]
+  /** Fotos de check-in/conclusão (só para as partes da conexão paga) */
+  service_photos?: ServicePhoto[]
   estimated_price_min?: number
   estimated_price_max?: number
   final_price?: number
@@ -237,6 +265,8 @@ export interface Schedule {
   provider?: User & { hourly_rate?: number }
   client?: User
   messages?: Message[]
+  /** Fotos de check-in e conclusão (várias por etapa) */
+  service_photos?: ServicePhoto[]
 }
 
 export interface Notification {

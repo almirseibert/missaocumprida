@@ -251,6 +251,9 @@ export function estimatePriceDynamic(
 // LEGACY — algoritmo antigo (mantido para compatibilidade)
 // ============================================================
 interface PriceField {
+  id?: string
+  key?: string | null
+  field_type?: string
   affects_price: boolean
   price_modifier: Record<string, number> | null
 }
@@ -271,12 +274,14 @@ export function estimatePrice(
 
   for (const field of fields) {
     if (!field.affects_price || !field.price_modifier) continue
-    const answeredValue = Object.values(answers).find(
-      (v) => (field.price_modifier as Record<string, number>)[v as string] !== undefined
-    )
-    if (answeredValue && field.price_modifier[answeredValue as string]) {
-      multiplier *= field.price_modifier[answeredValue as string]
-    }
+    // Lê a resposta DESTE campo (antes procurava o valor em qualquer resposta:
+    // dois campos Sim/Não ou opções iguais contaminavam um ao outro).
+    const raw = field.id !== undefined ? answers[field.id] : undefined
+    const fallback = raw === undefined && field.key ? answers[field.key] : raw
+    if (fallback === undefined || fallback === null || fallback === '') continue
+    const value = field.field_type === 'BOOLEAN' ? String(boolVal(fallback)) : String(fallback)
+    const mod = field.price_modifier[value]
+    if (typeof mod === 'number' && mod > 0) multiplier *= mod
   }
 
   return {

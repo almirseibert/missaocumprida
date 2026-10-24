@@ -24,6 +24,9 @@ export async function getPublicConfig(_req: Request, res: Response) {
       },
     },
     provider_fee_timeout_hours: s.provider_fee_timeout_hours,
+    max_order_photos: s.max_order_photos,
+    max_service_photos: s.max_service_photos,
+    recurring_enabled: env.RECURRING_ENABLED,
   })
 }
 
@@ -47,6 +50,8 @@ const updateSchema = z
     proposal_min_ratio: z.number().min(0).max(1),
     gateway_surcharge_card: z.number().min(0).max(0.2),
     gateway_surcharge_pix: z.number().min(0).max(0.2),
+    max_order_photos: z.number().int().min(1).max(20),
+    max_service_photos: z.number().int().min(1).max(20),
   })
   .partial()
 

@@ -12,6 +12,21 @@ import {
   reopenOrderFromBrokenMatch,
 } from '../payments/connectionFees.service'
 import { banUser, suspendUserForReview } from '../users/moderation.service'
+import { getSettings } from '../settings/settings.service'
+import { archiveScheduleTx } from './scheduleArchive.service'
+
+/** Arquivos enviados nos campos "photo" (app antigo) e "photos" (vários). */
+function collectServicePhotos(req: Request): Express.Multer.File[] {
+  const files = req.files as Record<string, Express.Multer.File[]> | undefined
+  if (!files) return req.file ? [req.file] : []
+  return [...(files.photo ?? []), ...(files.photos ?? [])]
+}
+
+function parseCoord(v: unknown, limit: number): number | null {
+  if (v === undefined || v === null || v === '') return null
+  const n = parseFloat(String(v))
+  return Number.isFinite(n) && Math.abs(n) <= limit ? n : null
+}
 
 const scheduleInclude = {
   order: {
@@ -87,10 +102,13 @@ export async function listMySchedules(req: Request, res: Response) {
 }
 
 export async function getSchedule(req: Request, res: Response) {
-  const schedule = await prisma.schedule.findUnique({
+  const found = await prisma.schedule.findUnique({
     where: { id: req.params.id },
-    include: { ...scheduleInclude, messages: { orderBy: { created_at: 'asc' }, take: 50 } },
+    // As 50 mensagens MAIS RECENTES (antes vinham as 50 mais antigas e o
+    // restante da conversa sumia); devolvidas em ordem cronológica.
+    include: { ...scheduleInclude, messages: { orderBy: { created_at: 'desc' }, take: 50 } },
   })
+  const schedule = found ? { ...found, messages: [...found.messages].reverse() } : null
   if (!schedule) return R.notFound(res, 'Agendamento não encontrado')
   if (schedule.client_id !== req.userId && schedule.provider_id !== req.userId) {
     return R.forbidden(res)
@@ -103,7 +121,12 @@ export async function getSchedule(req: Request, res: Response) {
   ) {
     return R.notFound(res, 'Agendamento não encontrado')
   }
-  return R.ok(res, maskScheduleContacts(schedule))
+  const service_photos = await prisma.orderPhoto.findMany({
+    where: { schedule_id: schedule.id },
+    orderBy: { created_at: 'asc' },
+    select: { id: true, stage: true, url: true, latitude: true, longitude: true, created_at: true },
+  })
+  return R.ok(res, { ...maskScheduleContacts(schedule), service_photos })
 }
 
 export async function checkin(req: Request, res: Response) {
@@ -124,13 +147,18 @@ export async function checkin(req: Request, res: Response) {
     return R.forbidden(res, 'O check-in só é liberado depois que as taxas de conexão forem pagas.')
   }
 
-  if (!req.file) return R.badRequest(res, 'Foto de check-in é obrigatória')
+  const files = collectServicePhotos(req)
+  if (files.length === 0) return R.badRequest(res, 'Envie ao menos uma foto do início do serviço')
+  const s = await getSettings()
+  if (files.length > s.max_service_photos) return R.badRequest(res, `Envie no máximo ${s.max_service_photos} fotos`)
 
-  const lat = req.body.lat ? parseFloat(req.body.lat) : null
-  const lng = req.body.lng ? parseFloat(req.body.lng) : null
-  const address = req.body.address ?? null
+  const lat = parseCoord(req.body.lat, 90)
+  const lng = parseCoord(req.body.lng, 180)
+  const address = typeof req.body.address === 'string' ? req.body.address.slice(0, 300) : null
 
-  const photoUrl = await persistUpload(req, req.file)
+  const photoUrls: string[] = []
+  for (const f of files) photoUrls.push(await persistUpload(req, f, { ownerId: req.userId }))
+  const photoUrl = photoUrls[0]
 
   // Transição condicional: evita corrida entre dois check-ins e garante que o
   // pedido ainda está SCHEDULED no momento da escrita.
@@ -153,6 +181,17 @@ export async function checkin(req: Request, res: Response) {
     if (orderMoved.count === 0 || scheduleMoved.count === 0) {
       throw new ScheduleStateChanged()
     }
+    await tx.orderPhoto.createMany({
+      data: photoUrls.map((url) => ({
+        order_id: schedule.order_id,
+        schedule_id: schedule.id,
+        stage: 'CHECKIN' as const,
+        url,
+        uploaded_by: req.userId,
+        latitude: lat,
+        longitude: lng,
+      })),
+    })
     return tx.schedule.findUnique({ where: { id: schedule.id } })
   }).catch((err) => {
     if (err instanceof ScheduleStateChanged) return null
@@ -187,11 +226,15 @@ export async function completeByProvider(req: Request, res: Response) {
     return R.forbidden(res, 'As taxas de conexão deste pedido ainda não foram pagas.')
   }
 
-  if (!req.file) return R.badRequest(res, 'Foto de conclusão é obrigatória')
+  const files = collectServicePhotos(req)
+  if (files.length === 0) return R.badRequest(res, 'Envie ao menos uma foto do serviço concluído')
+  const s = await getSettings()
+  if (files.length > s.max_service_photos) return R.badRequest(res, `Envie no máximo ${s.max_service_photos} fotos`)
+  if (schedule.done_at) return R.badRequest(res, 'Este serviço já foi marcado como concluído')
 
-  const lat = req.body.lat ? parseFloat(req.body.lat) : null
-  const lng = req.body.lng ? parseFloat(req.body.lng) : null
-  const address = req.body.address ?? null
+  const lat = parseCoord(req.body.lat, 90)
+  const lng = parseCoord(req.body.lng, 180)
+  const address = typeof req.body.address === 'string' ? req.body.address.slice(0, 300) : null
 
   // Calculate duration and hourly amount
   let durationMinutes: number | null = null
@@ -204,20 +247,34 @@ export async function completeByProvider(req: Request, res: Response) {
     }
   }
 
-  const photoUrl = await persistUpload(req, req.file)
+  const photoUrls: string[] = []
+  for (const f of files) photoUrls.push(await persistUpload(req, f, { ownerId: req.userId }))
 
-  await prisma.schedule.update({
-    where: { id: schedule.id },
-    data: {
-      done_at: new Date(),
-      complete_photo_url: photoUrl,
-      complete_lat: lat,
-      complete_lng: lng,
-      complete_address: address,
-      duration_minutes: durationMinutes,
-      hourly_amount: hourlyAmount,
-    },
-  })
+  await prisma.$transaction([
+    prisma.schedule.update({
+      where: { id: schedule.id },
+      data: {
+        done_at: new Date(),
+        complete_photo_url: photoUrls[0],
+        complete_lat: lat,
+        complete_lng: lng,
+        complete_address: address,
+        duration_minutes: durationMinutes,
+        hourly_amount: hourlyAmount,
+      },
+    }),
+    prisma.orderPhoto.createMany({
+      data: photoUrls.map((url) => ({
+        order_id: schedule.order_id,
+        schedule_id: schedule.id,
+        stage: 'COMPLETION' as const,
+        url,
+        uploaded_by: req.userId,
+        latitude: lat,
+        longitude: lng,
+      })),
+    }),
+  ])
 
   // Notify client
   await notify(
@@ -260,6 +317,7 @@ export async function cancelSchedule(req: Request, res: Response) {
   if (!unlocked) {
     if (isClient) {
       await prisma.$transaction(async (tx) => {
+        await archiveScheduleTx(tx, schedule.id, 'CLIENT_CANCELLED_BEFORE_CONNECTION', req.userId)
         await tx.message.deleteMany({ where: { schedule_id: schedule.id } })
         await tx.rating.deleteMany({ where: { schedule_id: schedule.id } })
         await tx.schedule.delete({ where: { id: schedule.id } })
@@ -278,7 +336,7 @@ export async function cancelSchedule(req: Request, res: Response) {
 
     // Prestador desiste antes da conexão: cliente recreditado, pedido reabre
     await cancelPendingFeesForProposal(schedule.proposal_id)
-    await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id)
+    await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id, 'PROVIDER_CANCELLED_BEFORE_CONNECTION')
     if (clientFee) await creditFee(clientFee, 'PROVIDER_CANCELLED')
     await prisma.user.update({
       where: { id: schedule.provider_id },
@@ -307,7 +365,7 @@ export async function cancelSchedule(req: Request, res: Response) {
     where: { id: schedule.provider_id },
     data: { no_show_count: { increment: 1 } },
   })
-  await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id)
+  await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id, 'PROVIDER_CANCELLED_AFTER_CONNECTION')
   await notify(schedule.client_id, 'GENERAL', 'O profissional cancelou 😕',
     'O prestador cancelou após a conexão e foi banido conforme os Termos. Sua taxa voltou como crédito — escolha outra proposta.', { order_id: order.id })
   await banUser(schedule.provider_id, 'Cancelamento após receber os dados do cliente (Termos de Uso)')
@@ -344,7 +402,7 @@ export async function reportNoShow(req: Request, res: Response) {
     where: { id: schedule.provider_id },
     data: { no_show_count: { increment: 1 } },
   })
-  await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id)
+  await reopenOrderFromBrokenMatch(order.id, schedule.proposal_id, 'PROVIDER_NO_SHOW')
   await suspendUserForReview(
     schedule.provider_id,
     `No-show reportado pelo cliente no pedido ${order.id} — em análise para banimento (Termos de Uso)`,

@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/Textarea'
 import { PhotoCaptureModal } from '@/components/PhotoCaptureModal'
 import { CrossSellSuggestions } from '@/components/CrossSellSuggestions'
 import { MakeRecurringButton } from '@/components/MakeRecurringButton'
+import { ServicePhotoGallery } from '@/components/ServicePhotoGallery'
+import { usePublicConfig } from '@/hooks/usePublicConfig'
 import { useChatSocket, ChatMessage } from '@/hooks/useChatSocket'
 import {
   formatDateTime,
@@ -44,6 +46,9 @@ export default function ScheduleDetailPage() {
   const [checkinPhotoOpen, setCheckinPhotoOpen] = useState(false)
   const [completePhotoOpen, setCompletePhotoOpen] = useState(false)
   const [submittingAction, setSubmittingAction] = useState(false)
+  // Fotos extras do check-in/conclusão (além da foto com GPS tirada na hora)
+  const [extraPhotos, setExtraPhotos] = useState<File[]>([])
+  const { max_service_photos: maxServicePhotos, recurring_enabled: recurringEnabled } = usePublicConfig()
 
   // Client confirmation modal
   const [confirmModal, setConfirmModal] = useState(false)
@@ -131,10 +136,12 @@ export default function ScheduleDetailPage() {
     try {
       const form = new FormData()
       form.append('photo', file)
+      extraPhotos.forEach((f) => form.append('photos', f))
       if (lat !== null) form.append('lat', String(lat))
       if (lng !== null) form.append('lng', String(lng))
       form.append('address', address)
       await api.post(`/schedules/${id}/checkin`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setExtraPhotos([])
       toast.success('Check-in realizado! Serviço em andamento.')
       await fetchSchedule()
     } catch (err) {
@@ -149,10 +156,12 @@ export default function ScheduleDetailPage() {
     try {
       const form = new FormData()
       form.append('photo', file)
+      extraPhotos.forEach((f) => form.append('photos', f))
       if (lat !== null) form.append('lat', String(lat))
       if (lng !== null) form.append('lng', String(lng))
       form.append('address', address)
       const res = await api.post(`/schedules/${id}/complete`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setExtraPhotos([])
       const { duration_minutes, hourly_amount } = res.data.data ?? {}
       let msg = 'Serviço marcado como concluído. Aguardando confirmação do cliente.'
       if (duration_minutes) {
@@ -223,7 +232,7 @@ export default function ScheduleDetailPage() {
       {/* Cross-sell para clientes em pedido concluído/avaliado */}
       {isClient && (schedule.status === 'DONE' || schedule.order?.status === 'RATED') && schedule.order_id && (
         <>
-          <MakeRecurringButton schedule={schedule} />
+          {recurringEnabled && <MakeRecurringButton schedule={schedule} />}
           <CrossSellSuggestions orderId={schedule.order_id} />
         </>
       )}
@@ -301,8 +310,18 @@ export default function ScheduleDetailPage() {
         </div>
       </div>
 
-      {/* Before/After photos */}
-      {(schedule.checkin_photo_url || schedule.complete_photo_url) && (
+      {/* Galeria de fotos do serviço (várias por etapa) */}
+      {(schedule.service_photos?.length ?? 0) > 0 && (
+        <div className="bg-white rounded-2xl border border-slate2-200 p-5">
+          <h3 className="font-semibold text-slate2-700 mb-3 flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" /> Fotos do serviço
+          </h3>
+          <ServicePhotoGallery photos={schedule.service_photos!} />
+        </div>
+      )}
+
+      {/* Before/After photos (registros antigos sem galeria) */}
+      {!(schedule.service_photos?.length) && (schedule.checkin_photo_url || schedule.complete_photo_url) && (
         <div className="bg-white rounded-2xl border border-slate2-200 p-5">
           <h3 className="font-semibold text-slate2-700 mb-3 flex items-center gap-2">
             <ImageIcon className="w-4 h-4" /> Fotos do serviço
@@ -344,6 +363,37 @@ export default function ScheduleDetailPage() {
             <Button size="sm" className="mt-3" onClick={() => setConfirmModal(true)}>
               Confirmar conclusão
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Fotos extras opcionais para o check-in / conclusão */}
+      {(canCheckin || canComplete) && (
+        <div className="bg-white rounded-2xl border border-slate2-200 p-4 text-sm">
+          <p className="font-medium text-slate2-700">Fotos adicionais (opcional)</p>
+          <p className="text-xs text-slate2-500 mb-2">
+            Além da foto com localização tirada na hora, você pode anexar até {Math.max(0, maxServicePhotos - 1)} fotos do serviço.
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="px-3 py-1.5 rounded-lg border border-slate2-300 text-xs font-medium cursor-pointer hover:bg-slate2-50">
+              Escolher fotos
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []).slice(0, Math.max(0, maxServicePhotos - 1))
+                  setExtraPhotos(files)
+                }}
+              />
+            </label>
+            {extraPhotos.length > 0 && (
+              <span className="text-xs text-slate2-600">
+                {extraPhotos.length} foto(s) selecionada(s){' '}
+                <button type="button" className="text-red-600 ml-1" onClick={() => setExtraPhotos([])}>remover</button>
+              </span>
+            )}
           </div>
         </div>
       )}

@@ -18,6 +18,8 @@ export type PlatformSettings = {
   proposal_min_ratio: number // piso da proposta vs base_price_min da categoria
   gateway_surcharge_card: number // repasse do meio de pagamento (cartão)
   gateway_surcharge_pix: number // repasse do meio de pagamento (Pix)
+  max_order_photos: number // fotos por pedido (todas as categorias, opcionais)
+  max_service_photos: number // fotos por etapa do serviço (check-in / conclusão)
 }
 
 const DEFAULTS: PlatformSettings = {
@@ -30,6 +32,8 @@ const DEFAULTS: PlatformSettings = {
   proposal_min_ratio: env.PROPOSAL_MIN_RATIO,
   gateway_surcharge_card: 0.04,
   gateway_surcharge_pix: 0.01,
+  max_order_photos: 10,
+  max_service_photos: 10,
 }
 
 export const SETTING_KEYS = Object.keys(DEFAULTS) as Array<keyof PlatformSettings>

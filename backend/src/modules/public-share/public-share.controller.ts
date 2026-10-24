@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
+import { sanitizeContactInfo } from '../../utils/contactSanitizer'
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
@@ -36,13 +37,18 @@ export async function enableShare(req: Request, res: Response) {
     if (!slug) slug = `pedido-${order.id.slice(0, 8)}`
   }
 
+  // Fotos no link público só com permissão explícita (podem mostrar a pessoa
+  // ou a casa dela). Body opcional: { show_photos: true }.
+  const showPhotos = req.body?.show_photos === true
+
   await prisma.order.update({
     where: { id: order.id },
-    data: { public_share_slug: slug, public_share_enabled: true },
+    data: { public_share_slug: slug, public_share_enabled: true, public_share_photos: showPhotos },
   })
 
   return R.ok(res, {
     slug,
+    show_photos: showPhotos,
     url: `${FRONTEND_URL}/p/pedido/${slug}`,
     deep_link: `missaocumprida://pedido/${slug}`,
   })
@@ -67,7 +73,7 @@ export async function getPublicOrder(req: Request, res: Response) {
     select: {
       id: true, title: true, description: true, neighborhood: true, city: true, state: true,
       desired_date: true, estimated_price_min: true, estimated_price_max: true,
-      photos: true, status: true, public_share_enabled: true,
+      photos: true, status: true, public_share_enabled: true, public_share_photos: true,
       created_at: true,
       category: { select: { id: true, name: true, slug: true, icon: true, pricing_unit: true } },
       client: { select: { name: true, avatar: true, rating_avg: true, rating_count: true } },
@@ -92,13 +98,14 @@ export async function getPublicOrder(req: Request, res: Response) {
   return R.ok(res, {
     id: order.id,
     title: order.title,
-    description: order.description,
+    description: order.description ? sanitizeContactInfo(order.description) : order.description,
     category: order.category,
     location: { neighborhood: order.neighborhood, city: order.city, state: order.state },
     desired_date: order.desired_date,
     estimated_price_min: order.estimated_price_min,
     estimated_price_max: order.estimated_price_max,
-    photos: order.photos,
+    photos: order.public_share_photos ? order.photos : [],
+    photos_count: order.photos.length,
     status: order.status,
     created_at: order.created_at,
     proposals_count: order._count.proposals,

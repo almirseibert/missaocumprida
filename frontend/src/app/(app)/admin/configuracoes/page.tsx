@@ -25,6 +25,8 @@ type SettingsData = {
   proposal_min_ratio: number
   gateway_surcharge_card: number
   gateway_surcharge_pix: number
+  max_order_photos: number
+  max_service_photos: number
 }
 
 const PCT_FIELDS: Array<{ key: keyof SettingsData; label: string; hint: string }> = [
@@ -58,7 +60,8 @@ export default function AdminConfiguracoesPage() {
   const setPct = (key: keyof SettingsData, raw: string) => {
     const v = parseFloat(raw.replace(',', '.'))
     if (isNaN(v)) return
-    setSettings({ ...settings, [key]: Math.round(v) / 100 } as SettingsData)
+    // Uma casa decimal: 7,5% → 0.075 (antes arredondava para 8%)
+    setSettings({ ...settings, [key]: Math.round(v * 10) / 1000 } as SettingsData)
   }
 
   const save = async () => {
@@ -94,7 +97,7 @@ export default function AdminConfiguracoesPage() {
             </h2>
             <p className="text-xs text-slate2-500 mt-0.5">
               Com a promoção ativa, os apps exibem a taxa cheia riscada
-              (&ldquo;de {Math.round(settings.fee_regular_pct * 100)}% por {Math.round(settings.fee_client_pct * 100)}%&rdquo;).
+              (&ldquo;de {Math.round(settings.fee_regular_pct * 1000) / 10}% por {Math.round(settings.fee_client_pct * 1000) / 10}%&rdquo;).
             </p>
           </div>
           <button
@@ -168,6 +171,38 @@ export default function AdminConfiguracoesPage() {
             <p className="text-[11px] text-slate2-400 mt-1">
               Depois disso o cliente é recreditado e o pedido reabre
             </p>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate2-700">Fotos por pedido</label>
+            <input
+              type="number"
+              step="1"
+              min={1}
+              max={20}
+              value={settings.max_order_photos}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10)
+                if (!isNaN(v)) setSettings({ ...settings, max_order_photos: v })
+              }}
+              className="mt-1 block w-full rounded-lg border-[1.5px] border-slate2-300 px-3 py-2.5 text-sm"
+            />
+            <p className="text-[11px] text-slate2-400 mt-1">Opcionais em todos os serviços (1 a 20)</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate2-700">Fotos por etapa do serviço</label>
+            <input
+              type="number"
+              step="1"
+              min={1}
+              max={20}
+              value={settings.max_service_photos}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10)
+                if (!isNaN(v)) setSettings({ ...settings, max_service_photos: v })
+              }}
+              className="mt-1 block w-full rounded-lg border-[1.5px] border-slate2-300 px-3 py-2.5 text-sm"
+            />
+            <p className="text-[11px] text-slate2-400 mt-1">Check-in e conclusão do prestador (1 a 20)</p>
           </div>
         </div>
       </div>

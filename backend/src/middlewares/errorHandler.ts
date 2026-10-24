@@ -15,6 +15,10 @@ export function errorHandler(
   if (err.message === 'Apenas imagens JPEG, PNG e WebP são aceitas') {
     return res.status(400).json({ success: false, message: err.message })
   }
+  // Erros de domínio que já trazem o status HTTP (ex.: imagem ilegível)
+  if (typeof err.status === 'number' && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ success: false, message: err.message })
+  }
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ success: false, message: 'JSON inválido' })
   }

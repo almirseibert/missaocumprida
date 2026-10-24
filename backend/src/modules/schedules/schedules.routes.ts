@@ -12,8 +12,13 @@ router.use(authenticate)
 
 router.get('/', listMySchedules)
 router.get('/:id', getSchedule)
-router.post('/:id/checkin', upload.single('photo'), checkin)
-router.post('/:id/complete', upload.single('photo'), completeByProvider)
+// Várias fotos por etapa: campo "photos" (novo) e "photo" (app antigo, 1 foto)
+const servicePhotos = upload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'photos', maxCount: 20 },
+])
+router.post('/:id/checkin', servicePhotos, checkin)
+router.post('/:id/complete', servicePhotos, completeByProvider)
 router.post('/:id/confirm', confirmByClient)
 router.post('/:id/cancel', cancelSchedule)
 router.post('/:id/report-no-show', reportNoShow)
