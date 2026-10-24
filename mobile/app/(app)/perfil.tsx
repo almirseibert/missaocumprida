@@ -8,7 +8,9 @@ import { router, useFocusEffect } from 'expo-router'
 import { LogOut, Wallet, Star, ChevronRight, MapPin, ShieldAlert, ShieldCheck, Clock, AlertCircle, Gift, BellRing, BarChart3, Package, CalendarDays, Repeat, LifeBuoy, Trash2, FileText } from 'lucide-react-native'
 import { useAuthStore } from '../../src/store/auth'
 import { api, getApiError } from '../../src/lib/api'
-import { maskDateBR, parseDateBR, isoToDateBR } from '../../src/lib/utils'
+import { maskDateBR, parseDateBR, isoToDateBR, formatCurrency } from '../../src/lib/utils'
+import { usePublicConfig } from '../../src/lib/config'
+import { isValidCpf, maskCpf } from '../../src/lib/ids'
 
 type Section = 'view' | 'basic' | 'address' | 'emergency'
 
@@ -19,6 +21,7 @@ const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || 'https://missaocumprida-front
 
 export default function PerfilScreen() {
   const { user, setUser, logout } = useAuthStore()
+  const publicConfig = usePublicConfig()
   const [section, setSection] = useState<Section>('view')
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -81,6 +84,10 @@ export default function PerfilScreen() {
 
   async function save(which: Section) {
     const birthIso = birthDate ? parseDateBR(birthDate) : null
+    if (which === 'basic' && cpf && !isValidCpf(cpf)) {
+      Alert.alert('CPF inválido', 'Confira os números do CPF. Cada CPF pode ter apenas uma conta.')
+      return
+    }
     if (which === 'basic' && birthDate && !birthIso) {
       Alert.alert('Data inválida', 'Informe o nascimento no formato DD/MM/AAAA.')
       return
@@ -239,7 +246,7 @@ export default function PerfilScreen() {
               <View className="gap-3 mt-1">
                 <Field label="Nome completo *" value={name} onChange={setName} />
                 <Field label="Telefone *" value={phone} onChange={setPhone} keyboardType="phone-pad" />
-                <Field label="CPF / CNPJ *" value={cpf} onChange={setCpf} keyboardType="number-pad" />
+                <Field label="CPF *" value={cpf} onChange={(v: string) => setCpf(maskCpf(v))} keyboardType="number-pad" />
                 <Field label="RG *" value={rg} onChange={setRg} />
                 <Field label="Data de nascimento *" value={birthDate} onChange={(v: string) => setBirthDate(maskDateBR(v))} placeholder="31/01/2000" keyboardType="number-pad" />
                 <Field label="Nome da mãe *" value={motherName} onChange={setMotherName} />
@@ -372,28 +379,30 @@ export default function PerfilScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Verificado Pro (prestador) */}
-          {isProvider && (
-            <TouchableOpacity
-              onPress={() => router.push('/(app)/verificar-pro' as any)}
-              className={`rounded-2xl p-4 flex-row items-center justify-between border-2 ${user.is_verified_pro ? 'border-blue-300 bg-blue-50' : 'border-slate2-200 bg-white'}`}
-            >
-              <View className="flex-row items-center gap-3">
-                <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center">
-                  <ShieldCheck size={20} color="#2563EB" />
-                </View>
-                <View>
-                  <Text className="font-display-semibold text-slate2-900">
-                    {user.is_verified_pro ? 'Verificado Pro ✓' : 'Tornar-se Verificado Pro'}
-                  </Text>
-                  <Text className="font-sans text-xs text-slate2-500">
-                    {user.is_verified_pro ? 'Selo ativo' : 'Selo + boost grátis · R$ 29,90/mês'}
-                  </Text>
-                </View>
+          {/* Assinatura Pro (clientes e prestadores) */}
+          <TouchableOpacity
+            onPress={() => router.push('/(app)/assinaturas' as any)}
+            className={`rounded-2xl p-4 flex-row items-center justify-between border-2 ${user.is_verified_pro ? 'border-blue-300 bg-blue-50' : 'border-slate2-200 bg-white'}`}
+          >
+            <View className="flex-row items-center gap-3">
+              <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center">
+                <ShieldCheck size={20} color="#2563EB" />
               </View>
-              <ChevronRight size={18} color="#94A3B8" />
-            </TouchableOpacity>
-          )}
+              <View>
+                <Text className="font-display-semibold text-slate2-900">
+                  {user.is_verified_pro ? 'Assinatura Pro ✓' : 'Assinatura Pro'}
+                </Text>
+                <Text className="font-sans text-xs text-slate2-500">
+                  {user.is_verified_pro
+                    ? 'Ativa — ver detalhes'
+                    : isProvider
+                      ? `Selo + destaque grátis · ${formatCurrency(publicConfig.pro.monthly_price)}/mês`
+                      : `Desconto na taxa de conexão · ${formatCurrency(publicConfig.pro.monthly_price)}/mês`}
+                </Text>
+              </View>
+            </View>
+            <ChevronRight size={18} color="#94A3B8" />
+          </TouchableOpacity>
 
           {/* Minha agenda (prestador) */}
           {isProvider && (
@@ -414,22 +423,24 @@ export default function PerfilScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Assinaturas */}
-          <TouchableOpacity
-            onPress={() => router.push('/(app)/assinaturas' as any)}
-            className="bg-white rounded-2xl p-4 flex-row items-center justify-between border border-slate2-200"
-          >
-            <View className="flex-row items-center gap-3">
-              <View className="w-10 h-10 rounded-full bg-indigo-50 items-center justify-center">
-                <Repeat size={20} color="#4338CA" />
+          {/* Serviços recorrentes (só quando ligados pelo admin) */}
+          {publicConfig.recurring_enabled && (
+            <TouchableOpacity
+              onPress={() => router.push('/(app)/assinaturas-recorrentes' as any)}
+              className="bg-white rounded-2xl p-4 flex-row items-center justify-between border border-slate2-200"
+            >
+              <View className="flex-row items-center gap-3">
+                <View className="w-10 h-10 rounded-full bg-indigo-50 items-center justify-center">
+                  <Repeat size={20} color="#4338CA" />
+                </View>
+                <View>
+                  <Text className="font-display-semibold text-slate2-900">Serviços recorrentes</Text>
+                  <Text className="font-sans text-xs text-slate2-500">Contratos semanais/mensais com desconto</Text>
+                </View>
               </View>
-              <View>
-                <Text className="font-display-semibold text-slate2-900">Assinaturas</Text>
-                <Text className="font-sans text-xs text-slate2-500">Serviços recorrentes com desconto</Text>
-              </View>
-            </View>
-            <ChevronRight size={18} color="#94A3B8" />
-          </TouchableOpacity>
+              <ChevronRight size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
 
           {/* Meus Pacotes (prestador) */}
           {isProvider && (

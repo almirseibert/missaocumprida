@@ -131,6 +131,20 @@ export interface Order {
   platform_fee_value?: number
   client_fee_value?: number
   photos?: string[]
+  answers?: Record<string, string>
+  cep?: string | null
+  address_number?: string | null
+  address_complement?: string | null
+  /** GPS_AT_SITE | ADDRESS_GEOCODED | PROFILE | LEGACY */
+  location_source?: string | null
+  location_accuracy_m?: number | null
+  edited_at?: string | null
+  edit_count?: number
+  /** Perguntas do questionário com as respostas, já formatadas */
+  answers_display?: { field_id: string; question: string; field_type: string; value: string }[]
+  /** Fotos de check-in/conclusão (partes da conexão paga) */
+  service_photos?: ServicePhoto[]
+  schedule?: { id: string; status: string; scheduled_at: string } | null
   created_at: string
   category?: Category
   client?: User
@@ -148,6 +162,15 @@ export interface Order {
   urgency_radius_km?: number | null
 }
 
+export interface ServicePhoto {
+  id: string
+  stage: 'ORDER' | 'CHECKIN' | 'COMPLETION'
+  url: string
+  latitude?: number | null
+  longitude?: number | null
+  created_at: string
+}
+
 export interface Proposal {
   id: string
   order_id: string
@@ -159,6 +182,7 @@ export interface Proposal {
   boost_paid_at?: string | null
   boost_value?: number | null
   created_at: string
+  updated_at?: string
   provider?: User
 }
 

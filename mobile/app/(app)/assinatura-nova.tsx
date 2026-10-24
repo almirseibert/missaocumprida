@@ -73,7 +73,7 @@ export default function AssinaturaNovaScreen() {
                   </Text>
                 )}
               </View>
-              <MakeRecurringButton schedule={s} onCreated={() => router.replace('/assinaturas' as any)} />
+              <MakeRecurringButton schedule={s} onCreated={() => router.replace('/assinaturas-recorrentes' as any)} />
             </View>
           ))}
         </ScrollView>

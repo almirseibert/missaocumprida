@@ -82,6 +82,7 @@ export default function AppLayout() {
         <Tabs.Screen name="dashboard" options={{ href: null }} />
         <Tabs.Screen name="minhas-propostas" options={{ href: null }} />
         <Tabs.Screen name="assinaturas" options={{ href: null }} />
+        <Tabs.Screen name="assinaturas-recorrentes" options={{ href: null }} />
         <Tabs.Screen name="assinatura-nova" options={{ href: null }} />
         <Tabs.Screen name="agenda-config" options={{ href: null }} />
         <Tabs.Screen name="notificacoes-config" options={{ href: null }} />

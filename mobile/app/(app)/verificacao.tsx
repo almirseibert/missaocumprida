@@ -11,6 +11,7 @@ import {
   Check, UserCheck, MapPin, PhoneCall,
 } from 'lucide-react-native'
 import { api, getApiError } from '../../src/lib/api'
+import { isValidCpf, maskCpf } from '../../src/lib/ids'
 import { formatDate, maskDateBR, parseDateBR, isoToDateBR } from '../../src/lib/utils'
 import { useAuthStore } from '../../src/store/auth'
 
@@ -102,6 +103,11 @@ export default function VerificacaoScreen() {
   }
 
   async function saveProfile() {
+    // 1 conta por CPF: valida os dígitos antes de enviar
+    if (profile.cpf && !isValidCpf(profile.cpf)) {
+      Alert.alert('CPF inválido', 'Confira os números do CPF. Cada CPF pode ter apenas uma conta.')
+      return
+    }
     const birthIso = profile.birth_date ? parseDateBR(profile.birth_date) : null
     if (profile.birth_date && !birthIso) {
       Alert.alert('Data inválida', 'Informe o nascimento no formato DD/MM/AAAA.')
@@ -283,7 +289,7 @@ export default function VerificacaoScreen() {
                 )}
 
                 <SubHeader icon={<UserCheck size={14} color="#1D4ED8" />} title="Identificação" />
-                <Field label="CPF *" value={profile.cpf} onChange={(v) => up('cpf', v)} keyboardType="number-pad" />
+                <Field label="CPF *" value={profile.cpf} onChange={(v) => up('cpf', maskCpf(v))} keyboardType="number-pad" />
                 <View className="flex-row gap-3">
                   <View className="flex-1"><Field label="RG *" value={profile.rg} onChange={(v) => up('rg', v)} /></View>
                   <View className="flex-1"><Field label="Nascimento *" value={profile.birth_date} onChange={(v) => up('birth_date', maskDateBR(v))} placeholder="31/01/2000" keyboardType="number-pad" /></View>

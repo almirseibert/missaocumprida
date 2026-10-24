@@ -10,6 +10,7 @@ import {
 } from 'lucide-react-native'
 import { useAuthStore } from '../../src/store/auth'
 import { api, getApiError } from '../../src/lib/api'
+import { isValidCpf, maskCpf } from '../../src/lib/ids'
 
 const TOTAL = 6
 
@@ -89,7 +90,11 @@ export default function ComecarPrestadorScreen() {
     })
   }
 
-  async function saveCpf() { if (cpf) await api.put('/users/me', { cpf }) }
+  async function saveCpf() {
+    if (!cpf) return
+    if (!isValidCpf(cpf)) throw new Error('CPF inválido — confira os números')
+    await api.put('/users/me', { cpf: cpf.replace(/\D/g, '') })
+  }
   async function savePix() { if (pixKey) await api.put('/payments/pix-key', { pix_key: pixKey, pix_key_type: pixKeyType }) }
 
   const selectedCat = groups.flatMap(g => g.categories).find(c => c.id === categoryId)
@@ -187,7 +192,7 @@ export default function ComecarPrestadorScreen() {
 
         {step === 4 && (
           <Shell icon={<ShieldCheck color="#059669" size={28} />} title="Verificação básica" subtitle="CPF é obrigatório para PIX.">
-            <Field label="CPF" value={cpf} onChangeText={setCpf} keyboardType="number-pad" placeholder="000.000.000-00" />
+            <Field label="CPF" value={cpf} onChangeText={(v: string) => setCpf(maskCpf(v))} keyboardType="number-pad" placeholder="000.000.000-00" />
             <Text className="text-xs text-slate2-500 mt-1 mb-3">
               Você pode enviar foto do RG depois em Perfil → Verificação.
             </Text>
