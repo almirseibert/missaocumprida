@@ -98,3 +98,17 @@ export const SCHEDULE_STATUS_COLOR: Record<ScheduleStatus, string> = {
   DONE:        'bg-accent-100 text-accent-700',
   CANCELLED:   'bg-red-50 text-red-600',
 }
+
+/** CPF válido: 11 dígitos, dígitos verificadores corretos, não repetido (111.111.111-11). */
+export function isValidCpf(value: string | null | undefined): boolean {
+  const cpf = String(value ?? '').replace(/\D/g, '')
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false
+  const d = cpf.split('').map(Number)
+  const check = (len: number) => {
+    let sum = 0
+    for (let i = 0; i < len; i++) sum += d[i] * (len + 1 - i)
+    const r = (sum * 10) % 11
+    return r === 10 ? 0 : r
+  }
+  return check(9) === d[9] && check(10) === d[10]
+}

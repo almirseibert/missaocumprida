@@ -46,6 +46,11 @@ export default function OrderDetailPage() {
   const [proposalMsg, setProposalMsg] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [cancelConfirm, setCancelConfirm] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [adjustOpen, setAdjustOpen] = useState(false)
+  const [adjustValue, setAdjustValue] = useState('')
+  const [adjustMsg, setAdjustMsg] = useState('')
   const { connection_fee: feeCfg } = usePublicConfig()
 
   const isClient = user?.id === order?.client_id
@@ -132,11 +137,29 @@ export default function OrderDetailPage() {
     }
   }, [order])
 
-  const cancelOrder = async () => {
+  // Excluir = cancelar e tirar da lista (o registro fica guardado para o suporte).
+  // Com proposta aceita e taxa ainda pendente, segue o cancelamento sem multa.
+  const deleteOrder = async () => {
+    setDeleting(true)
     try {
-      await api.patch(`/orders/${id}/cancel`)
-      toast.success('Pedido cancelado.')
+      const res = await api.delete(`/orders/${id}`, { data: { reason: deleteReason || undefined } })
+      toast.success(res.data.message || 'Pedido excluído')
       router.replace('/meus-pedidos')
+    } catch (err) {
+      toast.error(getApiErrorMessage(err))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const adjustProposal = async (proposalId: string) => {
+    const value = parseFloat(adjustValue.replace(',', '.'))
+    if (!value || value <= 0) { toast.error('Informe o novo valor'); return }
+    try {
+      await api.patch(`/proposals/${proposalId}`, { value, ...(adjustMsg ? { message: adjustMsg } : {}) })
+      toast.success('Proposta atualizada')
+      setAdjustOpen(false)
+      fetchOrder()
     } catch (err) {
       toast.error(getApiErrorMessage(err))
     }
@@ -146,6 +169,18 @@ export default function OrderDetailPage() {
   if (!order) return null
 
   const statusClass = ORDER_STATUS_COLOR[order.status] || 'bg-slate2-100 text-slate2-700'
+  const myProposal = !isClient ? order.proposals?.find((p) => p.provider_id === user?.id) : undefined
+  const editedAfterMyProposal =
+    !!myProposal && !!order.edited_at && new Date(order.edited_at).getTime() > new Date(myProposal.updated_at ?? myProposal.created_at).getTime()
+  const canEdit = isClient && ['OPEN', 'IN_PROPOSAL'].includes(order.status)
+  const canDelete = isClient && ['OPEN', 'IN_PROPOSAL', 'ACCEPTED', 'CANCELLED', 'DONE', 'RATED'].includes(order.status)
+  const fullAddress = [
+    [order.address, order.address_number].filter(Boolean).join(', '),
+    order.address_complement,
+    order.neighborhood,
+    [order.city, order.state].filter(Boolean).join('/'),
+    order.cep ? `CEP ${order.cep.slice(0, 5)}-${order.cep.slice(5)}` : null,
+  ].filter(Boolean).join(' · ')
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
@@ -275,9 +310,17 @@ export default function OrderDetailPage() {
                   </p>
                 ) : (
                   <>
-                    <p className="font-medium text-slate2-900">
-                      {order.address || ''}{order.neighborhood && `, ${order.neighborhood}`}{order.city && `, ${order.city}`}{order.state && `/${order.state}`}
-                    </p>
+                    <p className="font-medium text-slate2-900">{fullAddress}</p>
+                    {order.location_source === 'GPS_AT_SITE' && (
+                      <p className="text-xs text-green-700">📍 Local marcado pelo GPS do cliente no endereço do serviço</p>
+                    )}
+                    {order.location_source === 'PROFILE' && (
+                      <p className="text-xs text-amber-700">
+                        {isClient
+                          ? 'Não localizamos o endereço exato no mapa — edite o pedido e use "Localizar no mapa" ou "Sim, estou no local".'
+                          : 'Ponto no mapa aproximado (cadastro do cliente) — confirme o endereço pelo chat.'}
+                      </p>
+                    )}
                     {!isClient && order.latitude != null && order.longitude != null && (
                       <div className="flex gap-3 mt-1">
                         <a
@@ -506,6 +549,28 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* Prestador: o cliente mudou o pedido depois da proposta */}
+      {myProposal && myProposal.status === 'PENDING' && ['OPEN', 'IN_PROPOSAL'].includes(order.status) && (
+        <div className={`rounded-2xl border p-4 ${editedAfterMyProposal ? 'border-amber-300 bg-amber-50' : 'border-slate2-200 bg-white'}`}>
+          <p className="font-semibold text-slate2-900">
+            Sua proposta: {formatCurrency(myProposal.value)}
+          </p>
+          {editedAfterMyProposal && (
+            <p className="text-sm text-amber-800 mt-1">
+              O cliente editou o pedido depois da sua proposta. Confira os detalhes e ajuste o valor se precisar.
+            </p>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-3"
+            onClick={() => { setAdjustValue(String(myProposal.value)); setAdjustMsg(''); setAdjustOpen(true) }}
+          >
+            Ajustar proposta
+          </Button>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3 flex-wrap">
         {canPropose && (
@@ -514,9 +579,15 @@ export default function OrderDetailPage() {
           </Button>
         )}
 
-        {isClient && ['OPEN', 'IN_PROPOSAL'].includes(order.status) && (
+        {canEdit && order.category?.slug && (
+          <Button variant="secondary" onClick={() => router.push(`/pedido/novo/${order.category!.slug}?editar=${order.id}`)}>
+            Editar pedido
+          </Button>
+        )}
+
+        {canDelete && (
           <Button variant="danger" onClick={() => setCancelConfirm(true)}>
-            Cancelar Pedido
+            {['CANCELLED', 'DONE', 'RATED'].includes(order.status) ? 'Remover da lista' : 'Excluir pedido'}
           </Button>
         )}
 
@@ -590,16 +661,64 @@ export default function OrderDetailPage() {
         </div>
       </Modal>
 
-      {/* Cancel confirm modal */}
-      <Modal isOpen={cancelConfirm} onClose={() => setCancelConfirm(false)} title="Cancelar Pedido" size="sm">
+      {/* Ajustar proposta (prestador) */}
+      <Modal isOpen={adjustOpen} onClose={() => setAdjustOpen(false)} title="Ajustar proposta" size="sm">
         <div className="space-y-4">
-          <p className="text-slate2-700">Tem certeza que deseja cancelar este pedido?</p>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate2-700">Novo valor (R$)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="10"
+              value={adjustValue}
+              onChange={(e) => setAdjustValue(e.target.value)}
+              className="block w-full rounded-lg border border-slate2-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+          <Textarea label="Mensagem (opcional)" value={adjustMsg} onChange={(e) => setAdjustMsg(e.target.value)} />
           <div className="flex gap-3">
-            <Button variant="danger" fullWidth onClick={cancelOrder}>
-              Sim, cancelar
+            <Button fullWidth onClick={() => myProposal && adjustProposal(myProposal.id)}>Salvar</Button>
+            <Button variant="outline" onClick={() => setAdjustOpen(false)}>Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Excluir pedido */}
+      <Modal
+        isOpen={cancelConfirm}
+        onClose={() => setCancelConfirm(false)}
+        title={['CANCELLED', 'DONE', 'RATED'].includes(order.status) ? 'Remover da lista' : 'Excluir pedido'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          {['OPEN', 'IN_PROPOSAL'].includes(order.status) && (
+            <p className="text-slate2-700">
+              O pedido será cancelado e sairá da sua lista. Quem já mandou proposta será avisado.
+            </p>
+          )}
+          {order.status === 'ACCEPTED' && (
+            <p className="text-slate2-700">
+              Você já aceitou uma proposta, mas a conexão ainda não foi concluída: pode cancelar sem penalidade.
+              Se já pagou a sua taxa de conexão, ela volta como crédito para o próximo pedido.
+            </p>
+          )}
+          {['CANCELLED', 'DONE', 'RATED'].includes(order.status) && (
+            <p className="text-slate2-700">O pedido sai da sua lista. O histórico continua guardado para o suporte.</p>
+          )}
+          {!['CANCELLED', 'DONE', 'RATED'].includes(order.status) && (
+            <Textarea
+              label="Motivo (opcional)"
+              placeholder="Ex: resolvi o problema por conta própria"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+            />
+          )}
+          <div className="flex gap-3">
+            <Button variant="danger" fullWidth onClick={deleteOrder} isLoading={deleting}>
+              Confirmar
             </Button>
             <Button variant="outline" onClick={() => setCancelConfirm(false)}>
-              Não
+              Voltar
             </Button>
           </div>
         </div>

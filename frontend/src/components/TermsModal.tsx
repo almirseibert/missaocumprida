@@ -60,7 +60,7 @@ export function TermsModal() {
           <div className="flex-1">
             <h2 className="text-lg sm:text-xl font-bold">{terms.title}</h2>
             <p className="text-xs text-brand-100 mt-0.5">
-              Versão {terms.version} · Vigente a partir de {new Date(terms.effective_date).toLocaleDateString('pt-BR')}
+              Versão {terms.version} · Vigente a partir de {terms.effective_date.split('-').reverse().join('/')}
             </p>
           </div>
         </div>

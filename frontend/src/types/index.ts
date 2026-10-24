@@ -198,6 +198,16 @@ export interface Order {
   latitude?: number | null
   longitude?: number | null
   location_blurred?: boolean
+  cep?: string | null
+  address_number?: string | null
+  address_complement?: string | null
+  /** GPS_AT_SITE | ADDRESS_GEOCODED | PROFILE | LEGACY */
+  location_source?: string | null
+  location_accuracy_m?: number | null
+  edited_at?: string | null
+  edit_count?: number
+  cancelled_at?: string | null
+  cancel_reason?: string | null
   /** Perguntas do questionário com as respostas, já formatadas */
   answers_display?: AnswerDisplay[]
   /** Fotos de check-in/conclusão (só para as partes da conexão paga) */
@@ -237,6 +247,7 @@ export interface Proposal {
   boost_paid_at?: string | null
   boost_value?: number | null
   created_at: string
+  updated_at?: string
   provider?: User
   order?: Order
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { isValidCpf } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -21,8 +22,8 @@ const schema = z.object({
   bio: z.string().max(500, 'Máximo 500 caracteres').optional().or(z.literal('')),
   role: z.enum(['CLIENT', 'PROVIDER', 'BOTH']),
   cpf: z.string().optional().or(z.literal('')).refine(
-    (v) => !v || onlyDigits(v).length === 11 || onlyDigits(v).length === 14,
-    'CPF (11) ou CNPJ (14) inválido',
+    (v) => !v || isValidCpf(v),
+    'CPF inválido — confira os números (cada CPF pode ter apenas uma conta)',
   ),
   rg: z.string().optional().or(z.literal('')),
   birth_date: z.string().optional().or(z.literal('')),
@@ -168,7 +169,7 @@ export default function EditarPerfilPage() {
         <Section icon={<User className="w-4 h-4" />} title="Dados básicos">
           <Input label="Nome completo *" {...register('name')} error={errors.name?.message} />
           <Input label="Telefone *" placeholder="(00) 00000-0000" {...register('phone')} error={errors.phone?.message} />
-          <Input label="CPF / CNPJ *" placeholder="000.000.000-00" {...register('cpf')} error={errors.cpf?.message} />
+          <Input label="CPF *" placeholder="000.000.000-00" {...register('cpf')} error={errors.cpf?.message} />
           <div className="grid sm:grid-cols-2 gap-3">
             <Input label="RG / Identidade *" {...register('rg')} error={errors.rg?.message} />
             <Input label="Data de nascimento *" type="date" {...register('birth_date')} error={errors.birth_date?.message} />

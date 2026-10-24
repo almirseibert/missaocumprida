@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Search, UserIcon, ShieldCheck, Ban, RotateCcw } from 'lucide-react'
+import { Search, UserIcon, ShieldCheck, Ban, RotateCcw, Fingerprint, Award } from 'lucide-react'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
 import { PageSpinner } from '@/components/ui/Spinner'
@@ -63,6 +63,8 @@ export default function AdminUsuariosPage() {
         <h1 className="text-2xl font-bold text-slate2-900">Usuários & Cadastros</h1>
         <p className="text-sm text-slate2-600 mt-1">Buscar, verificar e moderar contas.</p>
       </div>
+
+      <CpfPanel />
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-2 items-center">
@@ -138,6 +140,29 @@ function UserDetail({ user, onClose, onChanged }: { user: U; onClose: () => void
     try { await api.patch(`/users/admin/users/${user.id}/reactivate`, {}); toast.success('Usuário reativado'); onChanged() }
     catch (e) { toast.error(getApiErrorMessage(e)) } finally { setBusy(false) }
   }
+  const ban = async () => {
+    const reason = prompt(`Motivo do banimento de ${user.name} (fica registrado; o CPF não poderá abrir outra conta):`)
+    if (!reason || reason.trim().length < 5) { if (reason !== null) toast.error('Informe um motivo (mín. 5 caracteres)'); return }
+    setBusy(true)
+    try { await api.post(`/users/admin/users/${user.id}/ban`, { reason }); toast.success('Usuário banido'); onChanged() }
+    catch (e) { toast.error(getApiErrorMessage(e)) } finally { setBusy(false) }
+  }
+  const grantPro = async () => {
+    const months = Number(prompt('Conceder Selo Pro por quantos meses? (1 a 24)', '1'))
+    if (!months || months < 1 || months > 24) return
+    const reason = prompt('Motivo da concessão (fica registrado):')
+    if (!reason || reason.trim().length < 5) { if (reason !== null) toast.error('Informe um motivo (mín. 5 caracteres)'); return }
+    setBusy(true)
+    try { await api.post(`/verification/admin/${user.id}/approve`, { months, reason }); toast.success('Selo Pro concedido'); onChanged() }
+    catch (e) { toast.error(getApiErrorMessage(e)) } finally { setBusy(false) }
+  }
+  const revokePro = async () => {
+    const reason = prompt('Motivo para retirar o selo concedido pela equipe:')
+    if (!reason) return
+    setBusy(true)
+    try { await api.post(`/verification/admin/${user.id}/reject`, { reason }); toast.success('Selo concedido pela equipe retirado'); onChanged() }
+    catch (e) { toast.error(getApiErrorMessage(e)) } finally { setBusy(false) }
+  }
 
   const d = detail ?? user
   const c = d._count ?? {}
@@ -154,6 +179,8 @@ function UserDetail({ user, onClose, onChanged }: { user: U; onClose: () => void
 
         <div className="text-sm text-slate2-700 space-y-1">
           <p>{d.email}{d.phone ? ` · ${d.phone}` : ''}</p>
+          {d.cpf && <p className="text-slate2-500">CPF {String(d.cpf).slice(0, 3)}.***.***-{String(d.cpf).slice(-2)}</p>}
+          {d.ban_reason && <p className="text-red-700 text-xs">Motivo do bloqueio: {d.ban_reason}</p>}
           {(d.address_city || d.address_state) && <p className="text-slate2-500">{[d.address_neighborhood, d.address_city, d.address_state].filter(Boolean).join(', ')}</p>}
           <p className="text-xs text-slate2-400">Desde {formatDateTime(d.created_at)}</p>
         </div>
@@ -175,11 +202,19 @@ function UserDetail({ user, onClose, onChanged }: { user: U; onClose: () => void
           </Link>
         </div>
 
-        <div className="flex gap-2 pt-2 border-t border-slate2-100">
+        <div className="flex gap-2 pt-2 border-t border-slate2-100 flex-wrap">
           {d.is_active ? (
-            <Button variant="danger" size="sm" isLoading={busy} onClick={suspend}><Ban className="w-4 h-4 mr-1" /> Suspender</Button>
+            <>
+              <Button variant="outline" size="sm" isLoading={busy} onClick={suspend}><Ban className="w-4 h-4 mr-1" /> Suspender</Button>
+              <Button variant="danger" size="sm" isLoading={busy} onClick={ban}><Ban className="w-4 h-4 mr-1" /> Banir</Button>
+            </>
           ) : (
             <Button variant="success" size="sm" isLoading={busy} onClick={reactivate}><RotateCcw className="w-4 h-4 mr-1" /> Reativar</Button>
+          )}
+          {d.is_verified_pro ? (
+            <Button variant="outline" size="sm" isLoading={busy} onClick={revokePro}><Award className="w-4 h-4 mr-1" /> Retirar Pro (concessão)</Button>
+          ) : (
+            <Button variant="outline" size="sm" isLoading={busy} onClick={grantPro}><Award className="w-4 h-4 mr-1" /> Conceder Pro</Button>
           )}
         </div>
       </div>
@@ -194,5 +229,63 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <p className="text-[11px] text-slate2-400">{label}</p>
       {sub && <p className="text-[10px] text-slate2-400">{sub}</p>}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Um cadastro por CPF: consulta a situação de um CPF (ativo, excluído,
+// banido, liberado) e libera um CPF bloqueado com motivo registrado.
+function CpfPanel() {
+  const [cpf, setCpf] = useState('')
+  const [result, setResult] = useState<any>(null)
+  const [busy, setBusy] = useState(false)
+  const STATUS: Record<string, string> = { ACTIVE: 'Em uso', DELETED: 'Conta excluída (bloqueado)', BANNED: 'Conta banida (bloqueado)', RELEASED: 'Liberado' }
+
+  const lookup = async () => {
+    setBusy(true)
+    try { setResult((await api.get(`/users/admin/cpf?cpf=${cpf.replace(/\D/g, '')}`)).data.data) }
+    catch (e) { toast.error(getApiErrorMessage(e)); setResult(null) } finally { setBusy(false) }
+  }
+  const release = async () => {
+    const reason = prompt('Motivo para liberar este CPF (ex.: titular comprovou que não abriu a conta anterior):')
+    if (!reason || reason.trim().length < 5) { if (reason !== null) toast.error('Informe um motivo (mín. 5 caracteres)'); return }
+    setBusy(true)
+    try { await api.post('/users/admin/cpf/release', { cpf, reason }); toast.success('CPF liberado'); await lookup() }
+    catch (e) { toast.error(getApiErrorMessage(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <details className="bg-white border border-slate2-200 rounded-2xl p-4">
+      <summary className="cursor-pointer font-semibold text-slate2-800 flex items-center gap-2">
+        <Fingerprint className="w-4 h-4 text-brand-600" /> Consultar CPF (1 conta por CPF)
+      </summary>
+      <div className="flex gap-2 mt-3 items-end flex-wrap">
+        <Input label="CPF" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
+        <Button size="sm" variant="outline" isLoading={busy} onClick={lookup}>Consultar</Button>
+      </div>
+      {result && (
+        <div className="mt-3 space-y-2 text-sm">
+          {result.registry.length === 0 && result.accounts.length === 0 && <p className="text-slate2-500">Nenhuma conta com este CPF.</p>}
+          {result.registry.map((r: any) => (
+            <div key={r.user_id} className="flex items-center gap-3 border border-slate2-200 rounded-lg p-2.5">
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-slate2-800">{r.user?.name ?? 'Usuário removido'} <span className="text-xs text-slate2-400">{r.user?.email}</span></p>
+                <p className="text-xs text-slate2-500">
+                  {STATUS[r.status] ?? r.status}{r.release_reason ? ` · motivo: ${r.release_reason}` : ''}
+                </p>
+              </div>
+              {(r.status === 'DELETED' || r.status === 'BANNED') && (
+                <Button size="sm" variant="outline" isLoading={busy} onClick={release}>Liberar CPF</Button>
+              )}
+            </div>
+          ))}
+          {result.pending_conflicts?.length > 0 && (
+            <p className="text-xs text-amber-700">
+              Há {result.pending_conflicts.length} conta(s) que tinham este CPF repetido quando a regra entrou em vigor — o CPF ficou só na conta mais confiável.
+            </p>
+          )}
+        </div>
+      )}
+    </details>
   )
 }

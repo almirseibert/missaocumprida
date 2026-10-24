@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { useAuthStore } from '@/store/auth'
+import { isValidCpf } from '@/lib/utils'
 import { api, getApiErrorMessage } from '@/lib/api'
 import type { ServiceGroup, Category } from '@/types'
 
@@ -106,7 +107,9 @@ export default function OnboardingProviderPage() {
   }
 
   async function saveCpf() {
-    if (cpf) await api.put('/users/me', { cpf })
+    if (!cpf) return
+    if (!isValidCpf(cpf)) throw new Error('CPF inválido — confira os números')
+    await api.put('/users/me', { cpf: cpf.replace(/\D/g, '') })
   }
 
   async function savePix() {

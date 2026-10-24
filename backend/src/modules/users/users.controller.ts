@@ -678,6 +678,7 @@ export async function adminGetUser(req: Request, res: Response) {
     select: {
       id: true, name: true, email: true, phone: true, role: true, avatar: true, bio: true,
       cpf: true, is_active: true, suspended_until: true, no_show_count: true,
+      banned_at: true, ban_reason: true, verified_pro_expires: true,
       document_verification_status: true, document_verified: true, document_rejection_reason: true,
       is_verified_pro: true, provider_balance: true, credit_balance: true,
       rating_avg: true, rating_count: true,

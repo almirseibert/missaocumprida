@@ -86,7 +86,7 @@ export async function adminListCategories(req: Request, res: Response) {
     orderBy: [{ group_id: 'asc' }, { order: 'asc' }],
     include: {
       group: { select: { id: true, name: true, slug: true } },
-      _count: { select: { questionnaire_fields: true, orders: true } },
+      _count: { select: { questionnaire_fields: { where: { is_active: true } }, orders: true } },
     },
   })
   return R.ok(res, categories)

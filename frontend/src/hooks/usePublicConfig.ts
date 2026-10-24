@@ -23,6 +23,7 @@ export interface PublicConfig {
   max_order_photos: number
   max_service_photos: number
   recurring_enabled: boolean
+  pro: { monthly_price: number; client_fee_discount_pct: number }
 }
 
 export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
@@ -39,6 +40,7 @@ export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   max_order_photos: 10,
   max_service_photos: 10,
   recurring_enabled: false,
+  pro: { monthly_price: 29.9, client_fee_discount_pct: 0.5 },
 }
 
 let cached: PublicConfig | null = null

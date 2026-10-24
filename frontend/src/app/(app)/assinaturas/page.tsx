@@ -2,157 +2,177 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Repeat, Pause, Play, X, SkipForward, Calendar } from 'lucide-react'
-import { api, getApiErrorMessage } from '@/lib/api'
-import { PageSpinner } from '@/components/ui/Spinner'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
+import { ShieldCheck, Check, AlertTriangle, Smartphone, RefreshCw, Repeat } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import { api, getApiErrorMessage } from '@/lib/api'
+import { useAuthStore } from '@/store/auth'
+import { PageSpinner } from '@/components/ui/Spinner'
+import { Button } from '@/components/ui/Button'
+import { formatCurrency, formatDate } from '@/lib/utils'
+import { usePublicConfig } from '@/hooks/usePublicConfig'
 
-type Subscription = {
-  id: string
-  frequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
-  weekday: number | null
-  day_of_month: number | null
-  time_slot: string
-  base_value: number
-  discount_pct: number
-  status: 'ACTIVE' | 'PAUSED' | 'CANCELLED'
-  next_occurrence: string
-  title: string
-  city: string
-  provider: { id: string; name: string; avatar: string | null; rating_avg: number }
-  category: { name: string; icon: string }
+/**
+ * Assinaturas — central da assinatura Pro (clientes e prestadores).
+ * A compra é feita no app Android (Google Play). Aqui o usuário vê o status,
+ * os benefícios do perfil dele e como assinar/gerenciar.
+ */
+const PLAY_APP_URL = 'https://play.google.com/store/apps/details?id=com.missaocumpridabr.app'
+const PLAY_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions?package=com.missaocumpridabr.app'
+
+type ProStatus = {
+  role: string
+  pro: {
+    active: boolean
+    expires_at: string | null
+    since: string | null
+    source: 'PLAY' | 'ADMIN' | null
+    will_renew: boolean
+    billing_issue: boolean
+  }
+  eligible: boolean
+  ineligible_reason: string | null
+  monthly_value: number
+  benefits: { client: string[]; provider: string[] }
 }
 
-const FREQ_LABEL = { WEEKLY: 'Semanal', BIWEEKLY: 'Quinzenal', MONTHLY: 'Mensal' } as const
-const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-
 export default function AssinaturasPage() {
-  const [subs, setSubs] = useState<Subscription[]>([])
+  const { user, fetchMe } = useAuthStore()
+  const { recurring_enabled: recurringEnabled } = usePublicConfig()
+  const [status, setStatus] = useState<ProStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [role, setRole] = useState<'client' | 'provider'>('client')
-
-  useEffect(() => {
-    load()
-  }, [role])
+  const [syncing, setSyncing] = useState(false)
 
   async function load() {
-    setLoading(true)
     try {
-      const res = await api.get(`/subscriptions?role=${role}`)
-      setSubs(res.data.data || [])
+      const res = await api.get('/verification/me')
+      setStatus(res.data.data)
     } catch (err) {
       toast.error(getApiErrorMessage(err))
     } finally {
       setLoading(false)
     }
   }
+  useEffect(() => { load() }, [])
 
-  async function patch(id: string, body: any) {
+  async function sync() {
+    setSyncing(true)
     try {
-      await api.patch(`/subscriptions/${id}`, body)
-      await load()
+      const res = await api.post('/verification/sync')
+      setStatus(res.data.data)
+      await fetchMe?.()
+      toast.success(res.data.data?.synced ? 'Assinatura conferida com a Google Play' : 'Status atualizado')
     } catch (err) {
       toast.error(getApiErrorMessage(err))
-    }
-  }
-
-  async function cancel(id: string) {
-    if (!confirm('Cancelar esta assinatura? Ocorrências futuras não serão geradas.')) return
-    try {
-      await api.delete(`/subscriptions/${id}`)
-      await load()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err))
-    }
-  }
-
-  async function skipNext(id: string) {
-    try {
-      await api.post(`/subscriptions/${id}/skip-next`, {})
-      toast.success('Próxima ocorrência pulada')
-      await load()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err))
+    } finally {
+      setSyncing(false)
     }
   }
 
   if (loading) return <PageSpinner />
+  if (!status) return null
+
+  const isProvider = status.role === 'PROVIDER' || status.role === 'BOTH' || user?.role === 'PROVIDER' || user?.role === 'BOTH'
+  const benefits = isProvider ? status.benefits.provider : status.benefits.client
+  const pro = status.pro
 
   return (
-    <div className="max-w-4xl mx-auto p-4 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Repeat className="w-6 h-6 text-brand-700" /> Assinaturas
+    <div className="max-w-2xl mx-auto space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold text-slate2-900 flex items-center gap-2">
+          <ShieldCheck className="w-6 h-6 text-blue-600" /> Assinatura Pro
         </h1>
-        <div className="flex items-center gap-2">
-          <div className="bg-slate2-100 rounded-xl p-1 flex">
-            <button onClick={() => setRole('client')} className={`px-3 py-1.5 rounded-lg text-sm ${role === 'client' ? 'bg-white shadow' : ''}`}>Como cliente</button>
-            <button onClick={() => setRole('provider')} className={`px-3 py-1.5 rounded-lg text-sm ${role === 'provider' ? 'bg-white shadow' : ''}`}>Como prestador</button>
-          </div>
-          {role === 'client' && (
-            <Link href="/assinaturas/nova" className="bg-brand-700 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-800">
-              + Nova
-            </Link>
-          )}
-        </div>
+        <p className="text-sm text-slate2-600 mt-1">
+          {isProvider ? 'Mais visibilidade e confiança para fechar mais serviços.' : 'Economia na taxa de conexão e prioridade no atendimento.'}
+        </p>
       </div>
 
-      {subs.length === 0 ? (
-        <Card className="p-8 text-center">
-          <Repeat className="w-12 h-12 text-slate2-400 mx-auto mb-3" />
-          <p className="text-slate2-600">Nenhuma assinatura {role === 'client' ? 'contratada' : 'recebida'} ainda.</p>
-          {role === 'client' && (
-            <Link href="/home" className="text-brand-700 underline text-sm mt-2 inline-block">
-              Contratar um serviço recorrente
-            </Link>
-          )}
-        </Card>
-      ) : (
-        subs.map((sub) => {
-          const finalPrice = sub.base_value * (1 - sub.discount_pct)
-          return (
-            <Card key={sub.id} className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h2 className="font-semibold text-slate2-900">{sub.title}</h2>
-                    {sub.status === 'PAUSED' && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Pausada</span>}
-                    {sub.status === 'CANCELLED' && <span className="text-[10px] bg-slate2-200 text-slate2-600 px-2 py-0.5 rounded-full">Cancelada</span>}
-                  </div>
-                  <p className="text-xs text-slate2-500">{sub.category.name} · {sub.city}</p>
-                  <div className="text-sm text-slate2-700 mt-2 space-y-1">
-                    <div>📅 {FREQ_LABEL[sub.frequency]}{sub.weekday != null ? ` · ${WEEKDAYS[sub.weekday]}` : sub.day_of_month != null ? ` · dia ${sub.day_of_month}` : ''} às {sub.time_slot}</div>
-                    <div>💰 R$ {finalPrice.toFixed(2)} por ocorrência <span className="text-emerald-600 text-xs">(-{(sub.discount_pct * 100).toFixed(0)}%)</span></div>
-                    <div className="text-xs text-slate2-500"><Calendar className="w-3 h-3 inline" /> Próxima: {new Date(sub.next_occurrence).toLocaleDateString('pt-BR')} às {new Date(sub.next_occurrence).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
-                  </div>
-                </div>
+      {/* Status */}
+      <div className={`rounded-2xl border p-5 ${pro.active ? 'border-blue-200 bg-blue-50' : 'border-slate2-200 bg-white'}`}>
+        {pro.active ? (
+          <>
+            <p className="font-semibold text-blue-900 flex items-center gap-2"><Check className="w-5 h-5" /> Você é Pro</p>
+            <p className="text-sm text-blue-800 mt-1">
+              {pro.source === 'ADMIN'
+                ? `Selo concedido pela equipe${pro.expires_at ? ` até ${formatDate(pro.expires_at)}` : ''}.`
+                : pro.will_renew
+                  ? `Renova automaticamente${pro.expires_at ? ` em ${formatDate(pro.expires_at)}` : ''}.`
+                  : `Renovação cancelada — o selo fica ativo até ${pro.expires_at ? formatDate(pro.expires_at) : 'o fim do período pago'}.`}
+            </p>
+            {pro.billing_issue && (
+              <p className="text-sm text-amber-800 mt-2 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5" />
+                Não conseguimos cobrar a renovação. Atualize a forma de pagamento na Google Play para não perder o selo.
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="font-semibold text-slate2-900">Você ainda não é Pro</p>
+            <p className="text-sm text-slate2-600 mt-1">{formatCurrency(status.monthly_value)}/mês, cancele quando quiser.</p>
+          </>
+        )}
+      </div>
+
+      {/* Benefícios */}
+      <div className="bg-white rounded-2xl border border-slate2-200 p-5">
+        <h2 className="font-semibold text-slate2-800 mb-3">O que você ganha</h2>
+        <ul className="space-y-2">
+          {benefits.map((b) => (
+            <li key={b} className="flex items-start gap-2 text-sm text-slate2-700">
+              <Check className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" /> {b}
+            </li>
+          ))}
+        </ul>
+        {!isProvider && (
+          <p className="text-xs text-slate2-500 mt-3">
+            Também oferece serviços? Ative o perfil de prestador em{' '}
+            <Link href="/perfil/editar" className="text-brand-700 underline">Meu perfil</Link> para ter os benefícios de profissional.
+          </p>
+        )}
+      </div>
+
+      {/* Como assinar / gerenciar */}
+      <div className="bg-white rounded-2xl border border-slate2-200 p-5 space-y-3">
+        {!pro.active && !status.eligible && status.ineligible_reason && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            {status.ineligible_reason}{' '}
+            <Link href="/verificacao" className="underline font-medium">Enviar documentos</Link>
+          </p>
+        )}
+        {!pro.active && (
+          <div className="flex items-start gap-3">
+            <Smartphone className="w-5 h-5 text-slate2-500 mt-0.5" />
+            <div className="text-sm text-slate2-700">
+              A assinatura é feita pelo aplicativo <strong>Missão Cumprida</strong> no Android, com pagamento pela Google Play.
+              <div className="mt-2">
+                <a href={PLAY_APP_URL} target="_blank" rel="noopener noreferrer" className="text-brand-700 font-semibold underline">
+                  Abrir o app na Google Play
+                </a>
               </div>
-              {sub.status !== 'CANCELLED' && (
-                <div className="flex gap-2 mt-3 pt-3 border-t flex-wrap">
-                  {sub.status === 'ACTIVE' ? (
-                    <Button variant="ghost" onClick={() => patch(sub.id, { status: 'PAUSED' })}>
-                      <Pause className="w-4 h-4" /> Pausar
-                    </Button>
-                  ) : (
-                    <Button variant="ghost" onClick={() => patch(sub.id, { status: 'ACTIVE' })}>
-                      <Play className="w-4 h-4" /> Retomar
-                    </Button>
-                  )}
-                  {role === 'client' && sub.status === 'ACTIVE' && (
-                    <Button variant="ghost" onClick={() => skipNext(sub.id)}>
-                      <SkipForward className="w-4 h-4" /> Pular próxima
-                    </Button>
-                  )}
-                  <Button variant="ghost" onClick={() => cancel(sub.id)} className="text-rose-600 ml-auto">
-                    <X className="w-4 h-4" /> Cancelar
-                  </Button>
-                </div>
-              )}
-            </Card>
-          )
-        })
+            </div>
+          </div>
+        )}
+        {pro.active && pro.source !== 'ADMIN' && (
+          <a href={PLAY_SUBSCRIPTIONS_URL} target="_blank" rel="noopener noreferrer" className="inline-block text-sm text-brand-700 font-semibold underline">
+            Gerenciar ou cancelar na Google Play
+          </a>
+        )}
+        <div>
+          <Button variant="secondary" size="sm" onClick={sync} isLoading={syncing}>
+            <RefreshCw className="w-4 h-4" /> Já assinei — atualizar status
+          </Button>
+        </div>
+        <p className="text-xs text-slate2-400">
+          Assinatura mensal renovada automaticamente pela Google Play até você cancelar. Ao assinar você concorda com os{' '}
+          <Link href="/termos" className="underline">Termos de Uso</Link> e a{' '}
+          <Link href="/privacidade" className="underline">Política de Privacidade</Link>.
+        </p>
+      </div>
+
+      {recurringEnabled && (
+        <Link href="/assinaturas/recorrentes" className="flex items-center gap-2 text-sm text-slate2-600 hover:text-slate2-900">
+          <Repeat className="w-4 h-4" /> Serviços recorrentes contratados
+        </Link>
       )}
     </div>
   )

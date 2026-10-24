@@ -9,7 +9,8 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { Avatar } from '@/components/ui/Avatar'
 import { Logo } from '@/components/Logo'
 import { cn } from '@/lib/utils'
-import { formatRelative } from '@/lib/utils'
+import { formatRelative, formatCurrency } from '@/lib/utils'
+import { usePublicConfig } from '@/hooks/usePublicConfig'
 import toast from 'react-hot-toast'
 
 const navItems = [
@@ -28,6 +29,7 @@ export function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
+  const { pro: proCfg, recurring_enabled: recurringEnabled } = usePublicConfig()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -203,19 +205,19 @@ export function Navbar() {
                           Meus Pacotes
                         </Link>
                       )}
-                      {(user.role === 'PROVIDER' || user.role === 'BOTH') && (
-                        <Link
-                          href="/verificar"
-                          onClick={() => setDropdownOpen(false)}
-                          className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate2-700 hover:bg-slate2-50"
-                        >
-                          <ShieldCheck className="w-4 h-4 text-blue-600" />
-                          Verificado Pro
-                          {!user.is_verified_pro && (
-                            <span className="ml-auto text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">R$ 29,90</span>
-                          )}
-                        </Link>
-                      )}
+                      <Link
+                        href="/assinaturas"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate2-700 hover:bg-slate2-50"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-blue-600" />
+                        Assinatura Pro
+                        {!user.is_verified_pro && (
+                          <span className="ml-auto text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                            {formatCurrency(proCfg.monthly_price)}
+                          </span>
+                        )}
+                      </Link>
                       {(user.role === 'PROVIDER' || user.role === 'BOTH') && (
                         <Link
                           href="/perfil/agenda"
@@ -226,14 +228,16 @@ export function Navbar() {
                           Minha agenda
                         </Link>
                       )}
-                      <Link
-                        href="/assinaturas"
-                        onClick={() => setDropdownOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate2-700 hover:bg-slate2-50"
-                      >
-                        <Repeat className="w-4 h-4" />
-                        Assinaturas
-                      </Link>
+                      {recurringEnabled && (
+                        <Link
+                          href="/assinaturas/recorrentes"
+                          onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate2-700 hover:bg-slate2-50"
+                        >
+                          <Repeat className="w-4 h-4" />
+                          Serviços recorrentes
+                        </Link>
+                      )}
                       <Link
                         href="/perfil/notificacoes"
                         onClick={() => setDropdownOpen(false)}

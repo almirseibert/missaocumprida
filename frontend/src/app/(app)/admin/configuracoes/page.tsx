@@ -27,6 +27,8 @@ type SettingsData = {
   gateway_surcharge_pix: number
   max_order_photos: number
   max_service_photos: number
+  pro_monthly_price: number
+  pro_client_fee_discount_pct: number
 }
 
 const PCT_FIELDS: Array<{ key: keyof SettingsData; label: string; hint: string }> = [
@@ -203,6 +205,46 @@ export default function AdminConfiguracoesPage() {
               className="mt-1 block w-full rounded-lg border-[1.5px] border-slate2-300 px-3 py-2.5 text-sm"
             />
             <p className="text-[11px] text-slate2-400 mt-1">Check-in e conclusão do prestador (1 a 20)</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Assinatura Pro */}
+      <div className="bg-white border border-slate2-200 rounded-2xl p-5">
+        <h2 className="font-semibold text-slate2-800 mb-1">Assinatura Pro</h2>
+        <p className="text-xs text-slate2-500 mb-4">
+          O valor cobrado é o do produto na Google Play — mantenha o preço exibido igual ao da loja.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-slate2-700">Preço exibido (R$/mês)</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              value={settings.pro_monthly_price}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value.replace(',', '.'))
+                if (!isNaN(v)) setSettings({ ...settings, pro_monthly_price: v })
+              }}
+              className="mt-1 block w-full rounded-lg border-[1.5px] border-slate2-300 px-3 py-2.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate2-700">Desconto do cliente Pro na taxa de conexão (%)</label>
+            <input
+              type="number"
+              step="5"
+              min={0}
+              max={100}
+              value={Math.round(settings.pro_client_fee_discount_pct * 100)}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value)
+                if (!isNaN(v)) setSettings({ ...settings, pro_client_fee_discount_pct: Math.min(Math.max(v, 0), 100) / 100 })
+              }}
+              className="mt-1 block w-full rounded-lg border-[1.5px] border-slate2-300 px-3 py-2.5 text-sm"
+            />
+            <p className="text-[11px] text-slate2-400 mt-1">Benefício do cliente assinante (0 = sem desconto)</p>
           </div>
         </div>
       </div>

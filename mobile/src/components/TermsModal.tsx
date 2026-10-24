@@ -4,7 +4,6 @@ import {
 } from 'react-native'
 import { ShieldCheck, AlertTriangle } from 'lucide-react-native'
 import { api } from '../lib/api'
-import { formatDateShort } from '../lib/utils'
 import { useAuthStore } from '../store/auth'
 
 interface TermsPayload {
@@ -67,7 +66,7 @@ export function TermsModal() {
                 {terms.title}
               </Text>
               <Text className="font-sans text-brand-100 text-xs mt-0.5">
-                Versão {terms.version} · Vigente em {formatDateShort(terms.effective_date)}
+                Versão {terms.version} · Vigente em {terms.effective_date.split('-').reverse().join('/')}
               </Text>
             </View>
           </View>

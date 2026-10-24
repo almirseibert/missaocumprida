@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Camera, FileCheck, Upload, ShieldCheck, AlertCircle, Loader2, Check, MapPinned, PhoneCall, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api, getApiErrorMessage } from '@/lib/api'
-import { authFileUrl } from '@/lib/utils'
+import { authFileUrl, isValidCpf } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -109,6 +109,11 @@ export default function VerificacaoPage() {
   }
 
   async function saveProfile() {
+    // 1 conta por CPF: valida os dígitos antes de enviar
+    if (profile.cpf && !isValidCpf(profile.cpf)) {
+      toast.error('CPF inválido — confira os números')
+      return
+    }
     setProfileSaving(true)
     try {
       const payload: Record<string, unknown> = {

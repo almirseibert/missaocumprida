@@ -23,7 +23,7 @@ export default async function TermosPage() {
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-slate-900">{doc.title}</h1>
-      <p className="text-sm text-slate-500 mt-1">Vigente desde {doc.effective_date}</p>
+      <p className="text-sm text-slate-500 mt-1">Vigente desde {doc.effective_date.split('-').reverse().join('/')}</p>
       <article className="mt-6">{renderMarkdown(doc.body)}</article>
     </main>
   )

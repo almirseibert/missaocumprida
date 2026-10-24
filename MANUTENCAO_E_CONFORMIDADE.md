@@ -136,6 +136,36 @@ proposta; distâncias em faixa ("1–3 km"); fotos opcionais em todos os serviç
 em Configurações), várias fotos no check-in/conclusão; prestador vê as respostas do questionário;
 chat mostra as mensagens mais recentes; agendamento desfeito fica arquivado como prova.
 
+### 3.2.3 Rodada pós-Play — Fase 3 (local exato, editar/excluir, Pro, CPF, catálogo)
+**Antes do redeploy do back** (mesma ordem: backup → migração → back → front):
+1. `npm run db:migrate:prod` aplica `20261024010000_order_location_edit`,
+   `20261024020000_one_account_per_cpf`, `20261024030000_pro_subscription_webhooks` e
+   `20261024040000_catalog_keys_merge`. Todas aditivas e reexecutáveis.
+   - ⚠️ A de CPF **normaliza** os CPFs (só dígitos) e, se duas contas tiverem o mesmo CPF,
+     mantém o CPF só na mais confiável (documentos aprovados > ativa > mais antiga); as outras
+     ficam sem CPF e aparecem em `cpf_conflicts` para o suporte regularizar.
+2. Defina **antes** do primeiro boot e **nunca troque depois**: `CPF_HASH_KEY` (ex.: `openssl rand -hex 32`).
+   Sem ela o backend usa uma chave derivada do `JWT_SECRET` (funciona, mas trocar o JWT_SECRET
+   depois quebraria o bloqueio de CPFs de contas excluídas).
+3. No boot o backend preenche sozinho o registro de CPFs (`cpf_registry`) com os CPFs existentes.
+4. **Seed agora é seguro em produção**: `npm run db:seed` sincroniza perguntas pela chave estável
+   (não apaga nem recria IDs), aplica as regras do catálogo e cria as 40 categorias novas.
+   Só o catálogo novo: `npm run db:catalog`. O `seed-expansion` foi desativado (duplicava serviços).
+5. **Mesclas de serviços duplicados**: Admin → Categorias → "Serviços duplicados" → Mesclar
+   (mostra antes quantos pedidos/prestadores serão movidos). Nada é apagado; o endereço antigo redireciona.
+
+Envs novas:
+| Env | Padrão | Para quê |
+|---|---|---|
+| `CPF_HASH_KEY` | derivada do JWT_SECRET | Hash do CPF (1 conta por CPF). Definir uma vez e não trocar |
+| `REVENUECAT_SECRET_API_KEY` | vazio | Chave secreta `sk_…` da RevenueCat para conferir a assinatura no servidor (`/verification/sync`) |
+| `REVENUECAT_ENTITLEMENT` | `pro` | Nome do entitlement na RevenueCat |
+| `RC_ALLOW_SANDBOX` | `true` | Aceita compras de teste (testadores de licença). Pôr `false` na produção aberta |
+| `GEOCODER` | `nominatim` | Endereço ↔ coordenadas (OpenStreetMap, 1 req/s). `none` desliga |
+| `NOMINATIM_USER_AGENT` | `MissaoCumprida/1.0 (+site)` | Identificação exigida pela política do Nominatim |
+
+Termos 1.4.0 e Privacidade 1.2.0: todos os usuários verão o pedido de aceite de novo.
+
 ### 3.3 Rotacionar a senha do admin (crítico — S1)
 No shell do container do backend (ou local apontando para o banco de prod), com `ADMIN_EMAIL` e `ADMIN_PASSWORD` definidos:
 ```
