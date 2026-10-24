@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
 import { sendToUsers } from '../push/push.service'
+import { audit } from '../audit/audit.service'
 
 /**
  * Avisos do admin (Remap 2.0): pop-ups e banners exibidos nos apps
@@ -72,9 +73,15 @@ export async function adminCreateAnnouncement(req: Request, res: Response) {
     },
   })
 
+  let recipients: number | null = null
   if (parsed.data.send_push) {
-    await sendAnnouncementPush(announcement.id)
+    recipients = await sendAnnouncementPush(announcement.id)
   }
+  audit({
+    type: 'ANNOUNCEMENT_CREATED', entityType: 'Announcement', entityId: announcement.id,
+    after: { title: announcement.title, body: announcement.body, audience: announcement.audience, type: announcement.type },
+    metadata: { push_recipients: recipients },
+  })
 
   return R.created(res, announcement, 'Aviso criado')
 }
@@ -94,6 +101,7 @@ export async function adminDeleteAnnouncement(req: Request, res: Response) {
     where: { id: req.params.id },
     data: { is_active: false, ends_at: new Date() },
   })
+  audit({ type: 'ANNOUNCEMENT_DISABLED', entityType: 'Announcement', entityId: existing.id, before: { title: existing.title } })
   return R.ok(res, null, 'Aviso desativado')
 }
 
@@ -130,5 +138,9 @@ export async function adminSendAnnouncementPush(req: Request, res: Response) {
   const announcement = await prisma.announcement.findUnique({ where: { id: req.params.id } })
   if (!announcement) return R.notFound(res, 'Aviso não encontrado')
   const sent = await sendAnnouncementPush(announcement.id)
+  audit({
+    type: 'ANNOUNCEMENT_PUSH_SENT', entityType: 'Announcement', entityId: announcement.id,
+    metadata: { title: announcement.title, audience: announcement.audience, recipients: sent },
+  })
   return R.ok(res, { recipients: sent }, `Push enviado para ${sent} usuário(s)`)
 }

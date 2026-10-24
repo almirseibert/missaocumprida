@@ -6,6 +6,8 @@ import { env } from '../../config/env'
 import { mpPayment, mpPreference } from './mercadopago'
 import { getSettings, PlatformSettings } from '../settings/settings.service'
 import { notify } from '../push/push.service'
+import { creditProviderBalance, debitProviderBalance } from '../audit/ledger.service'
+import { audit, recordEvent } from '../audit/audit.service'
 import { accrueReferralVolume } from '../referrals/referrals.service'
 
 /**
@@ -126,6 +128,25 @@ export async function createFeesOnAccept(
       },
     ],
   })
+  await recordEvent(
+    {
+      type: 'FEES_CREATED',
+      userId: args.client_id,
+      counterpartId: args.provider_id,
+      orderId: args.order_id,
+      entityType: 'Proposal',
+      entityId: args.proposal_id,
+      amount: args.value,
+      metadata: {
+        client_fee: clientBase,
+        provider_fee: computeFeeBase(args.value, s.fee_provider_pct, s.fee_min),
+        client_pct: clientPct,
+        provider_pct: s.fee_provider_pct,
+        pro_discount: discount,
+      },
+    },
+    tx,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -492,11 +513,13 @@ export async function payProviderFeeWithBalance(args: { userId: string; orderId:
 
   // Débito atômico: só desconta se houver saldo suficiente (sem surcharge —
   // pagamento com saldo não passa pelo gateway)
-  const debited = await prisma.user.updateMany({
-    where: { id: args.userId, provider_balance: { gte: fee.base_amount } },
-    data: { provider_balance: { decrement: fee.base_amount } },
-  })
-  if (debited.count === 0) {
+  const debited = await prisma.$transaction((tx) =>
+    debitProviderBalance(tx, {
+      userId: args.userId, amount: fee.base_amount, reason: 'FEE_PAID_WITH_BALANCE',
+      refType: 'ConnectionFee', refId: fee.id, orderId: args.orderId, note: 'Taxa de conexão paga com saldo',
+    }),
+  )
+  if (!debited) {
     throw new FeeFlowError(400, `Saldo insuficiente. A taxa é R$ ${fee.base_amount.toFixed(2)} — pague com Pix ou adicione saldo.`)
   }
 
@@ -507,10 +530,12 @@ export async function payProviderFeeWithBalance(args: { userId: string; orderId:
   const ok = await markFeePaid(fee.id, { finalStatus: 'COVERED', method: 'balance' })
   if (!ok) {
     // corrida rara: outra via marcou a taxa primeiro — devolve o débito
-    await prisma.user.update({
-      where: { id: args.userId },
-      data: { provider_balance: { increment: fee.base_amount } },
-    })
+    await prisma.$transaction((tx) =>
+      creditProviderBalance(tx, {
+        userId: args.userId, amount: fee.base_amount, reason: 'FEE_PAID_WITH_BALANCE_REVERSAL',
+        refType: 'ConnectionFee', refId: fee.id, orderId: args.orderId, note: 'Taxa já estava paga — débito devolvido',
+      }),
+    )
     return { already_paid: true, status: 'PAID' }
   }
 
@@ -537,6 +562,15 @@ export async function markFeePaid(
 
   const fee = await prisma.connectionFee.findUnique({ where: { id: feeId } })
   if (!fee) return true
+  audit({
+    type: 'FEE_PAID',
+    userId: fee.user_id,
+    orderId: fee.order_id,
+    entityType: 'ConnectionFee',
+    entityId: fee.id,
+    amount: fee.gateway_amount || fee.base_amount,
+    metadata: { side: fee.side, status: opts.finalStatus, method: opts.method ?? fee.method, mp_ref: opts.mpRef ?? null, credit_used: fee.credit_used },
+  })
   if (fee.side === 'CLIENT') await handleClientFeePaid(fee)
   else await handleProviderFeePaid(fee)
   return true
@@ -582,6 +616,17 @@ async function handleProviderFeePaid(fee: ConnectionFee) {
     select: { id: true, title: true, client_id: true, final_price: true },
   })
   if (!order) return
+  // Momento em que endereço, telefone e chat ficam disponíveis para as duas partes
+  audit({
+    type: 'CONTACT_UNLOCKED',
+    userId: order.client_id,
+    counterpartId: fee.user_id,
+    orderId: order.id,
+    entityType: 'Order',
+    entityId: order.id,
+    actorId: null,
+    actorRole: 'SYSTEM',
+  })
 
   await notify(order.client_id, {
     type: 'CONTACT_UNLOCKED',
@@ -633,12 +678,14 @@ async function creditOrphanPayment(fee: ConnectionFee, mpRef: string, amount: nu
       await tx.creditTransaction.create({
         data: { user_id: fee.user_id, amount: value, reason: 'MP_ORPHAN_PAYMENT', ref_id: mpRef },
       })
-      await tx.user.update({
-        where: { id: fee.user_id },
-        data: fee.side === 'CLIENT'
-          ? { credit_balance: { increment: value } }
-          : { provider_balance: { increment: value } },
-      })
+      if (fee.side === 'CLIENT') {
+        await tx.user.update({ where: { id: fee.user_id }, data: { credit_balance: { increment: value } } })
+      } else {
+        await creditProviderBalance(tx, {
+          userId: fee.user_id, amount: value, reason: 'MP_ORPHAN_PAYMENT', refType: 'ConnectionFee',
+          refId: fee.id, orderId: fee.order_id, note: `Pagamento ${mpRef} chegou com a taxa já resolvida`,
+        })
+      }
       return true
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     if (!credited) return
@@ -667,6 +714,18 @@ export async function onFeeReversedByExternalRef(externalRef: string, mpRef: str
   })
   if (updated.count > 0) {
     console.warn(`[taxa-conexao] taxa ${feeId} ${mpStatus} no Mercado Pago (${mpRef}) — revisar no painel admin`)
+    const fee = await prisma.connectionFee.findUnique({ where: { id: feeId } })
+    audit({
+      type: 'FEE_REVERSED_BY_GATEWAY',
+      userId: fee?.user_id ?? null,
+      orderId: fee?.order_id ?? null,
+      entityType: 'ConnectionFee',
+      entityId: feeId,
+      amount: fee?.gateway_amount ?? null,
+      actorRole: 'WEBHOOK',
+      reason: `Mercado Pago: ${mpStatus}`,
+      metadata: { mp_ref: mpRef },
+    })
   }
 }
 
@@ -709,12 +768,18 @@ export async function creditFee(
         }),
       ])
     } else {
-      await prisma.user.update({
-        where: { id: fee.user_id },
-        data: { provider_balance: { increment: refundable } },
-      })
+      await prisma.$transaction((tx) =>
+        creditProviderBalance(tx, {
+          userId: fee.user_id, amount: refundable, reason: 'FEE_CREDIT', refType: 'ConnectionFee',
+          refId: fee.id, orderId: fee.order_id, note: `Taxa devolvida como saldo (${reason})`,
+        }),
+      )
     }
   }
+  audit({
+    type: 'FEE_CREDITED', userId: fee.user_id, orderId: fee.order_id, entityType: 'ConnectionFee',
+    entityId: fee.id, amount: refundable, reason: opts.notes ?? reason, metadata: { side: fee.side, reason },
+  })
 
   await notify(fee.user_id, {
     type: 'FEE_CREDITED',
@@ -801,6 +866,18 @@ export async function expireOverdueProviderFees(): Promise<{ expired: number }> 
         data: { status: 'EXPIRED' },
       })
       if (marked.count === 0) continue
+      audit({
+        type: 'FEE_EXPIRED',
+        userId: providerFee.user_id,
+        counterpartId: order.client_id,
+        orderId: order.id,
+        entityType: 'ConnectionFee',
+        entityId: providerFee.id,
+        amount: providerFee.base_amount,
+        actorId: null,
+        actorRole: 'SYSTEM',
+        reason: 'Prestador não pagou a taxa no prazo',
+      })
 
       await prisma.user.update({
         where: { id: providerFee.user_id },

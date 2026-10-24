@@ -5,7 +5,7 @@ import { prisma } from '../../config/database'
 import { estimatePriceDynamic } from '../../utils/priceEstimator'
 import { haversineDistance, distanceBucket } from '../../utils/geo'
 import * as R from '../../utils/response'
-import { sendToUsers } from '../push/push.service'
+import { sendToUsers, notify } from '../push/push.service'
 import { persistUpload } from '../files/files.service'
 import { contactsUnlocked } from '../../utils/orderVisibility'
 import { sanitizeContactInfo } from '../../utils/contactSanitizer'
@@ -23,6 +23,9 @@ import {
 } from './orders.service'
 import { normalizeCep } from '../geo/geo.service'
 import { cancelBeforeConnectionByClient } from '../schedules/scheduleCancel.service'
+import { creditProviderBalance } from '../audit/ledger.service'
+import { audit } from '../audit/audit.service'
+import { creditFee } from '../payments/connectionFees.service'
 
 const answerValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()])
 const orderContentSchema = z.object({
@@ -287,6 +290,7 @@ export async function createOrder(req: Request, res: Response) {
     // Non-fatal — don't fail the order creation
   }
 
+  audit({ type: 'ORDER_CREATED', userId: req.userId, orderId: order.id, entityType: 'Order', entityId: order.id, after: { category: category.slug, city, is_urgent, location_source: content.location_source, photos: (content.photos as string[]).length } })
   return R.created(res, order, 'Pedido criado com sucesso')
 }
 
@@ -372,6 +376,7 @@ export async function updateOrder(req: Request, res: Response) {
     await sendToUsers(providerIds, { title, body: bodyText, data: { order_id: order.id, type: 'ORDER_UPDATED' }, channel: 'proposal_update' })
   }
 
+  audit({ type: 'ORDER_EDITED', userId: req.userId, orderId: order.id, entityType: 'Order', entityId: order.id, before: { description: order.description, answers: order.answers, address: order.address, address_number: order.address_number, city: order.city, desired_date: order.desired_date, photos: order.photos.length }, after: { description: data.description, answers: data.answers, address: data.address, address_number: data.address_number, city: data.city, desired_date: data.desired_date, photos: (data.photos as string[] | undefined)?.length }, metadata: { notified_providers: providerIds.length } })
   return R.ok(res, updated, providerIds.length ? 'Pedido atualizado. Os prestadores com proposta foram avisados.' : 'Pedido atualizado')
 }
 
@@ -379,7 +384,7 @@ export async function updateOrder(req: Request, res: Response) {
 // Cancelamento/exclusão pelo cliente
 // ---------------------------------------------------------------------------
 /** Cancela um pedido ainda sem proposta aceita: recusa as propostas, devolve boosts pagos e avisa. */
-async function cancelOpenOrder(orderId: string, actorId: string, reason: string, hide: boolean) {
+async function cancelOpenOrder(orderId: string, actorId: string, reason: string, hide: boolean, byAdmin = false) {
   const result = await prisma.$transaction(async (tx) => {
     const moved = await tx.order.updateMany({
       where: { id: orderId, status: { in: EDITABLE_STATUSES as never } },
@@ -403,7 +408,11 @@ async function cancelOpenOrder(orderId: string, actorId: string, reason: string,
         .filter((b) => b.payment_ref === 'INTERNAL_BALANCE')
         .reduce((sum, b) => sum + (b.value ?? 0), 0)
       if (refund > 0) {
-        await tx.user.update({ where: { id: p.provider_id }, data: { provider_balance: { increment: refund } } })
+        await creditProviderBalance(tx, {
+          userId: p.provider_id, amount: refund, reason: 'BOOST_REFUND',
+          refType: 'Proposal', refId: p.id, orderId,
+          note: byAdmin ? 'Pedido cancelado pelo suporte: destaque devolvido' : 'Pedido cancelado pelo cliente: destaque devolvido',
+        })
       }
     }
     return pending
@@ -412,7 +421,7 @@ async function cancelOpenOrder(orderId: string, actorId: string, reason: string,
 
   const providerIds = Array.from(new Set(result.map((p) => p.provider_id)))
   if (providerIds.length > 0) {
-    const title = 'Pedido cancelado pelo cliente'
+    const title = byAdmin ? 'Pedido cancelado pelo suporte' : 'Pedido cancelado pelo cliente'
     const body = 'Um pedido em que você fez proposta foi cancelado. Se você pagou destaque, o valor voltou para o seu saldo.'
     await prisma.notification.createMany({
       data: providerIds.map((id) => ({ user_id: id, type: 'ORDER_CANCELLED' as never, title, body, data: { order_id: orderId } as never })),
@@ -440,6 +449,7 @@ export async function deleteOrder(req: Request, res: Response) {
   if (EDITABLE_STATUSES.includes(order.status)) {
     const done = await cancelOpenOrder(order.id, req.userId, reason, true)
     if (!done) return R.conflict(res, 'O pedido mudou de estado. Atualize a tela e tente novamente.')
+    audit({ type: 'ORDER_DELETED', userId: req.userId, orderId: order.id, entityType: 'Order', entityId: order.id, before: { status: order.status }, after: { status: 'CANCELLED', hidden: true }, reason })
     return R.ok(res, null, 'Pedido excluído. Os prestadores com proposta foram avisados.')
   }
 
@@ -455,6 +465,7 @@ export async function deleteOrder(req: Request, res: Response) {
 
   if (['CANCELLED', 'DONE', 'RATED'].includes(order.status)) {
     await prisma.order.update({ where: { id: order.id }, data: { hidden_by_client_at: new Date() } })
+    audit({ type: 'ORDER_HIDDEN', userId: req.userId, orderId: order.id, entityType: 'Order', entityId: order.id, before: { status: order.status } })
     return R.ok(res, null, 'Pedido removido da sua lista')
   }
 
@@ -475,6 +486,7 @@ export async function cancelOrder(req: Request, res: Response) {
   }
   const done = await cancelOpenOrder(order.id, req.userId, 'Cancelado pelo cliente', false)
   if (!done) return R.conflict(res, 'O pedido mudou de estado. Atualize a tela e tente novamente.')
+  audit({ type: 'ORDER_CANCELLED', userId: req.userId, orderId: order.id, entityType: 'Order', entityId: order.id, before: { status: order.status }, after: { status: 'CANCELLED' } })
   return R.ok(res, null, 'Pedido cancelado')
 }
 
@@ -817,12 +829,98 @@ export async function adminGetOrder(req: Request, res: Response) {
 }
 
 // PATCH /api/orders/admin/orders/:id/cancel — intervenção do admin
+// PATCH /api/orders/admin/orders/:id/cancel — cancelamento pelo suporte.
+// Motivo obrigatório (fica na linha do tempo). Taxas pendentes são canceladas;
+// taxas já pagas voltam como crédito (cliente) / saldo (prestador), a menos
+// que o admin marque credit_fees=false (ex.: fraude comprovada).
+const adminCancelSchema = z.object({
+  reason: z.string().trim().min(5, 'Informe o motivo (mínimo 5 caracteres)').max(500),
+  credit_fees: z.boolean().optional().default(true),
+})
+
 export async function adminCancelOrder(req: Request, res: Response) {
-  const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } })
+  const parsed = adminCancelSchema.safeParse(req.body ?? {})
+  if (!parsed.success) return R.badRequest(res, parsed.error.errors[0]?.message ?? 'Motivo obrigatório')
+  const { reason, credit_fees } = parsed.data
+
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: { schedule: { select: { id: true, status: true, provider_id: true, proposal_id: true } }, connection_fees: true },
+  })
   if (!order) return R.notFound(res, 'Pedido não encontrado')
   if (['DONE', 'RATED', 'CANCELLED'].includes(order.status)) {
     return R.badRequest(res, `Pedido já está ${order.status} e não pode ser cancelado.`)
   }
-  await prisma.order.update({ where: { id: req.params.id }, data: { status: 'CANCELLED' } })
-  return R.ok(res, null, 'Pedido cancelado pelo admin')
+
+  // Sem proposta aceita: mesmo caminho do cliente (recusa propostas, devolve boosts, avisa)
+  if (EDITABLE_STATUSES.includes(order.status)) {
+    const done = await cancelOpenOrder(order.id, req.userId, reason, false, true)
+    if (!done) return R.conflict(res, 'O pedido mudou de estado. Atualize e tente novamente.')
+    await notify(order.client_id, {
+      type: 'ORDER_CANCELLED',
+      title: 'Pedido cancelado pelo suporte',
+      body: `Seu pedido "${order.title}" foi cancelado. Motivo: ${reason}`,
+      data: { order_id: order.id },
+      channel: 'proposal_update',
+    }).catch(() => {})
+    audit({
+      type: 'ORDER_CANCELLED_BY_ADMIN', userId: order.client_id, orderId: order.id, entityType: 'Order',
+      entityId: order.id, reason, before: { status: order.status }, after: { status: 'CANCELLED' },
+      metadata: { rejected_proposals: done.length },
+    })
+    return R.ok(res, null, 'Pedido cancelado. Cliente e prestadores foram avisados.')
+  }
+
+  // Com proposta aceita: o agendamento fica guardado (status CANCELLED), nada é apagado
+  const moved = await prisma.$transaction(async (tx) => {
+    const m = await tx.order.updateMany({
+      where: { id: order.id, status: order.status },
+      data: { status: 'CANCELLED', cancelled_at: new Date(), cancelled_by: req.userId, cancel_reason: reason },
+    })
+    if (m.count === 0) return false
+    if (order.schedule) {
+      await tx.schedule.update({ where: { id: order.schedule.id }, data: { status: 'CANCELLED' } })
+      await tx.proposal.update({ where: { id: order.schedule.proposal_id }, data: { status: 'CANCELLED' } })
+    }
+    await tx.proposal.updateMany({ where: { order_id: order.id, status: 'PENDING' }, data: { status: 'REJECTED' } })
+    await tx.connectionFee.updateMany({ where: { order_id: order.id, status: 'PENDING' }, data: { status: 'CANCELLED' } })
+    return true
+  })
+  if (!moved) return R.conflict(res, 'O pedido mudou de estado. Atualize e tente novamente.')
+
+  const credited: Array<{ side: string; fee_id: string }> = []
+  if (credit_fees) {
+    for (const fee of order.connection_fees) {
+      if (fee.status !== 'PAID' && fee.status !== 'COVERED') continue
+      if (await creditFee(fee, 'ADMIN_CANCEL', { notes: reason, adminId: req.userId })) {
+        credited.push({ side: fee.side, fee_id: fee.id })
+      }
+    }
+  }
+
+  const body = `O pedido "${order.title}" foi cancelado pelo suporte. Motivo: ${reason}`
+  const recipients = [order.client_id, order.schedule?.provider_id].filter(Boolean) as string[]
+  for (const uid of recipients) {
+    await notify(uid, {
+      type: 'ORDER_CANCELLED',
+      title: 'Pedido cancelado pelo suporte',
+      body,
+      data: { order_id: order.id },
+      channel: 'schedule_update',
+    }).catch(() => {})
+  }
+  audit({
+    type: 'ORDER_CANCELLED_BY_ADMIN', userId: order.client_id, counterpartId: order.schedule?.provider_id ?? null,
+    orderId: order.id, entityType: 'Order', entityId: order.id, reason,
+    before: { status: order.status, schedule: order.schedule?.status ?? null },
+    after: { status: 'CANCELLED' },
+    metadata: { credit_fees, credited },
+  })
+  return R.ok(
+    res,
+    { credited },
+    credited.length > 0
+      ? 'Pedido cancelado. As taxas pagas voltaram como crédito/saldo para quem pagou.'
+      : 'Pedido cancelado. As duas partes foram avisadas.',
+  )
 }

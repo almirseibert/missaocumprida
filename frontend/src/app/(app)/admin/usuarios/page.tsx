@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Search, UserIcon, ShieldCheck, Ban, RotateCcw, Fingerprint, Award } from 'lucide-react'
+import { Search, UserIcon, ShieldCheck, Ban, RotateCcw, Fingerprint, Award, ChevronRight } from 'lucide-react'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
 import { PageSpinner } from '@/components/ui/Spinner'
@@ -130,9 +130,10 @@ function UserDetail({ user, onClose, onChanged }: { user: U; onClose: () => void
   }, [user])
 
   const suspend = async () => {
-    if (!confirm(`Suspender ${user.name}?`)) return
+    const reason = prompt(`Motivo da suspensão de ${user.name} (fica registrado):`)
+    if (!reason || reason.trim().length < 5) { if (reason !== null) toast.error('Informe um motivo (mín. 5 caracteres)'); return }
     setBusy(true)
-    try { await api.patch(`/users/admin/users/${user.id}/suspend`, {}); toast.success('Usuário suspenso'); onChanged() }
+    try { await api.patch(`/users/admin/users/${user.id}/suspend`, { reason: reason.trim() }); toast.success('Usuário suspenso'); onChanged() }
     catch (e) { toast.error(getApiErrorMessage(e)) } finally { setBusy(false) }
   }
   const reactivate = async () => {
@@ -170,6 +171,9 @@ function UserDetail({ user, onClose, onChanged }: { user: U; onClose: () => void
   return (
     <Modal isOpen onClose={onClose} title={user.name} size="lg">
       <div className="space-y-4">
+        <Link href={`/admin/usuarios/${user.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline">
+          Abrir ficha completa (linha do tempo, financeiro, acessos) <ChevronRight className="w-4 h-4" />
+        </Link>
         <div className="flex flex-wrap gap-2">
           <span className="text-xs px-2 py-1 rounded-full bg-slate2-100 text-slate2-600">{ROLE_LABEL[d.role] ?? d.role}</span>
           <span className={`text-xs px-2 py-1 rounded-full ${KYC_COLOR[d.document_verification_status] ?? 'bg-slate2-100'}`}>{KYC_LABEL[d.document_verification_status] ?? d.document_verification_status}</span>

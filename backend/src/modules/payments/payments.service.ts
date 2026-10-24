@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import { notify } from '../push/push.service'
+import { creditProviderBalance } from '../audit/ledger.service'
 import { accrueReferralVolume } from '../referrals/referrals.service'
 
 /**
@@ -43,9 +44,9 @@ export async function releasePayment(payment: ReleasablePayment): Promise<void> 
       data: { status: 'RELEASED', released_at: new Date() },
     })
     if (res.count === 0) return false
-    await tx.user.update({
-      where: { id: payment.provider_id },
-      data: { provider_balance: { increment: payment.provider_amount } },
+    await creditProviderBalance(tx, {
+      userId: payment.provider_id, amount: payment.provider_amount, reason: 'PAYMENT_RELEASE',
+      refType: 'Payment', refId: payment.id, orderId: payment.order_id, note: 'Pagamento liberado (escrow legado)',
     })
     return true
   })

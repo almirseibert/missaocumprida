@@ -1055,6 +1055,78 @@ model VerifiedProSubscription {
 }
 
 // ============================================================
+// RASTREABILIDADE — tudo o que acontece no sistema, por quem, quando e de onde
+// ------------------------------------------------------------
+// audit_events: um registro por ação relevante (pedido, proposta, taxa,
+// pagamento, estorno, chat visto pelo admin, banimento, mudança de dados…).
+// Dados pessoais vão mascarados em before/after. Nunca senha, token ou imagem.
+// ============================================================
+model AuditEvent {
+  id             String   @id @default(uuid())
+  created_at     DateTime @default(now())
+  type           String // ex.: ORDER_CREATED, FEE_PAID, USER_BANNED
+  actor_id       String? // quem fez (null = sistema/webhook)
+  actor_role     String? // CLIENT | PROVIDER | BOTH | ADMIN | SYSTEM | WEBHOOK
+  user_id        String? // conta afetada (titular do evento)
+  counterpart_id String? // a outra parte (ex.: prestador do pedido)
+  order_id       String?
+  entity_type    String? // Order | Proposal | ConnectionFee | User | …
+  entity_id      String?
+  amount         Float?
+  before         Json?
+  after          Json?
+  metadata       Json?
+  reason         String?
+  request_id     String?
+  ip             String?
+  user_agent     String?
+  device_id      String?
+  app_version    String?
+
+  @@index([user_id, created_at])
+  @@index([counterpart_id, created_at])
+  @@index([order_id, created_at])
+  @@index([actor_id, created_at])
+  @@index([entity_type, entity_id, created_at])
+  @@index([type, created_at])
+  @@map("audit_events")
+}
+
+// Registros de acesso (Marco Civil da Internet, art. 15 — mínimo 6 meses)
+model AccessLog {
+  id          String   @id @default(uuid())
+  user_id     String?
+  email       String? // tentativa de login com e-mail que não existe
+  event       String // LOGIN_OK | LOGIN_FAIL | REFRESH | LOGOUT | REGISTER
+  ip          String?
+  user_agent  String?
+  device_id   String?
+  app_version String?
+  created_at  DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@index([created_at])
+  @@map("access_logs")
+}
+
+// Extrato do saldo do prestador (cada entrada/saída de provider_balance)
+model ProviderBalanceTransaction {
+  id            String   @id @default(uuid())
+  user_id       String
+  amount        Float // positivo = entrada; negativo = saída
+  balance_after Float
+  reason        String // FEE_CREDIT | BOOST | BOOST_REFUND | WITHDRAWAL | WITHDRAWAL_REJECTED | PAYMENT_RELEASE | FEE_PAID_WITH_BALANCE | ADMIN_ADJUSTMENT | OPENING_BALANCE | ADMIN_REVERSAL
+  ref_type      String?
+  ref_id        String?
+  actor_id      String?
+  note          String?
+  created_at    DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@map("provider_balance_transactions")
+}
+
+// ============================================================
 // WEBHOOKS RECEBIDOS (Mercado Pago, RevenueCat)
 // Guarda cada evento (idempotência + prova para o suporte). O mesmo evento
 // reenviado pelo provedor não é processado duas vezes.

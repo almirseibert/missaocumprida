@@ -166,6 +166,29 @@ Envs novas:
 
 Termos 1.4.0 e Privacidade 1.2.0: todos os usuários verão o pedido de aceite de novo.
 
+### 3.2.4 Rodada pós-Play — Fase 4 (rastreabilidade no painel admin)
+**Antes do redeploy do back:** backup → `npm run db:migrate:prod` (aplica `20261024050000_audit_trail`,
+aditiva e reexecutável) → back → front. Nenhuma env nova.
+- A migração cria `audit_events`, `access_logs` e `provider_balance_transactions`, e grava uma linha
+  `OPENING_BALANCE` com o saldo atual de cada prestador (a partir daí cada centavo tem extrato).
+- **Admin → Auditoria & rastreabilidade** (`/admin/auditoria`): busca por e-mail, nome, telefone, CPF ou
+  nº do pedido; todos os eventos com filtro; webhooks do Mercado Pago/RevenueCat com **Reprocessar**
+  (seguro: não credita duas vezes); **Conciliação** (saldo × extrato, webhooks com falha, taxa paga com
+  pedido parado, chargebacks, saques pendentes, contato liberado sem taxa).
+- **Ficha do usuário** (`/admin/usuarios/[id]`) e **ficha do pedido** (`/admin/pedidos/[id]`): linha do tempo
+  (quem, quando, IP, aparelho, versão do app, antes/depois), financeiro com extrato, ajuste manual de
+  saldo/crédito, "estornar em dinheiro" taxa já creditada, acessos/aparelhos, chat (abrir fica registrado)
+  e **dossiê CSV** para reclamação/Procon/chargeback. Eventos anteriores à migração aparecem a partir do
+  histórico das tabelas (sem IP/aparelho).
+- Ações do admin agora exigem **motivo**: cancelar pedido (taxas pagas voltam como crédito, salvo se o
+  admin marcar o contrário; agendamento e chat são mantidos), suspender, banir, ajustar saldo, estornar.
+- Documentos KYC: o site e o app recebem **links assinados que valem 10 min**; o token de login não vai
+  mais na URL (`?token=` deixou de funcionar).
+- App e site enviam `X-Device-Id` (identificador aleatório da instalação, **não** é o ID de publicidade)
+  e `X-App-Version`. O app instalado só passa a enviar após o próximo build/OTA.
+- Retenção (cron 03h30): acessos 12 meses; eventos com dinheiro, contato, moderação e documentos 5 anos;
+  demais 2 anos; webhooks 5 anos. O mesmo cron confere saldo × extrato e avisa no log.
+
 ### 3.3 Rotacionar a senha do admin (crítico — S1)
 No shell do container do backend (ou local apontando para o banco de prod), com `ADMIN_EMAIL` e `ADMIN_PASSWORD` definidos:
 ```
@@ -209,6 +232,7 @@ Isso atualiza a senha do admin existente (o seed **não** sobrescreve senha de u
 - **Localização (precisa):** coletada em uso; finalidade funcionalidade do app (check-in/pedidos).
 - **Financeiro:** histórico de compras/transações (via gateways).
 - **Mensagens no app / UGC.** Marque criptografia em trânsito (HTTPS) e a existência de exclusão de conta.
+- **IDs do dispositivo ou outros IDs:** identificador aleatório gerado pelo app (X-Device-Id) — coletado, ligado ao usuário, finalidade **segurança e prevenção a fraude**, não compartilhado. Continua **sem** ID de publicidade.
 
 ### 4.5 Permissões e conteúdo
 - Após a remoção, o app pede apenas **Câmera** (fotos/selfie), **Localização** (foreground) e **Notificações**. Justifique cada uma se solicitado. Não há uso de background location nem microfone.

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   ShieldCheck, ChevronRight, LifeBuoy, Wallet, TrendingUp, Landmark,
   Lock, Users, ShoppingBag, RefreshCw, AlertTriangle, ArrowDownToLine,
-  FolderTree, Megaphone,
+  FolderTree, Megaphone, History,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api, getApiErrorMessage } from '@/lib/api'
@@ -89,6 +89,7 @@ export default function AdminHomePage() {
     { href: '/admin/verificacoes', title: 'Verificações de identidade', desc: 'Aprovar ou recusar documentos (KYC)', icon: ShieldCheck },
     { href: '/admin/comunicacao', title: 'Comunicação', desc: 'Comunicados/broadcast aos usuários', icon: Megaphone },
     { href: '/admin/suporte', title: 'Suporte ao usuário', desc: 'Mensagens de clientes e prestadores', icon: LifeBuoy },
+    { href: '/admin/auditoria', title: 'Auditoria & rastreabilidade', desc: 'Linha do tempo, webhooks, conciliação e dossiês', icon: History },
   ]
 
   return (

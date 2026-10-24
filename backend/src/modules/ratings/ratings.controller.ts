@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
+import { audit } from '../audit/audit.service'
 import { notify } from '../push/push.service'
 
 const rateSchema = z.object({
@@ -76,6 +77,7 @@ export async function rateSchedule(req: Request, res: Response) {
     channel: 'general',
   }).catch(() => {})
 
+  audit({ type: 'RATING_CREATED', userId: req.userId, counterpartId: rating.reviewed_id, orderId: schedule.order_id, entityType: 'Rating', entityId: rating.id, after: { score: rating.score, comment: rating.comment } })
   return R.created(res, rating, 'Avaliação registrada com sucesso')
 }
 

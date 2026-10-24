@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Search, MapPin, Zap, Ban, ChevronRight } from 'lucide-react'
@@ -119,9 +120,15 @@ function OrderDetail({ order, onClose, onChanged }: { order: Order; onClose: () 
   }, [order])
 
   const cancel = async () => {
-    if (!confirm('Cancelar este pedido como admin?')) return
+    const reason = prompt('Motivo do cancelamento (fica registrado na linha do tempo e é enviado ao cliente e ao prestador):')
+    if (reason === null) return
+    if (reason.trim().length < 5) { toast.error('Informe o motivo (mínimo 5 caracteres)'); return }
+    const creditFees = confirm('Devolver as taxas já pagas como crédito/saldo para quem pagou?\n\nOK = devolver · Cancelar = não devolver (ex.: fraude comprovada)')
     setBusy(true)
-    try { await api.patch(`/orders/admin/orders/${order.id}/cancel`, {}); toast.success('Pedido cancelado'); onChanged() }
+    try {
+      const r = await api.patch(`/orders/admin/orders/${order.id}/cancel`, { reason: reason.trim(), credit_fees: creditFees })
+      toast.success(r.data?.message ?? 'Pedido cancelado'); onChanged()
+    }
     catch (e) { toast.error(getApiErrorMessage(e)) } finally { setBusy(false) }
   }
 
@@ -131,6 +138,9 @@ function OrderDetail({ order, onClose, onChanged }: { order: Order; onClose: () 
   return (
     <Modal isOpen onClose={onClose} title={o.title} size="lg">
       <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+        <Link href={`/admin/pedidos/${order.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline">
+          Abrir ficha completa (linha do tempo, taxas, chat) <ChevronRight className="w-4 h-4" />
+        </Link>
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={o.status} />
           {o.is_urgent && <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700">Urgente</span>}

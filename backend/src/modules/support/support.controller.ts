@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
+import { audit } from '../audit/audit.service'
 
 const CATEGORIES = ['PROBLEM', 'IMPROVEMENT', 'QUESTION', 'PAYMENT', 'ACCOUNT', 'OTHER'] as const
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'WAITING_USER', 'RESOLVED', 'CLOSED'] as const
@@ -59,6 +60,10 @@ export async function createTicket(req: Request, res: Response) {
     },
   })
 
+  audit({
+    type: 'TICKET_CREATED', userId: req.userId, entityType: 'SupportTicket', entityId: ticket.id,
+    metadata: { subject: ticket.subject, category: ticket.category },
+  })
   return R.created(res, ticket, 'Mensagem enviada à equipe Missão Cumprida.')
 }
 
@@ -145,6 +150,11 @@ export async function replyToTicket(req: Request, res: Response) {
     },
   })
 
+  audit({
+    type: isAdmin ? 'TICKET_REPLIED_BY_ADMIN' : 'TICKET_REPLIED', userId: ticket.user_id,
+    entityType: 'SupportTicket', entityId: ticket.id,
+    before: { status: ticket.status }, after: { status: newStatus },
+  })
   return R.created(res, message, 'Mensagem enviada.')
 }
 
@@ -208,6 +218,10 @@ export async function adminUpdateStatus(req: Request, res: Response) {
   }
 
   const updated = await prisma.supportTicket.update({ where: { id: ticket.id }, data })
+  audit({
+    type: 'TICKET_STATUS_CHANGED', userId: ticket.user_id, entityType: 'SupportTicket', entityId: ticket.id,
+    before: { status: ticket.status }, after: { status: parsed.data.status },
+  })
   return R.ok(res, updated, 'Status atualizado')
 }
 
@@ -229,6 +243,10 @@ export async function adminAssign(req: Request, res: Response) {
   const updated = await prisma.supportTicket.update({
     where: { id: ticket.id },
     data: { assignee_id: parsed.data.assignee_id },
+  })
+  audit({
+    type: 'TICKET_ASSIGNED', userId: ticket.user_id, entityType: 'SupportTicket', entityId: ticket.id,
+    before: { assignee_id: ticket.assignee_id }, after: { assignee_id: parsed.data.assignee_id },
   })
   return R.ok(res, updated, 'Responsável atualizado')
 }

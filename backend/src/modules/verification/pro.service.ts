@@ -8,6 +8,7 @@ import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import { notify } from '../push/push.service'
 import { getSettings } from '../settings/settings.service'
+import { audit } from '../audit/audit.service'
 
 export type ProSource = 'PLAY' | 'ADMIN'
 
@@ -70,6 +71,17 @@ export async function grantPro(a: GrantArgs): Promise<{ firstTime: boolean }> {
       },
     })
     return { firstTime: !user?.is_verified_pro }
+  }).then((r) => {
+    audit({
+      type: 'PRO_GRANTED',
+      userId: a.userId,
+      entityType: 'VerifiedProSubscription',
+      amount: a.source === 'PLAY' ? monthly_value : 0,
+      reason: a.grantReason ?? null,
+      actorRole: a.source === 'ADMIN' ? undefined : a.eventType === 'SYNC' ? 'SYSTEM' : 'WEBHOOK',
+      metadata: { source: a.source, event: a.eventType, period_end: a.periodEnd, product: a.productId, environment: a.environment },
+    })
+    return r
   })
 }
 
@@ -78,6 +90,13 @@ export async function grantPro(a: GrantArgs): Promise<{ firstTime: boolean }> {
  * sobrar outra assinatura ativa (ex.: concedida pelo admin).
  */
 export async function revokePro(userId: string, opts: { source?: ProSource; eventType?: string } = {}): Promise<void> {
+  audit({
+    type: 'PRO_REVOKED',
+    userId,
+    entityType: 'VerifiedProSubscription',
+    actorRole: opts.eventType?.startsWith('ADMIN') ? undefined : opts.eventType === 'EXPIRED_BY_CRON' ? 'SYSTEM' : 'WEBHOOK',
+    metadata: { source: opts.source ?? 'ALL', event: opts.eventType ?? null },
+  })
   await prisma.$transaction(async (tx) => {
     await tx.verifiedProSubscription.updateMany({
       where: { user_id: userId, status: { in: ['ACTIVE', 'PAST_DUE'] }, ...(opts.source ? { source: opts.source } : {}) },

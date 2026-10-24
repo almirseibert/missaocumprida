@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import * as R from '../../utils/response'
 import { env } from '../../config/env'
+import { audit } from '../audit/audit.service'
 import { getSettings, updateSettings } from './settings.service'
 
 // ---------------------------------------------------------------------------
@@ -69,6 +70,8 @@ export async function adminUpdateSettings(req: Request, res: Response) {
   if (Object.keys(parsed.data).length === 0) {
     return R.badRequest(res, 'Nenhuma configuração para atualizar')
   }
+  const before = await getSettings()
   const updated = await updateSettings(parsed.data, req.userId)
+  audit({ type: 'SETTINGS_CHANGED', entityType: 'PlatformSetting', before: Object.fromEntries(Object.keys(parsed.data).map((k) => [k, (before as Record<string, unknown>)[k]])), after: parsed.data })
   return R.ok(res, updated, 'Configurações atualizadas')
 }

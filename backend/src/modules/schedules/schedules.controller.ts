@@ -13,6 +13,7 @@ import {
 } from '../payments/connectionFees.service'
 import { banUser, suspendUserForReview } from '../users/moderation.service'
 import { getSettings } from '../settings/settings.service'
+import { audit } from '../audit/audit.service'
 import { cancelBeforeConnectionByClient } from './scheduleCancel.service'
 
 /** Arquivos enviados nos campos "photo" (app antigo) e "photos" (vários). */
@@ -208,6 +209,7 @@ export async function checkin(req: Request, res: Response) {
     { schedule_id: schedule.id },
   )
 
+  audit({ type: 'SERVICE_CHECKIN', userId: schedule.provider_id, counterpartId: schedule.client_id, orderId: schedule.order_id, entityType: 'Schedule', entityId: schedule.id, metadata: { photos: photoUrls.length, lat, lng } })
   return R.ok(res, updated, 'Check-in realizado com sucesso')
 }
 
@@ -285,6 +287,7 @@ export async function completeByProvider(req: Request, res: Response) {
     { schedule_id: schedule.id },
   )
 
+  audit({ type: 'SERVICE_COMPLETED_BY_PROVIDER', userId: schedule.provider_id, counterpartId: schedule.client_id, orderId: schedule.order_id, entityType: 'Schedule', entityId: schedule.id, metadata: { photos: photoUrls.length, lat, lng, duration_minutes: durationMinutes } })
   return R.ok(res, { duration_minutes: durationMinutes, hourly_amount: hourlyAmount }, 'Serviço marcado como concluído. Aguardando confirmação do cliente.')
 }
 
@@ -331,6 +334,7 @@ export async function cancelSchedule(req: Request, res: Response) {
     })
     await notify(schedule.client_id, 'GENERAL', 'O profissional desistiu 😕',
       'O prestador cancelou antes da conexão. Sua taxa voltou como crédito — escolha outra proposta.', { order_id: order.id })
+    audit({ type: 'SCHEDULE_CANCELLED_BY_PROVIDER', userId: schedule.provider_id, counterpartId: schedule.client_id, orderId: order.id, entityType: 'Schedule', entityId: schedule.id, metadata: { unlocked: false } })
     return R.ok(res, null, 'Proposta cancelada. O pedido voltou para a fila do cliente.')
   }
 
@@ -344,6 +348,7 @@ export async function cancelSchedule(req: Request, res: Response) {
     await notify(schedule.provider_id, 'GENERAL', 'Serviço cancelado pelo cliente',
       'O cliente cancelou após a conexão. Sua taxa voltou como crédito e a conta dele foi banida conforme os Termos.', { order_id: order.id })
     await banUser(schedule.client_id, 'Cancelamento após receber os dados do prestador (Termos de Uso)')
+    audit({ type: 'SCHEDULE_CANCELLED_BY_CLIENT', userId: schedule.client_id, counterpartId: schedule.provider_id, orderId: order.id, entityType: 'Schedule', entityId: schedule.id, metadata: { unlocked: true, banned: true } })
     return R.ok(res, null, 'Serviço cancelado. Conforme os Termos de Uso, contas que cancelam após receber os dados do profissional são banidas.')
   }
 
@@ -356,6 +361,7 @@ export async function cancelSchedule(req: Request, res: Response) {
   await notify(schedule.client_id, 'GENERAL', 'O profissional cancelou 😕',
     'O prestador cancelou após a conexão e foi banido conforme os Termos. Sua taxa voltou como crédito — escolha outra proposta.', { order_id: order.id })
   await banUser(schedule.provider_id, 'Cancelamento após receber os dados do cliente (Termos de Uso)')
+  audit({ type: 'SCHEDULE_CANCELLED_BY_PROVIDER', userId: schedule.provider_id, counterpartId: schedule.client_id, orderId: order.id, entityType: 'Schedule', entityId: schedule.id, metadata: { unlocked: true, banned: true } })
   return R.ok(res, null, 'Serviço cancelado. Conforme os Termos de Uso, profissionais que cancelam após receber os dados do cliente são banidos.')
 }
 
@@ -395,6 +401,7 @@ export async function reportNoShow(req: Request, res: Response) {
     `No-show reportado pelo cliente no pedido ${order.id} — em análise para banimento (Termos de Uso)`,
   )
 
+  audit({ type: 'NO_SHOW_REPORTED', userId: schedule.client_id, counterpartId: schedule.provider_id, orderId: order.id, entityType: 'Schedule', entityId: schedule.id })
   return R.ok(res, null,
     'Não comparecimento registrado. Sua taxa voltou como crédito, o pedido reabriu e o profissional foi suspenso para análise.')
 }
@@ -449,6 +456,14 @@ export async function confirmByClient(req: Request, res: Response) {
     'schedule_update',
   )
 
+  audit({
+    type: 'SERVICE_CONFIRMED_BY_CLIENT',
+    userId: schedule.client_id,
+    counterpartId: schedule.provider_id,
+    orderId: schedule.order_id,
+    entityType: 'Schedule',
+    entityId: schedule.id,
+  })
   return R.ok(
     res,
     null,

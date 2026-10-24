@@ -7,6 +7,7 @@ import { env } from './config/env'
 import { errorHandler } from './middlewares/errorHandler'
 import { blockLegacySensitiveUploads } from './middlewares/legacyUploads'
 import { corsMiddleware, helmetMiddleware, apiLimiter, apiIpLimiter } from './middlewares/security'
+import { requestContextMiddleware } from './utils/requestContext'
 
 // Routers
 import authRoutes from './modules/auth/auth.routes'
@@ -36,6 +37,7 @@ import filesRoutes from './modules/files/files.routes'
 import settingsRoutes from './modules/settings/settings.routes'
 import geoRoutes from './modules/geo/geo.routes'
 import announcementsRoutes from './modules/announcements/announcements.routes'
+import auditAdminRoutes from './modules/audit/audit.routes'
 
 const app = express()
 
@@ -45,6 +47,8 @@ const app = express()
 app.set('trust proxy', env.TRUST_PROXY_HOPS)
 
 // ---- Middlewares globais ----
+// Contexto da requisição (id, IP, aparelho, autor) para a auditoria
+app.use(requestContextMiddleware)
 app.use(helmetMiddleware)
 app.use(corsMiddleware)
 app.use(apiIpLimiter)
@@ -102,6 +106,7 @@ app.use('/api/support', supportRoutes)
 app.use('/api/config', settingsRoutes) // GET /public (apps) + GET/PUT (admin)
 app.use('/api/geo', geoRoutes)         // CEP, endereço ↔ coordenadas
 app.use('/api/announcements', announcementsRoutes) // avisos do admin (pop-up/banner + push)
+app.use('/api/admin', auditAdminRoutes)          // rastreabilidade: linha do tempo, extrato, webhooks
 
 // ---- 404 ----
 app.use((_req, res) => {

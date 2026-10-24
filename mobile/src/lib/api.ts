@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './secureStore'
+import { clientHeaders } from './device'
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3333'
 
@@ -12,6 +13,7 @@ export const api = axios.create({
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const token = await getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
+  for (const [k, v] of Object.entries(await clientHeaders())) config.headers[k] = v
   return config
 })
 
@@ -24,7 +26,7 @@ api.interceptors.response.use(
       try {
         const refreshToken = await getRefreshToken()
         if (!refreshToken) throw new Error('sem refresh token')
-        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken })
+        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken }, { headers: await clientHeaders() })
         await setTokens(data.data.accessToken, data.data.refreshToken)
         original.headers.Authorization = `Bearer ${data.data.accessToken}`
         return api(original)

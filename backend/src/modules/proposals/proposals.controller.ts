@@ -6,6 +6,8 @@ import * as R from '../../utils/response'
 import { notify } from '../push/push.service'
 import { getSettings } from '../settings/settings.service'
 import { computeFeeBase, createFeesOnAccept } from '../payments/connectionFees.service'
+import { debitProviderBalance } from '../audit/ledger.service'
+import { audit } from '../audit/audit.service'
 import { sanitizeContactInfo } from '../../utils/contactSanitizer'
 
 const createSchema = z.object({
@@ -88,6 +90,7 @@ export async function createProposal(req: Request, res: Response) {
     channel: 'new_proposal',
   })
 
+  audit({ type: 'PROPOSAL_CREATED', userId: req.userId, counterpartId: order.client_id, orderId: order.id, entityType: 'Proposal', entityId: proposal.id, amount: proposal.value, after: { value: proposal.value, message: proposal.message } })
   return R.created(res, proposal, 'Proposta enviada com sucesso')
 }
 
@@ -158,11 +161,11 @@ export async function boostProposal(req: Request, res: Response) {
     updated = await prisma.$transaction(async (tx) => {
     if (price > 0) {
       // Débito condicional: dois boosts simultâneos não deixam o saldo negativo
-      const debited = await tx.user.updateMany({
-        where: { id: proposal.provider_id, provider_balance: { gte: price } },
-        data: { provider_balance: { decrement: price } },
+      const debited = await debitProviderBalance(tx, {
+        userId: proposal.provider_id, amount: price, reason: 'BOOST', refType: 'Proposal',
+        refId: proposal.id, orderId: proposal.order_id, note: `Destaque nível ${parsed.data.level}`,
       })
-      if (debited.count === 0) throw new Error('INSUFFICIENT_BALANCE')
+      if (!debited) throw new Error('INSUFFICIENT_BALANCE')
     }
     // Só sobe de nível se ainda estiver abaixo (evita cobrar duas vezes)
     const bumped = await tx.proposal.updateMany({
@@ -194,6 +197,7 @@ export async function boostProposal(req: Request, res: Response) {
     }
     throw err
   }
+  audit({ type: 'PROPOSAL_BOOSTED', userId: proposal.provider_id, orderId: proposal.order_id, entityType: 'Proposal', entityId: proposal.id, amount: price, metadata: { level: parsed.data.level } })
   return R.ok(res, updated, 'Proposta destacada!')
 }
 
@@ -277,6 +281,15 @@ export async function acceptProposal(req: Request, res: Response) {
     channel: 'proposal_update',
   })
 
+  audit({
+    type: 'PROPOSAL_ACCEPTED',
+    userId: req.userId,
+    counterpartId: proposal.provider_id,
+    orderId: proposal.order_id,
+    entityType: 'Proposal',
+    entityId: proposal.id,
+    amount: proposal.value,
+  })
   const promoActive = s.fee_promo_active && s.fee_regular_pct > s.fee_client_pct
   return R.ok(res, {
     final_price: proposal.value,
@@ -342,6 +355,7 @@ export async function updateProposal(req: Request, res: Response) {
     data: { order_id: proposal.order.id },
     channel: 'new_proposal',
   }).catch(() => {})
+  audit({ type: 'PROPOSAL_EDITED', userId: req.userId, counterpartId: proposal.order.client_id, orderId: proposal.order.id, entityType: 'Proposal', entityId: proposal.id, before: { value: proposal.value, message: proposal.message }, after: data })
   return R.ok(res, updated, 'Proposta atualizada')
 }
 
@@ -355,6 +369,7 @@ export async function rejectProposal(req: Request, res: Response) {
   if (proposal.status !== 'PENDING') return R.badRequest(res, 'Esta proposta não pode ser rejeitada')
 
   await prisma.proposal.update({ where: { id: proposal.id }, data: { status: 'REJECTED' } })
+  audit({ type: 'PROPOSAL_REJECTED', userId: req.userId, counterpartId: proposal.provider_id, orderId: proposal.order_id, entityType: 'Proposal', entityId: proposal.id, amount: proposal.value })
   return R.ok(res, null, 'Proposta rejeitada')
 }
 
@@ -365,6 +380,7 @@ export async function cancelProposal(req: Request, res: Response) {
   if (proposal.status !== 'PENDING') return R.badRequest(res, 'Esta proposta não pode ser cancelada')
 
   await prisma.proposal.update({ where: { id: proposal.id }, data: { status: 'CANCELLED' } })
+  audit({ type: 'PROPOSAL_WITHDRAWN', userId: req.userId, orderId: proposal.order_id, entityType: 'Proposal', entityId: proposal.id, amount: proposal.value })
   return R.ok(res, null, 'Proposta cancelada')
 }
 

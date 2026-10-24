@@ -5,12 +5,13 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/database'
 import * as R from '../../utils/response'
-import { persistUpload } from '../files/files.service'
+import { persistUpload, signFileUrl } from '../files/files.service'
 import { banUser } from './moderation.service'
 import { anonymizeUser, DELETION_GRACE_DAYS } from './deletion.service'
 import { findUserByEmail } from '../auth/auth.controller'
 import { invalidateAccountState } from '../../middlewares/auth'
 import { isValidCpf, normalizeCpf } from '../../utils/cpf'
+import { audit } from '../audit/audit.service'
 import {
   CpfInUseError,
   claimCpf,
@@ -48,7 +49,11 @@ export async function getMe(req: Request, res: Response) {
     },
   })
   if (!user) return R.notFound(res, 'Usuário não encontrado')
-  return R.ok(res, user)
+  return R.ok(res, {
+    ...user,
+    document_photo_url: signFileUrl(user.document_photo_url),
+    selfie_photo_url: signFileUrl(user.selfie_photo_url),
+  })
 }
 
 // DELETE /api/users/me — exclusão de conta (LGPD + exigência Google Play).
@@ -99,6 +104,7 @@ export async function deleteMe(req: Request, res: Response) {
   await anonymizeUser(user.id)
   invalidateAccountState(user.id)
 
+  audit({ type: 'ACCOUNT_DELETED', userId: user.id, entityType: 'User', entityId: user.id, reason: 'Exclusão pelo app (imediata)' })
   return R.ok(res, null, 'Conta excluída. Seus dados pessoais foram anonimizados.')
 }
 
@@ -157,6 +163,7 @@ export async function undoDeletionRequest(req: Request, res: Response) {
     where: { id: user.id },
     data: { deletion_requested_at: null },
   })
+  audit({ type: 'ACCOUNT_DELETION_UNDONE', userId: user.id, actorId: user.id, entityType: 'User', entityId: user.id })
   return R.ok(res, null, 'Exclusão cancelada — sua conta continua ativa. A assinatura, se desejar, precisa ser reativada no app.')
 }
 
@@ -285,6 +292,12 @@ export async function updateMe(req: Request, res: Response) {
     throw err
   }
   if (parsed.data.role) invalidateAccountState(req.userId)
+  audit({
+    type: cpfChanged ? 'PROFILE_UPDATED_CPF' : 'PROFILE_UPDATED',
+    userId: req.userId, entityType: 'User', entityId: req.userId,
+    before: Object.fromEntries(Object.keys(parsed.data).map((k) => [k, (current as Record<string, unknown>)[k] ?? null])),
+    after: parsed.data,
+  })
   return R.ok(res, user, 'Perfil atualizado com sucesso')
 }
 
@@ -392,7 +405,12 @@ export async function submitVerification(req: Request, res: Response) {
     },
   })
 
-  return R.ok(res, user, 'Documentos enviados para análise. Você será notificado em até 48h.')
+  audit({ type: 'KYC_SUBMITTED', userId: req.userId, entityType: 'User', entityId: req.userId })
+  return R.ok(
+    res,
+    { ...user, document_photo_url: signFileUrl(user.document_photo_url), selfie_photo_url: signFileUrl(user.selfie_photo_url) },
+    'Documentos enviados para análise. Você será notificado em até 48h.',
+  )
 }
 
 // GET /api/users/me/verification — status atual + estado do cadastro
@@ -417,8 +435,8 @@ export async function getVerificationStatus(req: Request, res: Response) {
 
   const missing = missingProfileFields(user as Record<string, unknown>)
   return R.ok(res, {
-    document_photo_url: user.document_photo_url,
-    selfie_photo_url: user.selfie_photo_url,
+    document_photo_url: signFileUrl(user.document_photo_url),
+    selfie_photo_url: signFileUrl(user.selfie_photo_url),
     document_submitted_at: user.document_submitted_at,
     document_verification_status: user.document_verification_status,
     document_rejection_reason: user.document_rejection_reason,
@@ -491,7 +509,12 @@ export async function adminListVerifications(req: Request, res: Response) {
   const summary: Record<string, number> = { NONE: 0, PENDING: 0, APPROVED: 0, REJECTED: 0 }
   for (const c of counts) summary[c.document_verification_status] = c._count.document_verification_status
 
-  return R.ok(res, { users, total, page, limit, summary })
+  const signed = users.map((u) => ({
+    ...u,
+    document_photo_url: signFileUrl(u.document_photo_url),
+    selfie_photo_url: signFileUrl(u.selfie_photo_url),
+  }))
+  return R.ok(res, { users: signed, total, page, limit, summary })
 }
 
 // PUT /api/users/:id/verification/review — admin aprova/rejeita
@@ -518,6 +541,7 @@ export async function reviewVerification(req: Request, res: Response) {
       document_verified: true,
     },
   })
+  audit({ type: parsed.data.status === 'APPROVED' ? 'KYC_APPROVED' : 'KYC_REJECTED', userId: req.params.id, entityType: 'User', entityId: req.params.id, before: { status: target.document_verification_status }, after: { status: parsed.data.status }, reason: parsed.data.reason ?? null })
   return R.ok(res, updated, parsed.data.status === 'APPROVED' ? 'Conta verificada' : 'Verificação recusada')
 }
 
@@ -548,6 +572,7 @@ export async function changePassword(req: Request, res: Response) {
       },
     }),
   ])
+  audit({ type: 'PASSWORD_CHANGED', userId: req.userId, entityType: 'User', entityId: req.userId })
   return R.ok(res, null, 'Senha alterada com sucesso')
 }
 
@@ -574,6 +599,7 @@ export async function addSkill(req: Request, res: Response) {
     create: { provider_id: req.userId, ...parsed.data },
     include: { category: { select: { id: true, name: true, icon: true } } },
   })
+  audit({ type: 'SKILL_ADDED', userId: req.userId, entityType: 'ProviderSkill', entityId: skill.id, after: { category: skill.category?.name, ...parsed.data } })
   return R.created(res, skill, 'Habilidade adicionada')
 }
 
@@ -704,6 +730,8 @@ export async function adminSuspendUser(req: Request, res: Response) {
   if (!target) return R.notFound(res, 'Usuário não encontrado')
   if (target.role === 'ADMIN') return R.badRequest(res, 'Não é possível suspender outro administrador.')
 
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
+  if (reason.length < 5) return R.badRequest(res, 'Informe o motivo da suspensão (mínimo 5 caracteres)')
   const until = req.body?.until ? new Date(req.body.until) : null
   if (until && isNaN(until.getTime())) return R.badRequest(res, 'Data inválida')
   const [user] = await prisma.$transaction([
@@ -715,6 +743,7 @@ export async function adminSuspendUser(req: Request, res: Response) {
     prisma.refreshToken.deleteMany({ where: { user_id: req.params.id } }),
   ])
   invalidateAccountState(req.params.id)
+  audit({ type: 'USER_SUSPENDED', userId: req.params.id, entityType: 'User', entityId: req.params.id, reason, metadata: { until } })
   return R.ok(res, user, 'Usuário suspenso')
 }
 
@@ -732,6 +761,7 @@ export async function adminReactivateUser(req: Request, res: Response) {
     prisma.cpfRegistry.updateMany({ where: { user_id: req.params.id, status: 'BANNED' }, data: { status: 'ACTIVE' } }),
   ])
   invalidateAccountState(req.params.id)
+  audit({ type: 'USER_REACTIVATED', userId: req.params.id, entityType: 'User', entityId: req.params.id, reason: typeof req.body?.reason === 'string' ? req.body.reason : null })
   return R.ok(res, user, 'Usuário reativado')
 }
 
@@ -775,6 +805,7 @@ export async function adminReleaseCpf(req: Request, res: Response) {
   if (count === 0) return R.notFound(res, 'CPF não está bloqueado')
   // contas inativas que ainda guardam o número deixam de bloqueá-lo
   await prisma.user.updateMany({ where: { cpf, is_active: false }, data: { cpf: null } })
+  audit({ type: 'CPF_RELEASED', entityType: 'CpfRegistry', reason: parsed.data.reason, metadata: { cpf, released: count } })
   return R.ok(res, { released: count }, 'CPF liberado para um novo cadastro')
 }
 
@@ -790,5 +821,6 @@ export async function adminBanUser(req: Request, res: Response) {
   if (!reason) return R.badRequest(res, 'Informe o motivo do banimento')
 
   await banUser(req.params.id, reason)
+  audit({ type: 'USER_BANNED', userId: req.params.id, entityType: 'User', entityId: req.params.id, reason })
   return R.ok(res, { id: req.params.id, banned: true }, 'Usuário banido')
 }

@@ -40,16 +40,12 @@ export function getAvatarUrl(avatar?: string): string | undefined {
 }
 
 /**
- * Anexa o token de acesso à URL de um arquivo sensível (documento/selfie KYC),
- * que o backend agora exige para download. Como <img> não envia cabeçalhos,
- * o backend também aceita o token via ?token=. Use só para imagens KYC.
+ * URL de arquivo sensível (documento/selfie KYC). A API já devolve esses
+ * links assinados e com validade curta (?exp=&sig=) só para quem pode vê-los;
+ * o token de acesso nunca vai na URL. Se a imagem não abrir, recarregue a tela.
  */
 export function authFileUrl(url?: string | null): string | undefined {
-  if (!url) return undefined
-  if (typeof window === 'undefined') return url
-  const token = localStorage.getItem('accessToken')
-  if (!token) return url
-  return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+  return url || undefined
 }
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {

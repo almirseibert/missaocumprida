@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../../config/database'
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../../utils/jwt'
 import * as R from '../../utils/response'
+import { audit, logAccess } from '../audit/audit.service'
 import { applyReferralOnRegister, ensureReferralCode } from '../referrals/referrals.service'
 
 const registerSchema = z.object({
@@ -71,6 +72,8 @@ export async function register(req: Request, res: Response) {
     },
   })
 
+  logAccess('REGISTER', user.id)
+  audit({ type: 'USER_REGISTERED', actorId: user.id, actorRole: user.role, userId: user.id, entityType: 'User', entityId: user.id, metadata: { role: user.role, referral: !!parsed.data.referral_code } })
   return R.created(res, { user, accessToken, refreshToken, referral_bonus: referralBonus }, 'Cadastro realizado com sucesso')
 }
 
@@ -84,7 +87,10 @@ export async function login(req: Request, res: Response) {
 
   const user = await findUserByEmail(email)
   const valid = await bcrypt.compare(password, user?.password ?? DUMMY_HASH)
-  if (!user || !valid) return R.unauthorized(res, 'E-mail ou senha incorretos')
+  if (!user || !valid) {
+    logAccess('LOGIN_FAIL', user?.id ?? null, email)
+    return R.unauthorized(res, 'E-mail ou senha incorretos')
+  }
 
   if (!user.is_active) {
     return R.forbidden(
@@ -107,6 +113,7 @@ export async function login(req: Request, res: Response) {
   })
 
   const { password: _, ...userSafe } = user
+  logAccess('LOGIN_OK', user.id)
   return R.ok(res, { user: userSafe, accessToken, refreshToken }, 'Login realizado com sucesso')
 }
 
@@ -151,6 +158,7 @@ export async function refresh(req: Request, res: Response) {
       },
     })
 
+    logAccess('REFRESH', user.id)
     return R.ok(res, { accessToken: newAccessToken, refreshToken: newRefreshToken })
   } catch {
     return R.unauthorized(res, 'Refresh token inválido')
@@ -162,5 +170,6 @@ export async function logout(req: Request, res: Response) {
   if (typeof refreshToken === 'string' && refreshToken) {
     await prisma.refreshToken.deleteMany({ where: { token: refreshToken } })
   }
+  logAccess('LOGOUT', null)
   return R.ok(res, null, 'Logout realizado com sucesso')
 }

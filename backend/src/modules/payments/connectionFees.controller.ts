@@ -4,6 +4,7 @@ import { prisma } from '../../config/database'
 import { env } from '../../config/env'
 import * as R from '../../utils/response'
 import { getSettings } from '../settings/settings.service'
+import { audit } from '../audit/audit.service'
 import {
   FeeFlowError,
   startFeeCheckout,
@@ -172,6 +173,17 @@ export async function adminRefundFee(req: Request, res: Response) {
     const hint = fee.status === 'CREDITED' ? ' — ela já foi devolvida como crédito ao usuário' : ''
     return R.badRequest(res, `Taxa não pode ser estornada (status: ${fee.status})${hint}`)
   }
+  audit({
+    type: 'FEE_REFUNDED',
+    userId: fee.user_id,
+    orderId: fee.order_id,
+    entityType: 'ConnectionFee',
+    entityId: fee.id,
+    amount: fee.gateway_amount,
+    reason: (req.body?.notes as string) ?? null,
+    before: { status: fee.status },
+    after: { status: 'REFUNDED' },
+  })
   return R.ok(
     res,
     null,

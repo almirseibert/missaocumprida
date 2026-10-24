@@ -1,6 +1,41 @@
 import { Request } from 'express'
+import crypto from 'crypto'
 import { prisma } from '../../config/database'
+import { env } from '../../config/env'
 import { fileAssetUrl } from '../../utils/url'
+
+// ---------------------------------------------------------------------------
+// Links assinados para arquivos sensíveis (documento/selfie KYC).
+// O <img> não envia cabeçalho de autorização; antes o JWT ia na URL
+// (?token=) e ficava em logs de proxy/histórico. Agora a API entrega, só a
+// quem pode ver, um link que vale poucos minutos e serve para um arquivo só.
+// ---------------------------------------------------------------------------
+const SIGNED_URL_TTL_S = 10 * 60
+const FILE_ID_RE = /\/api\/files\/([0-9a-f-]{36})(?:[?#].*)?$/i
+
+function fileSignature(id: string, exp: number): string {
+  return crypto.createHmac('sha256', `${env.JWT_SECRET}:files`).update(`${id}.${exp}`).digest('base64url').slice(0, 43)
+}
+
+/** Troca a URL de um arquivo sensível por uma assinada de curta duração. */
+export function signFileUrl<T extends string | null | undefined>(url: T): T {
+  if (!url) return url
+  const m = FILE_ID_RE.exec(url)
+  if (!m) return url
+  const exp = Math.floor(Date.now() / 1000) + SIGNED_URL_TTL_S
+  const base = url.split(/[?#]/)[0]
+  return `${base}?exp=${exp}&sig=${fileSignature(m[1], exp)}` as T
+}
+
+/** Confere a assinatura de GET /api/files/:id?exp=&sig=. */
+export function verifyFileSignature(id: string, exp: unknown, sig: unknown): boolean {
+  if (typeof exp !== 'string' || typeof sig !== 'string') return false
+  const expN = Number(exp)
+  if (!Number.isFinite(expN) || expN < Date.now() / 1000) return false
+  const expected = Buffer.from(fileSignature(id, expN))
+  const got = Buffer.from(sig)
+  return expected.length === got.length && crypto.timingSafeEqual(expected, got)
+}
 
 type PersistOpts = {
   /** Marca o arquivo como sensível (KYC/selfie) — exige auth para baixar. */

@@ -1,15 +1,14 @@
 import { Request, Response } from 'express'
 import { prisma } from '../../config/database'
 import { verifyAccessToken } from '../../utils/jwt'
+import { verifyFileSignature } from './files.service'
 
-// Lê o token JWT do header Authorization OU da query string (?token=).
-// O fallback por query é necessário para imagens sensíveis exibidas em <img>,
-// que não permitem enviar cabeçalhos.
+// Lê o token JWT do header Authorization. Para <img> (sem cabeçalhos) a API
+// entrega links assinados de curta duração (?exp=&sig=) — o JWT nunca vai na URL.
 function readToken(req: Request): { userId: string; role: string } | null {
   const header = req.headers.authorization
   let raw: string | undefined
   if (header?.startsWith('Bearer ')) raw = header.split(' ')[1]
-  else if (typeof req.query.token === 'string') raw = req.query.token
   if (!raw) return null
   try {
     return verifyAccessToken(raw)
@@ -29,16 +28,19 @@ export async function getFile(req: Request, res: Response) {
   }
 
   if (file.sensitive) {
-    const auth = readToken(req)
-    if (!auth) {
-      res.status(401).json({ success: false, message: 'Não autorizado' })
-      return
-    }
-    const isOwner = file.owner_id && auth.userId === file.owner_id
-    const isAdmin = auth.role === 'ADMIN'
-    if (!isOwner && !isAdmin) {
-      res.status(403).json({ success: false, message: 'Acesso negado' })
-      return
+    const signed = verifyFileSignature(file.id, req.query.exp, req.query.sig)
+    if (!signed) {
+      const auth = readToken(req)
+      if (!auth) {
+        res.status(401).json({ success: false, message: 'Link expirado ou não autorizado. Recarregue a página.' })
+        return
+      }
+      const isOwner = file.owner_id && auth.userId === file.owner_id
+      const isAdmin = auth.role === 'ADMIN'
+      if (!isOwner && !isAdmin) {
+        res.status(403).json({ success: false, message: 'Acesso negado' })
+        return
+      }
     }
     // Conteúdo sensível: nunca cachear em proxies/navegador compartilhado.
     res.setHeader('Cache-Control', 'private, no-store')

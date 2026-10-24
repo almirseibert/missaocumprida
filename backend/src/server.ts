@@ -13,6 +13,7 @@ import { purgeExpiredDeletionRequests } from './modules/users/deletion.service'
 import { withCronLock } from './utils/cronLock'
 import { backfillCpfRegistry } from './modules/users/cpfRegistry.service'
 import { expireOverduePro } from './modules/verification/pro.service'
+import { purgeExpiredAuditData, dailyReconciliation } from './modules/audit/retention.service'
 
 async function start() {
   try {
@@ -110,6 +111,22 @@ async function start() {
         })
       } catch (err) {
         console.error('[cron][pro] erro:', err)
+      }
+    })
+
+    // Cron diário às 03h30: retenção dos registros de auditoria/acesso e
+    // conferência saldo do prestador x extrato
+    cron.schedule('30 3 * * *', async () => {
+      try {
+        await withCronLock('audit-retention', async () => {
+          const r = await purgeExpiredAuditData()
+          if (r.access + r.events + r.webhooks > 0) {
+            console.log(`[cron][auditoria] apagados: acessos=${r.access} eventos=${r.events} webhooks=${r.webhooks}`)
+          }
+          await dailyReconciliation()
+        })
+      } catch (err) {
+        console.error('[cron][auditoria] erro:', err)
       }
     })
 

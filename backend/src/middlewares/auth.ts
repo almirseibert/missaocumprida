@@ -3,6 +3,7 @@ import { verifyAccessToken } from '../utils/jwt'
 import { unauthorized, forbidden } from '../utils/response'
 import { prisma } from '../config/database'
 import { isValidCpf } from '../utils/cpf'
+import { setRequestActor } from '../utils/requestContext'
 
 declare global {
   namespace Express {
@@ -57,6 +58,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     req.userId = payload.userId
     // Papel atual do banco: rebaixamentos de ADMIN valem na hora.
     req.userRole = state.role || payload.role
+    setRequestActor(req.userId, req.userRole)
     next()
   } catch (err) {
     next(err)

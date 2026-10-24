@@ -9,6 +9,8 @@ import { mpPayment } from './mercadopago'
 import { consumeCredit } from '../referrals/referrals.service'
 import { releasePayment } from './payments.service'
 import { onFeePaidByExternalRef, onFeeReversedByExternalRef } from './connectionFees.service'
+import { creditProviderBalance, debitProviderBalance } from '../audit/ledger.service'
+import { audit } from '../audit/audit.service'
 import { notify } from '../push/push.service'
 
 async function pixToQrBase64(pixCode: string): Promise<string> {
@@ -267,45 +269,11 @@ export async function handleMpWebhook(req: Request, res: Response) {
       return res.sendStatus(401)
     }
 
-    const { type, data } = req.body as { type?: string; data?: { id?: string } }
+    const { type, data, action } = req.body as { type?: string; data?: { id?: string }; action?: string }
 
     // MP envia type 'payment' quando o status muda
     if (type === 'payment' && data?.id) {
-      const mpId = String(data.id)
-
-      // Consulta o pagamento atualizado diretamente na API do MP
-      const mpPay = await mpPayment.get({ id: mpId })
-
-      if (mpPay.status === 'approved') {
-        const ref = mpPay.external_reference as string | undefined
-
-        if (ref?.startsWith('fee_')) {
-          // Taxa de Conexão (Remap 2.0)
-          await onFeePaidByExternalRef(ref, `mp_${mpId}`, Number(mpPay.transaction_amount ?? 0))
-        } else if (ref) {
-          // Fluxo legado de escrow (deprecated). Só avança estados — uma
-          // reentrega do webhook não pode voltar um pedido DONE para SCHEDULED.
-          await prisma.$transaction(async (tx) => {
-            const moved = await tx.payment.updateMany({
-              where: { stripe_payment_intent: `mp_${mpId}`, status: 'PENDING' },
-              data: { status: 'PAID', paid_at: new Date() },
-            })
-            if (moved.count > 0) {
-              await tx.order.updateMany({
-                where: { id: ref, status: 'ACCEPTED' },
-                data: { status: 'SCHEDULED' },
-              })
-            }
-          })
-        }
-      } else if (mpPay.status === 'refunded' || mpPay.status === 'charged_back') {
-        const ref = mpPay.external_reference as string | undefined
-        if (ref?.startsWith('fee_')) {
-          await onFeeReversedByExternalRef(ref, `mp_${mpId}`, mpPay.status)
-        } else {
-          console.warn(`[MP Webhook] pagamento legado ${mpId} ${mpPay.status} — revisar manualmente`)
-        }
-      }
+      await processMpPayment(String(data.id), { type, data, action: action ?? null })
     }
   } catch (err) {
     failed = true
@@ -315,6 +283,89 @@ export async function handleMpWebhook(req: Request, res: Response) {
   // Erro de processamento → 500 para o Mercado Pago reenviar a notificação
   // (o processamento é idempotente). Sucesso → 200.
   return res.sendStatus(failed ? 500 : 200)
+}
+
+/**
+ * Processa um pagamento do Mercado Pago (webhook ou "reprocessar" do admin).
+ * Consulta o status atual na API do MP e grava o evento em webhook_events
+ * (prova + idempotência: um registro por pagamento e status). Os passos
+ * seguintes são idempotentes — reprocessar nunca credita duas vezes.
+ */
+export async function processMpPayment(
+  mpId: string,
+  notification: unknown,
+  opts: { force?: boolean } = {},
+): Promise<'PROCESSED' | 'IGNORED' | 'DUPLICATE'> {
+  const mpPay = await mpPayment.get({ id: mpId })
+
+  const externalId = `payment:${mpId}:${mpPay.status}`
+  const seen = await prisma.webhookEvent.findUnique({
+    where: { provider_external_id: { provider: 'MERCADOPAGO', external_id: externalId } },
+  })
+  if (!opts.force && seen && (seen.status === 'PROCESSED' || seen.status === 'IGNORED')) return 'DUPLICATE'
+  const ref = (mpPay.external_reference as string | undefined) ?? undefined
+  const record = seen
+    ? await prisma.webhookEvent.update({ where: { id: seen.id }, data: { attempts: { increment: 1 } } })
+    : await prisma.webhookEvent.create({
+        data: {
+          provider: 'MERCADOPAGO',
+          external_id: externalId,
+          event_type: `payment.${mpPay.status}`,
+          payload: {
+            notification,
+            payment: {
+              id: mpId,
+              status: mpPay.status,
+              status_detail: mpPay.status_detail,
+              external_reference: ref ?? null,
+              transaction_amount: mpPay.transaction_amount,
+              payment_method_id: mpPay.payment_method_id,
+              date_approved: mpPay.date_approved,
+            },
+          } as never,
+        },
+      })
+
+  try {
+    if (mpPay.status === 'approved') {
+      if (ref?.startsWith('fee_')) {
+        // Taxa de Conexão (Remap 2.0)
+        await onFeePaidByExternalRef(ref, `mp_${mpId}`, Number(mpPay.transaction_amount ?? 0))
+      } else if (ref) {
+        // Fluxo legado de escrow (deprecated). Só avança estados — uma
+        // reentrega do webhook não pode voltar um pedido DONE para SCHEDULED.
+        await prisma.$transaction(async (tx) => {
+          const moved = await tx.payment.updateMany({
+            where: { stripe_payment_intent: `mp_${mpId}`, status: 'PENDING' },
+            data: { status: 'PAID', paid_at: new Date() },
+          })
+          if (moved.count > 0) {
+            await tx.order.updateMany({
+              where: { id: ref, status: 'ACCEPTED' },
+              data: { status: 'SCHEDULED' },
+            })
+          }
+        })
+      }
+    } else if (mpPay.status === 'refunded' || mpPay.status === 'charged_back') {
+      if (ref?.startsWith('fee_')) {
+        await onFeeReversedByExternalRef(ref, `mp_${mpId}`, mpPay.status)
+      } else {
+        console.warn(`[MP Webhook] pagamento legado ${mpId} ${mpPay.status} — revisar manualmente`)
+      }
+    }
+    const status = ['approved', 'refunded', 'charged_back'].includes(String(mpPay.status)) ? 'PROCESSED' : 'IGNORED'
+    await prisma.webhookEvent.update({
+      where: { id: record.id },
+      data: { status, error: null, processed_at: new Date() },
+    })
+    return status
+  } catch (err) {
+    await prisma.webhookEvent
+      .update({ where: { id: record.id }, data: { status: 'FAILED', error: String((err as Error)?.message ?? err).slice(0, 500) } })
+      .catch(() => {})
+    throw err
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -424,14 +475,15 @@ export async function requestWithdrawal(req: Request, res: Response) {
   let withdrawal
   try {
     withdrawal = await prisma.$transaction(async (tx) => {
-      const debited = await tx.user.updateMany({
-        where: { id: req.userId, provider_balance: { gte: amount } },
-        data: { provider_balance: { decrement: amount } },
-      })
-      if (debited.count === 0) throw new Error('INSUFFICIENT_BALANCE')
-      return tx.providerWithdrawal.create({
+      const created = await tx.providerWithdrawal.create({
         data: { provider_id: req.userId, amount, pix_key, pix_key_type },
       })
+      const debited = await debitProviderBalance(tx, {
+        userId: req.userId, amount, reason: 'WITHDRAWAL', refType: 'ProviderWithdrawal', refId: created.id,
+        note: 'Saque solicitado',
+      })
+      if (!debited) throw new Error('INSUFFICIENT_BALANCE')
+      return created
     })
   } catch (err) {
     if (err instanceof Error && err.message === 'INSUFFICIENT_BALANCE') {
@@ -440,6 +492,7 @@ export async function requestWithdrawal(req: Request, res: Response) {
     throw err
   }
 
+  audit({ type: 'WITHDRAWAL_REQUESTED', userId: req.userId, entityType: 'ProviderWithdrawal', entityId: withdrawal.id, amount, metadata: { pix_key_type } })
   return R.created(res, withdrawal, 'Solicitação de saque enviada. Processaremos em até 2 dias úteis.')
 }
 
@@ -470,6 +523,7 @@ export async function approveWithdrawal(req: Request, res: Response) {
   })
   if (changed.count === 0) return R.badRequest(res, 'Saque já processado')
   const updated = await prisma.providerWithdrawal.findUnique({ where: { id: withdrawal.id } })
+  audit({ type: 'WITHDRAWAL_PAID', userId: withdrawal.provider_id, entityType: 'ProviderWithdrawal', entityId: withdrawal.id, amount: withdrawal.amount, reason: typeof notes === 'string' ? notes : null })
   return R.ok(res, updated, 'Saque aprovado e pago')
 }
 
@@ -489,13 +543,15 @@ export async function rejectWithdrawal(req: Request, res: Response) {
       data: { status: 'REJECTED', processed_at: new Date(), notes: typeof notes === 'string' ? notes : null },
     })
     if (changed.count === 0) return false
-    await tx.user.update({
-      where: { id: withdrawal.provider_id },
-      data: { provider_balance: { increment: withdrawal.amount } },
+    await creditProviderBalance(tx, {
+      userId: withdrawal.provider_id, amount: withdrawal.amount, reason: 'WITHDRAWAL_REJECTED',
+      refType: 'ProviderWithdrawal', refId: withdrawal.id,
+      note: typeof notes === 'string' && notes ? `Saque rejeitado: ${notes}` : 'Saque rejeitado — saldo devolvido',
     })
     return true
   })
   if (!refunded) return R.badRequest(res, 'Saque já processado')
+  audit({ type: 'WITHDRAWAL_REJECTED', userId: withdrawal.provider_id, entityType: 'ProviderWithdrawal', entityId: withdrawal.id, amount: withdrawal.amount, reason: typeof notes === 'string' ? notes : null })
   return R.ok(res, null, 'Saque rejeitado e saldo devolvido ao prestador')
 }
 
@@ -516,6 +572,7 @@ export async function updatePixKey(req: Request, res: Response) {
     data: { pix_key: parsed.data.pix_key, pix_key_type: parsed.data.pix_key_type },
     select: { id: true, pix_key: true, pix_key_type: true },
   })
+  audit({ type: 'PIX_KEY_CHANGED', userId: req.userId, entityType: 'User', entityId: req.userId, after: { pix_key: parsed.data.pix_key, pix_key_type: parsed.data.pix_key_type } })
   return R.ok(res, user, 'Chave PIX atualizada')
 }
 

@@ -7,12 +7,31 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// Identificador aleatório deste navegador (rastreabilidade de acessos/ações
+// no painel admin). Não é cookie de publicidade.
+function clientHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'X-App-Version': 'web' }
+  if (typeof window === 'undefined') return headers
+  try {
+    let id = localStorage.getItem('mc.device_id')
+    if (!id) {
+      id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      localStorage.setItem('mc.device_id', id)
+    }
+    headers['X-Device-Id'] = id
+  } catch {
+    /* navegador sem storage: segue sem o id */
+  }
+  return headers
+}
+
 // Inject access token
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('accessToken')
     if (token) config.headers.Authorization = `Bearer ${token}`
   }
+  for (const [k, v] of Object.entries(clientHeaders())) config.headers[k] = v
   return config
 })
 
@@ -26,7 +45,7 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken')
         if (!refreshToken) throw new Error('no refresh token')
-        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken })
+        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken }, { headers: clientHeaders() })
         localStorage.setItem('accessToken', data.data.accessToken)
         localStorage.setItem('refreshToken', data.data.refreshToken)
         original.headers.Authorization = `Bearer ${data.data.accessToken}`

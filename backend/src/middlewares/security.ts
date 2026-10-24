@@ -18,7 +18,8 @@ export const corsMiddleware = cors({
     return cb(new Error('Origin não permitida pelo CORS'))
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Device-Id', 'X-App-Version'],
+  exposedHeaders: ['X-Request-Id'],
 })
 
 // Headers de segurança. CSP desligado (API não serve HTML) e CORP em
