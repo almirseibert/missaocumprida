@@ -3,7 +3,7 @@ import { authenticate, requireVerified } from '../../middlewares/auth'
 import {
   createProposal, listOrderProposals,
   acceptProposal, rejectProposal, cancelProposal, listMyProposals,
-  boostProposal,
+  boostProposal, updateProposal,
 } from './proposals.controller'
 
 const router = Router({ mergeParams: true })
@@ -23,4 +23,5 @@ proposalActionsRouter.get('/mine', listMyProposals)
 proposalActionsRouter.post('/:id/accept', acceptProposal)
 proposalActionsRouter.post('/:id/reject', rejectProposal)
 proposalActionsRouter.delete('/:id', cancelProposal)
+proposalActionsRouter.patch('/:id', updateProposal)
 proposalActionsRouter.post('/:id/boost', boostProposal)

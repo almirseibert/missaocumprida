@@ -4,6 +4,7 @@ import { upload } from '../../middlewares/upload'
 import {
   createOrder, listMyOrders, getProviderFeed,
   getOrder, uploadOrderPhotos, preUploadOrderPhotos, cancelOrder,
+  updateOrder, deleteOrder,
   adminListOrders, adminGetOrder, adminCancelOrder,
 } from './orders.controller'
 
@@ -24,5 +25,7 @@ router.get('/feed', getProviderFeed)
 router.get('/:id', getOrder)
 router.post('/:id/photos', upload.array('photos', 20), uploadOrderPhotos)
 router.patch('/:id/cancel', cancelOrder)
+router.patch('/:id', updateOrder)
+router.delete('/:id', deleteOrder)
 
 export default router

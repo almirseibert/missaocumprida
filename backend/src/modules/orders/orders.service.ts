@@ -4,8 +4,11 @@
 // data DD/MM/AAAA, cidade "Lajeado, RS" — para não quebrar quem ainda não
 // atualizou o app.
 // ============================================================
+import crypto from 'crypto'
 import { prisma } from '../../config/database'
+import { env } from '../../config/env'
 import { sanitizeContactInfo } from '../../utils/contactSanitizer'
+import { geocodeAddress, normalizeCep } from '../geo/geo.service'
 
 export const BR_STATES = new Set([
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
@@ -141,23 +144,147 @@ export function normalizeAnswers(
   return { answers, missing, invalid }
 }
 
+export type AnswerSnapshotItem = { field_id: string; question: string; field_type: string; value: string }
+
+/** Foto das perguntas/respostas no momento do pedido (guardada em answers_snapshot). */
+export function buildAnswersSnapshot(
+  fields: Array<{ id: string; question: string; field_type: string; order: number }>,
+  answers: Record<string, string>,
+): AnswerSnapshotItem[] {
+  return [...fields]
+    .sort((a, b) => a.order - b.order)
+    .filter((f) => f.field_type !== 'PHOTO' && answers[f.id] !== undefined && answers[f.id] !== '')
+    .map((f) => ({ field_id: f.id, question: f.question, field_type: f.field_type, value: answers[f.id] }))
+}
+
 /** Lista legível pergunta → resposta (para cliente e prestador verem no pedido). */
 export function buildAnswersDisplay(
   fields: Array<{ id: string; question: string; field_type: string; order: number }>,
   answers: unknown,
-  opts: { maskContacts: boolean },
-): Array<{ field_id: string; question: string; field_type: string; value: string }> {
-  if (!answers || typeof answers !== 'object') return []
-  const map = answers as Record<string, unknown>
-  return [...fields]
-    .sort((a, b) => a.order - b.order)
-    .filter((f) => f.field_type !== 'PHOTO' && map[f.id] !== undefined && map[f.id] !== null && map[f.id] !== '')
-    .map((f) => {
-      let value = String(map[f.id])
-      if (f.field_type === 'BOOLEAN') value = TRUE_VALUES.has(value.toLowerCase()) ? 'Sim' : 'Não'
-      if (opts.maskContacts) value = sanitizeContactInfo(value)
-      return { field_id: f.id, question: f.question, field_type: f.field_type, value }
-    })
+  opts: { maskContacts: boolean; snapshot?: unknown },
+): AnswerSnapshotItem[] {
+  let items: AnswerSnapshotItem[]
+  if (Array.isArray(opts.snapshot) && opts.snapshot.length > 0) {
+    items = (opts.snapshot as AnswerSnapshotItem[]).filter((i) => i && i.question && i.value !== undefined)
+  } else {
+    if (!answers || typeof answers !== 'object') return []
+    const map = answers as Record<string, unknown>
+    items = [...fields]
+      .sort((a, b) => a.order - b.order)
+      .filter((f) => f.field_type !== 'PHOTO' && map[f.id] !== undefined && map[f.id] !== null && map[f.id] !== '')
+      .map((f) => ({ field_id: f.id, question: f.question, field_type: f.field_type, value: String(map[f.id]) }))
+  }
+  return items.map((i) => {
+    let value = String(i.value)
+    if (i.field_type === 'BOOLEAN') value = TRUE_VALUES.has(value.toLowerCase()) ? 'Sim' : 'Não'
+    if (opts.maskContacts) value = sanitizeContactInfo(value)
+    return { ...i, value }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Local exato do serviço
+// ---------------------------------------------------------------------------
+export const LOCATION_SOURCES = ['GPS_AT_SITE', 'ADDRESS_GEOCODED'] as const
+
+export type ResolvedLocation = {
+  latitude: number | null
+  longitude: number | null
+  location_source: string | null
+  location_accuracy_m: number | null
+  location_captured_at: Date | null
+}
+
+/**
+ * Define as coordenadas do serviço, nesta ordem:
+ * 1. as que o app/site enviou — GPS_AT_SITE quando o cliente respondeu que
+ *    está no local, ADDRESS_GEOCODED quando o endereço foi convertido no aparelho;
+ * 2. o endereço digitado convertido no servidor (app antigo não manda GPS);
+ * 3. a posição do cadastro, marcada como PROFILE (aproximada).
+ */
+export async function resolveServiceLocation(
+  input: {
+    latitude?: number | null
+    longitude?: number | null
+    location_source?: string | null
+    location_accuracy_m?: number | null
+    address?: string | null
+    address_number?: string | null
+    neighborhood?: string | null
+    city?: string | null
+    state?: string | null
+    cep?: string | null
+  },
+  profile?: { latitude: number | null; longitude: number | null } | null,
+): Promise<ResolvedLocation> {
+  const hasCoords =
+    typeof input.latitude === 'number' && typeof input.longitude === 'number' &&
+    !(input.latitude === 0 && input.longitude === 0)
+  if (hasCoords) {
+    const source = (LOCATION_SOURCES as readonly string[]).includes(input.location_source ?? '')
+      ? (input.location_source as string)
+      : 'GPS_AT_SITE'
+    return {
+      latitude: input.latitude as number,
+      longitude: input.longitude as number,
+      location_source: source,
+      location_accuracy_m: input.location_accuracy_m ?? null,
+      location_captured_at: new Date(),
+    }
+  }
+  const geo = await geocodeAddress({
+    street: input.address,
+    number: input.address_number,
+    neighborhood: input.neighborhood,
+    city: input.city,
+    state: input.state,
+    cep: normalizeCep(input.cep),
+  })
+  if (geo && geo.precision !== 'CITY') {
+    return {
+      latitude: geo.latitude,
+      longitude: geo.longitude,
+      location_source: 'ADDRESS_GEOCODED',
+      location_accuracy_m: geo.precision === 'ADDRESS' ? 50 : geo.precision === 'STREET' ? 300 : 1000,
+      location_captured_at: new Date(),
+    }
+  }
+  if (profile?.latitude != null && profile?.longitude != null) {
+    return {
+      latitude: profile.latitude,
+      longitude: profile.longitude,
+      location_source: 'PROFILE',
+      location_accuracy_m: null,
+      location_captured_at: null,
+    }
+  }
+  if (geo) {
+    return {
+      latitude: geo.latitude,
+      longitude: geo.longitude,
+      location_source: 'ADDRESS_GEOCODED',
+      location_accuracy_m: 5000,
+      location_captured_at: new Date(),
+    }
+  }
+  return { latitude: null, longitude: null, location_source: null, location_accuracy_m: null, location_captured_at: null }
+}
+
+/**
+ * Ponto aproximado mostrado ANTES da conexão paga: deslocado 300–800 m do
+ * local real numa direção fixa por pedido (sempre o mesmo ponto — consultar
+ * várias vezes não ajuda a achar o centro, ao contrário de um sorteio).
+ */
+export function fuzzCoordinates(orderId: string, lat: number, lng: number): { latitude: number; longitude: number } {
+  const h = crypto.createHmac('sha256', env.JWT_SECRET).update(`loc:${orderId}`).digest()
+  const angle = (h.readUInt16BE(0) / 0xffff) * 2 * Math.PI
+  const meters = 300 + (h.readUInt16BE(2) / 0xffff) * 500
+  const dLat = (meters * Math.cos(angle)) / 111_320
+  const dLng = (meters * Math.sin(angle)) / (111_320 * Math.max(Math.cos((lat * Math.PI) / 180), 0.2))
+  return {
+    latitude: Math.round((lat + dLat) * 10_000) / 10_000,
+    longitude: Math.round((lng + dLng) * 10_000) / 10_000,
+  }
 }
 
 const FILE_URL_RE = /\/api\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/?#].*)?$/i

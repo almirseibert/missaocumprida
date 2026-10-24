@@ -299,6 +299,52 @@ export async function acceptProposal(req: Request, res: Response) {
     : 'Proposta aceita! O agendamento foi confirmado.')
 }
 
+// PATCH /api/proposals/:id — prestador ajusta valor/mensagem da proposta
+// pendente (ex.: depois que o cliente editou o pedido).
+const updateProposalSchema = z.object({
+  value: z.number().positive().optional(),
+  message: z.string().max(1000).optional(),
+})
+
+export async function updateProposal(req: Request, res: Response) {
+  const parsed = updateProposalSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: req.params.id },
+    include: { order: { select: { id: true, status: true, category_id: true, client_id: true, title: true } } },
+  })
+  if (!proposal) return R.notFound(res, 'Proposta não encontrada')
+  if (proposal.provider_id !== req.userId) return R.forbidden(res)
+  if (proposal.status !== 'PENDING' || !['OPEN', 'IN_PROPOSAL'].includes(proposal.order.status)) {
+    return R.badRequest(res, 'Esta proposta não pode mais ser alterada')
+  }
+
+  const data: { value?: number; message?: string } = {}
+  if (parsed.data.value !== undefined) {
+    const s = await getSettings()
+    const category = await prisma.category.findUnique({
+      where: { id: proposal.order.category_id },
+      select: { base_price_min: true },
+    })
+    const minValue = Math.max(10, Math.round((category?.base_price_min ?? 0) * s.proposal_min_ratio * 100) / 100)
+    if (parsed.data.value < minValue) {
+      return R.badRequest(res, `O valor mínimo de proposta para esta categoria é R$ ${minValue.toFixed(2)}`)
+    }
+    data.value = parsed.data.value
+  }
+  if (parsed.data.message !== undefined) data.message = sanitizeContactInfo(parsed.data.message)
+
+  const updated = await prisma.proposal.update({ where: { id: proposal.id }, data })
+  await notify(proposal.order.client_id, {
+    type: 'PROPOSAL_RECEIVED',
+    title: 'Proposta atualizada',
+    body: `Um prestador atualizou a proposta para "${proposal.order.title}".`,
+    data: { order_id: proposal.order.id },
+    channel: 'new_proposal',
+  }).catch(() => {})
+  return R.ok(res, updated, 'Proposta atualizada')
+}
+
 export async function rejectProposal(req: Request, res: Response) {
   const proposal = await prisma.proposal.findUnique({
     where: { id: req.params.id },

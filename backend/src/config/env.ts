@@ -63,6 +63,15 @@ export const env = {
   // Serviços recorrentes (assinatura cliente↔prestador). Desligado até o fluxo
   // passar a cobrar a Taxa de Conexão em cada ocorrência.
   RECURRING_ENABLED: process.env.RECURRING_ENABLED === 'true',
+
+  // Chave do hash do CPF (cpf_registry). Defina uma vez e não troque.
+  CPF_HASH_KEY: process.env.CPF_HASH_KEY || '',
+
+  // Geocodificação de endereço (endereço ↔ coordenadas). 'nominatim' (OSM,
+  // gratuito, 1 req/s) ou 'none' para desligar chamadas externas (testes).
+  GEOCODER: (process.env.GEOCODER || 'nominatim') as 'nominatim' | 'none',
+  NOMINATIM_USER_AGENT:
+    process.env.NOMINATIM_USER_AGENT || 'MissaoCumprida/1.0 (+https://missaocumprida-front.oehpg2.easypanel.host)',
 }
 
 // ---- Guard de produção: recusa segredos fracos/conhecidos ----

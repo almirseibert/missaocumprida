@@ -120,7 +120,7 @@ model User {
   rating_count                 Int                @default(0)
   latitude                     Float?
   longitude                    Float?
-  cpf                          String? // CPF ou CNPJ (obrigatório para PIX via Mercado Pago)
+  cpf                          String?            @unique // só dígitos; 1 conta por CPF (ver cpf_registry)
   rg                           String?
   birth_date                   DateTime?
   mother_name                  String?
@@ -146,6 +146,8 @@ model User {
   ban_reason                   String?
   // ---- Exclusão de conta com prazo de arrependimento (LGPD/CDC) ----
   deletion_requested_at        DateTime?
+  // Última troca da posição do perfil (limita trocas — evita triangulação)
+  location_updated_at          DateTime?
   document_photo_url           String?
   selfie_photo_url             String?
   document_submitted_at        DateTime?
@@ -487,6 +489,25 @@ model Order {
   client_request_id          String?
   // Link público mostra as fotos só se o cliente permitir (podem envolver a pessoa)
   public_share_photos        Boolean     @default(false)
+  // ---- Local exato do serviço ----
+  cep                        String?
+  address_number             String?
+  address_complement         String?
+  // GPS_AT_SITE (cliente estava no local) | ADDRESS_GEOCODED (endereço digitado
+  // convertido em coordenadas) | PROFILE (posição do cadastro) | LEGACY
+  location_source            String?
+  location_accuracy_m        Float?
+  location_captured_at       DateTime?
+  // Perguntas + respostas no momento do pedido (sobrevive a edição/mescla do catálogo)
+  answers_snapshot           Json?
+  // ---- Edição / exclusão pelo cliente ----
+  edited_at                  DateTime?
+  edit_count                 Int         @default(0)
+  cancelled_at               DateTime?
+  cancelled_by               String?
+  cancel_reason              String?
+  hidden_by_client_at        DateTime? // "excluído" da lista do cliente (registro mantido)
+  original_category_id       String? // categoria antes de uma mescla do catálogo
   created_at                 DateTime    @default(now())
   updated_at                 DateTime    @updatedAt
 
@@ -1003,19 +1024,55 @@ enum VerifiedProStatus {
 }
 
 model VerifiedProSubscription {
-  id                 String            @id @default(uuid())
-  user_id            String
-  stripe_sub_id      String?           @unique
-  status             VerifiedProStatus @default(ACTIVE)
-  current_period_end DateTime
-  monthly_value      Float             @default(29.90)
-  created_at         DateTime          @default(now())
-  cancelled_at       DateTime?
+  id                   String            @id @default(uuid())
+  user_id              String
+  stripe_sub_id        String?           @unique
+  status               VerifiedProStatus @default(ACTIVE)
+  current_period_end   DateTime
+  monthly_value        Float             @default(29.90)
+  created_at           DateTime          @default(now())
+  cancelled_at         DateTime?
+  // ---- Google Play (RevenueCat) ----
+  source               String            @default("PLAY") // PLAY | ADMIN
+  product_id           String?
+  store_transaction_id String?
+  environment          String? // PRODUCTION | SANDBOX
+  will_renew           Boolean           @default(true)
+  billing_issue_at     DateTime?
+  last_event_type      String?
+  last_event_at        DateTime?
+  granted_by           String? // admin que concedeu (source = ADMIN)
+  grant_reason         String?
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, status])
   @@map("verified_pro_subscriptions")
+}
+
+// ============================================================
+// WEBHOOKS RECEBIDOS (Mercado Pago, RevenueCat)
+// Guarda cada evento (idempotência + prova para o suporte). O mesmo evento
+// reenviado pelo provedor não é processado duas vezes.
+// ============================================================
+model WebhookEvent {
+  id              String    @id @default(uuid())
+  provider        String // MERCADOPAGO | REVENUECAT
+  external_id     String
+  event_type      String?
+  user_id         String?
+  payload         Json
+  signature_valid Boolean   @default(true)
+  status          String    @default("RECEIVED") // RECEIVED | PROCESSED | FAILED | IGNORED
+  error           String?
+  attempts        Int       @default(1)
+  received_at     DateTime  @default(now())
+  processed_at    DateTime?
+
+  @@unique([provider, external_id])
+  @@index([provider, received_at])
+  @@index([user_id, received_at])
+  @@map("webhook_events")
 }
 
 // ============================================================
@@ -1110,6 +1167,49 @@ model FileAsset {
 
   @@index([owner_id])
   @@map("file_assets")
+}
+
+// ============================================================
+// UM CADASTRO POR CPF
+// Hash (HMAC) do CPF de cada conta. Continua aqui depois da exclusão
+// (DELETED) ou do banimento (BANNED) para impedir um novo cadastro com o
+// mesmo CPF; o número em si não é guardado. RELEASED = liberado pelo admin.
+// ============================================================
+model CpfRegistry {
+  cpf_hash       String   @id
+  user_id        String
+  status         String   @default("ACTIVE") // ACTIVE | DELETED | BANNED | RELEASED
+  released_by    String?
+  release_reason String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([user_id])
+  @@map("cpf_registry")
+}
+
+// Contas que tinham o mesmo CPF de outra quando a regra entrou em vigor:
+// o CPF ficou só na conta mantida; as demais precisam regularizar com o suporte.
+model CpfConflict {
+  id           String    @id
+  user_id      String
+  kept_user_id String
+  resolved_at  DateTime?
+  resolved_by  String?
+  created_at   DateTime  @default(now())
+
+  @@index([user_id])
+  @@map("cpf_conflicts")
+}
+
+// Cache de CEP/geocodificação (ViaCEP / Nominatim) — reduz chamadas externas
+model GeoCache {
+  key        String   @id
+  kind       String // CEP | GEOCODE
+  result     Json
+  created_at DateTime @default(now())
+
+  @@map("geo_cache")
 }
 
 model CategoryAffinity {

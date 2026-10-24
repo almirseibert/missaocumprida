@@ -13,7 +13,7 @@ import {
 } from '../payments/connectionFees.service'
 import { banUser, suspendUserForReview } from '../users/moderation.service'
 import { getSettings } from '../settings/settings.service'
-import { archiveScheduleTx } from './scheduleArchive.service'
+import { cancelBeforeConnectionByClient } from './scheduleCancel.service'
 
 /** Arquivos enviados nos campos "photo" (app antigo) e "photos" (vários). */
 function collectServicePhotos(req: Request): Express.Multer.File[] {
@@ -316,22 +316,9 @@ export async function cancelSchedule(req: Request, res: Response) {
   // ---- Pré-liberação (janela ACCEPTED): sem punição ----
   if (!unlocked) {
     if (isClient) {
-      await prisma.$transaction(async (tx) => {
-        await archiveScheduleTx(tx, schedule.id, 'CLIENT_CANCELLED_BEFORE_CONNECTION', req.userId)
-        await tx.message.deleteMany({ where: { schedule_id: schedule.id } })
-        await tx.rating.deleteMany({ where: { schedule_id: schedule.id } })
-        await tx.schedule.delete({ where: { id: schedule.id } })
-        await tx.proposal.update({ where: { id: schedule.proposal_id }, data: { status: 'CANCELLED' } })
-        await tx.order.update({
-          where: { id: order.id },
-          data: { status: 'CANCELLED', client_fee_paid_at: null, provider_fee_due_at: null },
-        })
-      })
-      await cancelPendingFeesForProposal(schedule.proposal_id)
-      if (clientFee) await creditFee(clientFee, 'PRE_CONNECTION_CANCEL')
-      await notify(schedule.provider_id, 'GENERAL', 'Pedido cancelado',
-        'O cliente cancelou o pedido antes da conexão ser concluída.', { order_id: order.id })
-      return R.ok(res, null, 'Pedido cancelado. Se você já tinha pago a taxa, ela voltou como crédito.')
+      const result = await cancelBeforeConnectionByClient(schedule.id, req.userId)
+      if (!result.ok) return R.conflict(res, result.message)
+      return R.ok(res, null, result.message)
     }
 
     // Prestador desiste antes da conexão: cliente recreditado, pedido reabre

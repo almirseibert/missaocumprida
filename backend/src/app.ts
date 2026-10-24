@@ -34,6 +34,7 @@ import legalRoutes from './modules/legal/legal.routes'
 import supportRoutes from './modules/support/support.routes'
 import filesRoutes from './modules/files/files.routes'
 import settingsRoutes from './modules/settings/settings.routes'
+import geoRoutes from './modules/geo/geo.routes'
 import announcementsRoutes from './modules/announcements/announcements.routes'
 
 const app = express()
@@ -99,6 +100,7 @@ app.use('/api/recommendations', recommendationsRoutes)
 app.use('/api/legal', legalRoutes)
 app.use('/api/support', supportRoutes)
 app.use('/api/config', settingsRoutes) // GET /public (apps) + GET/PUT (admin)
+app.use('/api/geo', geoRoutes)         // CEP, endereço ↔ coordenadas
 app.use('/api/announcements', announcementsRoutes) // avisos do admin (pop-up/banner + push)
 
 // ---- 404 ----

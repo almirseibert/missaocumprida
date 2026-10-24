@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/database'
 import { estimatePriceDynamic } from '../../utils/priceEstimator'
 import { haversineDistance, distanceBucket } from '../../utils/geo'
@@ -12,37 +13,169 @@ import { getSettings } from '../settings/settings.service'
 import {
   RawAnswer,
   buildAnswersDisplay,
+  buildAnswersSnapshot,
+  fuzzCoordinates,
   normalizeAnswers,
   normalizeCityState,
   parseFlexibleDate,
+  resolveServiceLocation,
   validateOwnedPhotoUrls,
 } from './orders.service'
+import { normalizeCep } from '../geo/geo.service'
+import { cancelBeforeConnectionByClient } from '../schedules/scheduleCancel.service'
 
-// Aceita os formatos do app antigo (booleano cru, data DD/MM/AAAA, sem UF) e
-// normaliza no servidor — ver orders.service.ts.
 const answerValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()])
-const createOrderSchema = z.object({
-  category_id: z.string().uuid(),
+const orderContentSchema = z.object({
   description: z.string().max(4000).optional().nullable(),
   answers: z.record(answerValue).optional().default({}),
   desired_date: z.union([z.string(), z.null()]).optional(),
+  // ---- Local do serviço ----
   address: z.string().max(300).optional().nullable(),
+  address_number: z.string().max(20).optional().nullable(),
+  address_complement: z.string().max(120).optional().nullable(),
   neighborhood: z.string().max(120).optional().nullable(),
   city: z.string().max(120).optional().nullable(),
   state: z.string().max(40).optional().nullable(),
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
-  is_urgent: z.boolean().optional().default(false),
-  urgency_radius_km: z.number().int().min(1).max(50).optional(),
+  cep: z.string().max(12).optional().nullable(),
+  latitude: z.number().min(-90).max(90).optional().nullable(),
+  longitude: z.number().min(-180).max(180).optional().nullable(),
+  // GPS_AT_SITE: o cliente confirmou que está no local do serviço agora
+  location_source: z.enum(['GPS_AT_SITE', 'ADDRESS_GEOCODED']).optional().nullable(),
+  location_accuracy_m: z.number().min(0).max(100_000).optional().nullable(),
   // Fotos já enviadas por POST /orders/photos (opcionais, em qualquer categoria)
   photos: z.array(z.string().url()).optional().default([]),
+})
+const createOrderSchema = orderContentSchema.extend({
+  category_id: z.string().uuid(),
+  is_urgent: z.boolean().optional().default(false),
+  urgency_radius_km: z.number().int().min(1).max(50).optional(),
   // Id gerado pelo app ao abrir o formulário: reenvio não duplica o pedido
   client_request_id: z.string().uuid().optional(),
 })
+type OrderContentInput = z.infer<typeof orderContentSchema>
 
 const URGENCY_FEE_PCT = 0.25 // 25% sobre o preço estimado
 const URGENCY_DEADLINE_HOURS = 2
 const URGENCY_DEFAULT_RADIUS_KM = 10
+
+type CategoryForOrder = Prisma.CategoryGetPayload<{ include: { questionnaire_fields: true } }>
+
+/**
+ * Valida e normaliza o conteúdo de um pedido (criação e edição usam as
+ * mesmas regras). `keepPhotos` são fotos que o pedido já tinha (edição).
+ */
+async function prepareOrderContent(
+  d: OrderContentInput,
+  category: CategoryForOrder,
+  userId: string,
+  opts: { keepPhotos?: string[]; isUrgent: boolean; skipPastDateCheck?: boolean },
+): Promise<{ error: string } | { data: Prisma.OrderUncheckedUpdateInput & { city: string; state: string } }> {
+  const client = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { latitude: true, longitude: true, address_state: true },
+  })
+
+  const { city, state } = normalizeCityState(d.city ?? undefined, d.state ?? undefined, client?.address_state)
+  const address = (d.address ?? '').trim()
+  const neighborhood = (d.neighborhood ?? '').trim()
+  const cep = normalizeCep(d.cep)
+  if (d.cep && !cep) return { error: 'CEP inválido. Use 8 dígitos.' }
+
+  const parsedDate = parseFlexibleDate(d.desired_date)
+  if (parsedDate === 'invalid') return { error: 'Data desejada inválida. Use o formato DD/MM/AAAA.' }
+  if (parsedDate && !opts.skipPastDateCheck && parsedDate.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+    return { error: 'A data desejada já passou. Escolha uma data a partir de hoje.' }
+  }
+
+  // Respostas: normaliza formatos, valida opções e obrigatórias
+  const { answers, missing, invalid } = normalizeAnswers(category.questionnaire_fields, d.answers as Record<string, RawAnswer>)
+  if (missing.length) return { error: `Campo obrigatório não preenchido: ${missing.join(', ')}` }
+  if (invalid.length) return { error: `Resposta inválida em: ${invalid.join(', ')}` }
+
+  // Descrição: obrigatória nas categorias que antes tinham a pergunta "Descreva…"
+  const description = d.description ? sanitizeContactInfo(d.description.trim()) : ''
+  if (category.description_required && description.length < 5) {
+    return {
+      error: category.description_hint
+        ? `Descreva o serviço: ${category.description_hint}`
+        : 'Descreva o serviço que você precisa.',
+    }
+  }
+
+  // Fotos (opcionais em todas as categorias)
+  const s = await getSettings()
+  if (d.photos.length > s.max_order_photos) return { error: `Envie no máximo ${s.max_order_photos} fotos.` }
+  const keep = new Set(opts.keepPhotos ?? [])
+  const newOnes = d.photos.filter((u) => !keep.has(u))
+  const owned = await validateOwnedPhotoUrls(newOnes, userId)
+  if (owned === null) return { error: 'Uma das fotos não foi encontrada. Envie as fotos novamente.' }
+  const photos = Array.from(new Set(d.photos))
+
+  // Local exato do serviço (GPS no local, endereço convertido ou perfil)
+  const loc = await resolveServiceLocation(
+    {
+      latitude: d.latitude,
+      longitude: d.longitude,
+      location_source: d.location_source,
+      location_accuracy_m: d.location_accuracy_m,
+      address,
+      address_number: d.address_number,
+      neighborhood,
+      city,
+      state,
+      cep,
+    },
+    client,
+  )
+
+  // Estimar preço (engine dinâmico — usa pricing_formula se existir, senão fallback legado)
+  const price = estimatePriceDynamic(
+    (category as any).pricing_formula,
+    category.questionnaire_fields.map((f) => ({
+      id: f.id,
+      key: (f as any).key ?? null,
+      field_type: f.field_type,
+      affects_price: f.affects_price,
+      price_modifier: f.price_modifier,
+      pricing_effect: (f as any).pricing_effect,
+    })),
+    answers,
+    category.base_price_min,
+    category.base_price_max,
+    state,
+  )
+  const finalMin = opts.isUrgent ? Math.round(price.min * (1 + URGENCY_FEE_PCT) * 100) / 100 : price.min
+  const finalMax = opts.isUrgent ? Math.round(price.max * (1 + URGENCY_FEE_PCT) * 100) / 100 : price.max
+
+  const locationLabel = [neighborhood, city].filter(Boolean).join(', ')
+  const title = `${opts.isUrgent ? '🚨 URGENTE — ' : ''}${category.name} — ${locationLabel || city}`
+
+  return {
+    data: {
+      title,
+      description: description || null,
+      answers,
+      answers_snapshot: buildAnswersSnapshot(category.questionnaire_fields.filter((f) => f.is_active), answers) as never,
+      photos,
+      desired_date: parsedDate ?? null,
+      address: address || null,
+      address_number: (d.address_number ?? '').trim() || null,
+      address_complement: (d.address_complement ?? '').trim() || null,
+      neighborhood: neighborhood || null,
+      city,
+      state,
+      cep,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      location_source: loc.location_source,
+      location_accuracy_m: loc.location_accuracy_m,
+      location_captured_at: loc.location_captured_at,
+      estimated_price_min: finalMin,
+      estimated_price_max: finalMax,
+      urgency_fee_value: opts.isUrgent ? Math.round((finalMax - price.max) * 100) / 100 : null,
+    },
+  }
+}
 
 export async function createOrder(req: Request, res: Response) {
   const parsed = createOrderSchema.safeParse(req.body)
@@ -50,7 +183,6 @@ export async function createOrder(req: Request, res: Response) {
 
   const d = parsed.data
   const { category_id, is_urgent, urgency_radius_km, client_request_id } = d
-  let { latitude, longitude } = d
 
   // Idempotência: o mesmo formulário reenviado (rede caiu) devolve o pedido já criado
   if (client_request_id) {
@@ -73,98 +205,22 @@ export async function createOrder(req: Request, res: Response) {
     return R.badRequest(res, 'Esta categoria foi atualizada. Volte e abra o formulário novamente.')
   }
 
-  const client = await prisma.user.findUnique({
-    where: { id: req.userId },
-    select: { latitude: true, longitude: true, address_state: true },
-  })
-
-  // Fallback: se o cliente não enviou coordenadas no formulário, herda do perfil
-  if (latitude == null || longitude == null) {
-    if (client?.latitude != null && client?.longitude != null) {
-      latitude = client.latitude
-      longitude = client.longitude
-    }
-  }
-
-  const { city, state } = normalizeCityState(d.city ?? undefined, d.state ?? undefined, client?.address_state)
-  const address = (d.address ?? '').trim()
-  const neighborhood = (d.neighborhood ?? '').trim()
-
-  const parsedDate = parseFlexibleDate(d.desired_date)
-  if (parsedDate === 'invalid') return R.badRequest(res, 'Data desejada inválida. Use o formato DD/MM/AAAA.')
-  if (parsedDate && parsedDate.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
-    return R.badRequest(res, 'A data desejada já passou. Escolha uma data a partir de hoje.')
-  }
-
-  // Respostas: normaliza formatos, valida opções e obrigatórias
-  const { answers, missing, invalid } = normalizeAnswers(category.questionnaire_fields, d.answers as Record<string, RawAnswer>)
-  if (missing.length) return R.badRequest(res, `Campo obrigatório não preenchido: ${missing.join(', ')}`)
-  if (invalid.length) return R.badRequest(res, `Resposta inválida em: ${invalid.join(', ')}`)
-
-  // Descrição: obrigatória nas categorias que antes tinham a pergunta "Descreva…"
-  const description = d.description ? sanitizeContactInfo(d.description.trim()) : ''
-  if (category.description_required && description.length < 5) {
-    return R.badRequest(res, category.description_hint
-      ? `Descreva o serviço: ${category.description_hint}`
-      : 'Descreva o serviço que você precisa.')
-  }
-
-  // Fotos (opcionais em todas as categorias)
-  const s = await getSettings()
-  if (d.photos.length > s.max_order_photos) {
-    return R.badRequest(res, `Envie no máximo ${s.max_order_photos} fotos.`)
-  }
-  const photos = await validateOwnedPhotoUrls(d.photos, req.userId)
-  if (photos === null) return R.badRequest(res, 'Uma das fotos não foi encontrada. Envie as fotos novamente.')
-
-  // Estimar preço (engine dinâmico — usa pricing_formula se existir, senão fallback legado)
-  const price = estimatePriceDynamic(
-    (category as any).pricing_formula,
-    category.questionnaire_fields.map((f) => ({
-      id: f.id,
-      key: (f as any).key ?? null,
-      field_type: f.field_type,
-      affects_price: f.affects_price,
-      price_modifier: f.price_modifier,
-      pricing_effect: (f as any).pricing_effect,
-    })),
-    answers,
-    category.base_price_min,
-    category.base_price_max,
-    state,
-  )
-
-  const locationLabel = [neighborhood, city].filter(Boolean).join(', ')
-  const title = `${is_urgent ? '🚨 URGENTE — ' : ''}${category.name} — ${locationLabel || city}`
-
-  // Aplica acréscimo de urgência
-  const finalMin = is_urgent ? Math.round(price.min * (1 + URGENCY_FEE_PCT) * 100) / 100 : price.min
-  const finalMax = is_urgent ? Math.round(price.max * (1 + URGENCY_FEE_PCT) * 100) / 100 : price.max
-  const urgencyFeeValue = is_urgent ? Math.round((finalMax - price.max) * 100) / 100 : null
-  const urgencyDeadline = is_urgent ? new Date(Date.now() + URGENCY_DEADLINE_HOURS * 60 * 60 * 1000) : null
+  const prepared = await prepareOrderContent(d, category, req.userId, { isUrgent: is_urgent })
+  if ('error' in prepared) return R.badRequest(res, prepared.error)
+  const content = prepared.data
+  const latitude = content.latitude as number | null
+  const longitude = content.longitude as number | null
+  const city = content.city
 
   const order = await prisma.order.create({
     data: {
+      ...(content as Prisma.OrderUncheckedCreateInput),
       client_id: req.userId,
       category_id,
-      title,
-      description: description || undefined,
-      answers,
-      photos,
       client_request_id,
-      desired_date: parsedDate ?? undefined,
-      address: address || undefined,
-      neighborhood: neighborhood || undefined,
-      city,
-      state,
-      latitude,
-      longitude,
-      estimated_price_min: finalMin,
-      estimated_price_max: finalMax,
       is_urgent,
       urgency_fee_pct: is_urgent ? URGENCY_FEE_PCT : null,
-      urgency_fee_value: urgencyFeeValue,
-      urgency_deadline: urgencyDeadline,
+      urgency_deadline: is_urgent ? new Date(Date.now() + URGENCY_DEADLINE_HOURS * 60 * 60 * 1000) : null,
       urgency_radius_km: is_urgent ? (urgency_radius_km ?? URGENCY_DEFAULT_RADIUS_KM) : null,
     },
     include: {
@@ -202,6 +258,7 @@ export async function createOrder(req: Request, res: Response) {
       // Pedido sem coordenadas: notifica todos da categoria como fallback (não dá pra calcular distância)
       targets = skills.map((s) => s.provider_id)
     }
+    targets = targets.filter((id) => id !== req.userId)
     if (targets.length > 0) {
       const title = is_urgent
         ? `🚨 URGENTE: ${category.name} perto de você!`
@@ -233,6 +290,194 @@ export async function createOrder(req: Request, res: Response) {
   return R.created(res, order, 'Pedido criado com sucesso')
 }
 
+// ---------------------------------------------------------------------------
+// PATCH /api/orders/:id — cliente edita o pedido enquanto não aceitou proposta
+// ---------------------------------------------------------------------------
+const EDITABLE_STATUSES = ['OPEN', 'IN_PROPOSAL']
+
+export async function updateOrder(req: Request, res: Response) {
+  const parsed = orderContentSchema.safeParse(req.body)
+  if (!parsed.success) return R.badRequest(res, 'Dados inválidos', parsed.error.flatten().fieldErrors)
+
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: {
+      category: { include: { questionnaire_fields: true } },
+      proposals: { where: { status: 'PENDING' }, select: { id: true, provider_id: true } },
+    },
+  })
+  if (!order) return R.notFound(res, 'Pedido não encontrado')
+  if (order.client_id !== req.userId) return R.forbidden(res)
+  if (!EDITABLE_STATUSES.includes(order.status)) {
+    return R.conflict(res, 'Este pedido não pode mais ser editado: já existe uma proposta aceita. Combine as mudanças pelo chat ou cancele o agendamento.')
+  }
+
+  // Campos não enviados mantêm o valor atual (edição parcial)
+  const body = req.body as Record<string, unknown>
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k)
+  const keepLocation = !has('latitude') && !has('longitude') && !has('address') && !has('cep') && !has('city')
+  const merged: OrderContentInput = {
+    description: has('description') ? parsed.data.description : order.description,
+    answers: has('answers') ? parsed.data.answers : ((order.answers ?? {}) as Record<string, string>),
+    desired_date: has('desired_date') ? parsed.data.desired_date : order.desired_date?.toISOString() ?? null,
+    address: has('address') ? parsed.data.address : order.address,
+    address_number: has('address_number') ? parsed.data.address_number : order.address_number,
+    address_complement: has('address_complement') ? parsed.data.address_complement : order.address_complement,
+    neighborhood: has('neighborhood') ? parsed.data.neighborhood : order.neighborhood,
+    city: has('city') ? parsed.data.city : order.city,
+    state: has('state') ? parsed.data.state : order.state,
+    cep: has('cep') ? parsed.data.cep : order.cep,
+    latitude: keepLocation ? order.latitude : parsed.data.latitude,
+    longitude: keepLocation ? order.longitude : parsed.data.longitude,
+    location_source: keepLocation
+      ? ((order.location_source === 'GPS_AT_SITE' || order.location_source === 'ADDRESS_GEOCODED') ? order.location_source : null)
+      : parsed.data.location_source,
+    location_accuracy_m: keepLocation ? order.location_accuracy_m : parsed.data.location_accuracy_m,
+    photos: has('photos') ? parsed.data.photos : order.photos,
+  }
+
+  const prepared = await prepareOrderContent(merged, order.category, req.userId, {
+    keepPhotos: order.photos,
+    isUrgent: order.is_urgent,
+    skipPastDateCheck: !has('desired_date'),
+  })
+  if ('error' in prepared) return R.badRequest(res, prepared.error)
+  const data = prepared.data
+  if (keepLocation) {
+    // sem mudança de endereço: mantém exatamente a origem/precisão registradas
+    data.location_source = order.location_source
+    data.location_captured_at = order.location_captured_at
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: order.id },
+    data: { ...data, edited_at: new Date(), edit_count: { increment: 1 } },
+    include: { category: { select: { id: true, name: true, icon: true } } },
+  })
+
+  // Quem já mandou proposta precisa saber que o pedido mudou
+  const providerIds = Array.from(new Set(order.proposals.map((p) => p.provider_id)))
+  if (providerIds.length > 0) {
+    const title = 'Pedido editado pelo cliente'
+    const bodyText = `O pedido "${updated.title}" foi alterado. Confira os detalhes e ajuste sua proposta se precisar.`
+    await prisma.notification.createMany({
+      data: providerIds.map((id) => ({
+        user_id: id,
+        type: 'ORDER_UPDATED' as never,
+        title,
+        body: bodyText,
+        data: { order_id: order.id } as never,
+      })),
+    }).catch(() => {})
+    await sendToUsers(providerIds, { title, body: bodyText, data: { order_id: order.id, type: 'ORDER_UPDATED' }, channel: 'proposal_update' })
+  }
+
+  return R.ok(res, updated, providerIds.length ? 'Pedido atualizado. Os prestadores com proposta foram avisados.' : 'Pedido atualizado')
+}
+
+// ---------------------------------------------------------------------------
+// Cancelamento/exclusão pelo cliente
+// ---------------------------------------------------------------------------
+/** Cancela um pedido ainda sem proposta aceita: recusa as propostas, devolve boosts pagos e avisa. */
+async function cancelOpenOrder(orderId: string, actorId: string, reason: string, hide: boolean) {
+  const result = await prisma.$transaction(async (tx) => {
+    const moved = await tx.order.updateMany({
+      where: { id: orderId, status: { in: EDITABLE_STATUSES as never } },
+      data: {
+        status: 'CANCELLED',
+        cancelled_at: new Date(),
+        cancelled_by: actorId,
+        cancel_reason: reason,
+        ...(hide ? { hidden_by_client_at: new Date() } : {}),
+      },
+    })
+    if (moved.count === 0) return null
+    const pending = await tx.proposal.findMany({
+      where: { order_id: orderId, status: 'PENDING' },
+      select: { id: true, provider_id: true, boost_purchases: { select: { value: true, payment_ref: true } } },
+    })
+    await tx.proposal.updateMany({ where: { order_id: orderId, status: 'PENDING' }, data: { status: 'REJECTED' } })
+    // Boost pago com saldo numa proposta que não vai ser avaliada volta para o prestador
+    for (const p of pending) {
+      const refund = p.boost_purchases
+        .filter((b) => b.payment_ref === 'INTERNAL_BALANCE')
+        .reduce((sum, b) => sum + (b.value ?? 0), 0)
+      if (refund > 0) {
+        await tx.user.update({ where: { id: p.provider_id }, data: { provider_balance: { increment: refund } } })
+      }
+    }
+    return pending
+  })
+  if (result === null) return null
+
+  const providerIds = Array.from(new Set(result.map((p) => p.provider_id)))
+  if (providerIds.length > 0) {
+    const title = 'Pedido cancelado pelo cliente'
+    const body = 'Um pedido em que você fez proposta foi cancelado. Se você pagou destaque, o valor voltou para o seu saldo.'
+    await prisma.notification.createMany({
+      data: providerIds.map((id) => ({ user_id: id, type: 'ORDER_CANCELLED' as never, title, body, data: { order_id: orderId } as never })),
+    }).catch(() => {})
+    await sendToUsers(providerIds, { title, body, data: { order_id: orderId, type: 'ORDER_CANCELLED' }, channel: 'proposal_update' })
+  }
+  return result
+}
+
+// DELETE /api/orders/:id — "excluir" o pedido.
+// Sem proposta aceita: cancela e tira da lista. Com proposta aceita mas taxa
+// ainda pendente: segue as regras do cancelamento antes da conexão (taxa paga
+// volta como crédito). Depois da conexão paga: bloqueado (Termos de Uso).
+// Pedidos encerrados (cancelado/concluído) só saem da lista do cliente.
+// O registro nunca é apagado de verdade — fica para auditoria e suporte.
+export async function deleteOrder(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: { schedule: { select: { id: true } } },
+  })
+  if (!order) return R.notFound(res, 'Pedido não encontrado')
+  if (order.client_id !== req.userId) return R.forbidden(res)
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 300) : 'Excluído pelo cliente'
+
+  if (EDITABLE_STATUSES.includes(order.status)) {
+    const done = await cancelOpenOrder(order.id, req.userId, reason, true)
+    if (!done) return R.conflict(res, 'O pedido mudou de estado. Atualize a tela e tente novamente.')
+    return R.ok(res, null, 'Pedido excluído. Os prestadores com proposta foram avisados.')
+  }
+
+  if (order.status === 'ACCEPTED' && order.schedule) {
+    const result = await cancelBeforeConnectionByClient(order.schedule.id, req.userId)
+    if (!result.ok) return R.conflict(res, result.message)
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { hidden_by_client_at: new Date(), cancelled_at: new Date(), cancelled_by: req.userId, cancel_reason: reason },
+    })
+    return R.ok(res, null, result.message)
+  }
+
+  if (['CANCELLED', 'DONE', 'RATED'].includes(order.status)) {
+    await prisma.order.update({ where: { id: order.id }, data: { hidden_by_client_at: new Date() } })
+    return R.ok(res, null, 'Pedido removido da sua lista')
+  }
+
+  return R.conflict(
+    res,
+    'Este pedido já tem a conexão paga e não pode ser excluído. Para desistir, cancele o agendamento — pelos Termos de Uso, cancelar depois de receber os dados do profissional leva ao banimento da conta.',
+  )
+}
+
+// PATCH /api/orders/:id/cancel — cancela sem tirar da lista (compatível com o site/app antigos)
+export async function cancelOrder(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id } })
+  if (!order) return R.notFound(res, 'Pedido não encontrado')
+  if (order.client_id !== req.userId) return R.forbidden(res)
+
+  if (!EDITABLE_STATUSES.includes(order.status)) {
+    return R.badRequest(res, 'Pedido não pode ser cancelado neste estágio. Use "Cancelar agendamento" ou fale com o suporte.')
+  }
+  const done = await cancelOpenOrder(order.id, req.userId, 'Cancelado pelo cliente', false)
+  if (!done) return R.conflict(res, 'O pedido mudou de estado. Atualize a tela e tente novamente.')
+  return R.ok(res, null, 'Pedido cancelado')
+}
+
 const ORDER_STATUSES = ['OPEN', 'IN_PROPOSAL', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS', 'DONE', 'RATED', 'CANCELLED', 'DISPUTED']
 
 /** Paginação segura: evita limit gigante (dump/DoS) e valores não numéricos. */
@@ -249,6 +494,8 @@ export async function listMyOrders(req: Request, res: Response) {
 
   const where: Record<string, unknown> = { client_id: req.userId }
   if (typeof status === 'string' && ORDER_STATUSES.includes(status)) where.status = status
+  // Pedidos "excluídos" pelo cliente saem da lista (o registro continua no banco)
+  if (req.query.include_hidden !== '1') where.hidden_by_client_at = null
 
   const [orders, total] = await Promise.all([
     prisma.order.findMany({
@@ -268,13 +515,26 @@ export async function listMyOrders(req: Request, res: Response) {
   return R.ok(res, { orders, total, page, limit })
 }
 
-// Blurs coordinates to a ~500m grid cell (0.005° ≈ 555m) and strips exact address
-function maskLocationForProvider<T extends { latitude: number | null; longitude: number | null; address: string | null }>(
-  order: T
-): T & { location_blurred: boolean } {
-  const blurredLat = order.latitude != null ? Math.round(order.latitude / 0.005) * 0.005 : null
-  const blurredLng = order.longitude != null ? Math.round(order.longitude / 0.005) * 0.005 : null
-  return { ...order, address: null, latitude: blurredLat, longitude: blurredLng, location_blurred: true }
+// Antes da conexão paga: tira endereço/CEP/número e desloca o ponto 300–800 m
+// (deslocamento fixo por pedido — ver fuzzCoordinates).
+function maskLocationForProvider<
+  T extends { id: string; latitude: number | null; longitude: number | null; address: string | null },
+>(order: T): T & { location_blurred: boolean } {
+  const fuzzed =
+    order.latitude != null && order.longitude != null
+      ? fuzzCoordinates(order.id, order.latitude, order.longitude)
+      : { latitude: null, longitude: null }
+  return {
+    ...order,
+    address: null,
+    address_number: null,
+    address_complement: null,
+    cep: null,
+    location_accuracy_m: null,
+    latitude: fuzzed.latitude,
+    longitude: fuzzed.longitude,
+    location_blurred: true,
+  }
 }
 
 const PRE_ACCEPTANCE_STATUSES = ['OPEN', 'IN_PROPOSAL']
@@ -420,6 +680,7 @@ export async function getOrder(req: Request, res: Response) {
   const fullAccess = isClient || (isAcceptedProvider && unlocked)
   const answers_display = buildAnswersDisplay(order.category?.questionnaire_fields ?? [], order.answers, {
     maskContacts: !fullAccess,
+    snapshot: order.answers_snapshot,
   })
   const withDisplay = { ...order, answers_display }
 
@@ -495,19 +756,6 @@ export async function uploadOrderPhotos(req: Request, res: Response) {
   return R.ok(res, updated, 'Fotos adicionadas com sucesso')
 }
 
-export async function cancelOrder(req: Request, res: Response) {
-  const order = await prisma.order.findUnique({ where: { id: req.params.id } })
-  if (!order) return R.notFound(res, 'Pedido não encontrado')
-  if (order.client_id !== req.userId) return R.forbidden(res)
-
-  const cancelable = ['OPEN', 'IN_PROPOSAL']
-  if (!cancelable.includes(order.status)) {
-    return R.badRequest(res, 'Pedido não pode ser cancelado neste estágio. Entre em contato com o suporte.')
-  }
-
-  await prisma.order.update({ where: { id: req.params.id }, data: { status: 'CANCELLED' } })
-  return R.ok(res, null, 'Pedido cancelado')
-}
 
 // ============================================================
 // ADMIN — acompanhamento e intervenção em pedidos
